@@ -78,14 +78,14 @@ The kept originals live in `%LOCALAPPDATA%\SnowRunnerNextGen`. Every new file is
 
 ## Build
 
-Windows 10 or 11. The C# compiler that ships with Windows builds the window; the package needs Node.js 20 or newer.
+Windows 10 or 11. The C# compiler that ships with Windows builds the window. The package needs Node.js 22.2 or newer and carries a copy of its `node.exe`.
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1 -Tools <tools folder>
 ```
 
-`package.ps1` copies the shader tools, the compiled helper shaders and the particle textures from the tools folder, and `assets\engine\hid.dll` must be the SnowRunner Shadows build named in `assets\engine\hid.dll.sha256`. Neither is part of this repository yet.
+`package.ps1` copies the shader tools, the compiled helper shaders and the particle textures from the tools folder, and `assets\engine\hid.dll` must be the SnowRunner Shadows build named in `assets\engine\hid.dll.sha256`. Neither is part of this repository yet. With `-Zip` it also writes `out\SnowRunnerNextGen.zip`, the download of a release.
 
 The tests run on copies and never touch the game folder: `test\run_tests.ps1` draws the window at four scales and checks the tick rules, `test\engine_test.ps1` runs the engine on a copy of the game made from original paks, and `test\package_test.ps1` runs the same against the packaged engine and fails when it reaches any file outside the package.
 

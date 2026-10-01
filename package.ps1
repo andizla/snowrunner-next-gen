@@ -1,4 +1,5 @@
-# Builds the standalone package of SnowRunner Next Gen: out\package\SnowRunnerNextGen\ and out\SnowRunnerNextGen.zip.
+# Builds the standalone package of SnowRunner Next Gen: out\package\SnowRunnerNextGen\, and with -Zip the release's
+# download, out\SnowRunnerNextGen.zip.
 # Anyone with the game unzips it anywhere and runs SnowRunnerNextGen.exe; nothing else needs to be installed.
 #   SnowRunnerNextGen.exe, help\ (the pop-ups' pictures), LICENSE (GPL-3.0), THIRD_PARTY_NOTICES.md, licenses\
 #   engine\ node.exe (a copy of the local Node.js), ngen.js, prepare.js, hid.dll (the pinned SnowRunner Shadows),
@@ -8,14 +9,14 @@
 # No game shader ships: no extracted shaders (dump\), no index of them, no set of patched game shaders. The engine
 # makes those on the player's machine from the player's own shader.pak (engine\prepare.js). The particle textures are
 # the game's own at twice the size and ship as files.
-# usage: powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1 [-Tools C:\Games\SnowRunner-shaders] [-Node <node.exe>]
-param([string]$Tools = 'C:\Games\SnowRunner-shaders', [string]$Node = '')
+# usage: powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1 [-Tools C:\Games\SnowRunner-shaders] [-Node <node.exe>] [-Zip]
+param([string]$Tools = 'C:\Games\SnowRunner-shaders', [string]$Node = '', [switch]$Zip)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 & (Join-Path $root 'build.ps1') | Out-Host
 
 $pkg = Join-Path $root 'out\package\SnowRunnerNextGen'
-$zip = Join-Path $root 'out\SnowRunnerNextGen.zip'
+$zipFile = Join-Path $root 'out\SnowRunnerNextGen.zip'
 if (Test-Path -LiteralPath $pkg) { [System.IO.Directory]::Delete($pkg, $true) }
 $engine = Join-Path $pkg 'engine'
 foreach ($d in $pkg, (Join-Path $pkg 'help'), (Join-Path $pkg 'licenses'), $engine, (Join-Path $engine 'tools'), (Join-Path $engine 'replacements')) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
@@ -33,9 +34,11 @@ $dllHash = (Get-FileHash -LiteralPath (Join-Path $engine 'hid.dll') -Algorithm S
 if ($dllHash -ne $pin) { throw "assets\engine\hid.dll is $($dllHash.Substring(0, 8)), not the pinned build $($pin.Substring(0, 8))" }
 Set-Content -LiteralPath (Join-Path $engine 'config.json') -Value '{}' -Encoding ASCII
 if (-not $Node) { $Node = (Get-Command node -ErrorAction SilentlyContinue).Source }
-if (-not $Node -or -not (Test-Path -LiteralPath $Node)) { throw 'node.exe not found: pass -Node <path> (a Node.js 20 or newer node.exe)' }
+if (-not $Node -or -not (Test-Path -LiteralPath $Node)) { throw 'node.exe not found: pass -Node <path> (Node.js 22.2 or newer)' }
 $nodeVersion = (& $Node --version).Trim()
-if ([int]($nodeVersion.TrimStart('v').Split('.')[0]) -lt 20) { throw "node.exe $nodeVersion is too old: Node.js 20 or newer" }
+# the pak tools use zlib.crc32, which Node.js has from 22.2 (and from 20.15 in the 20 line)
+& $Node -e "process.exit(typeof require('zlib').crc32 === 'function' ? 0 : 1)"
+if ($LASTEXITCODE -ne 0) { throw "node.exe $nodeVersion is too old: Node.js 22.2 or newer" }
 Copy-Item -LiteralPath $Node -Destination (Join-Path $engine 'node.exe')
 # Node.js's own licence text: next to node.exe (the zip distribution has it) or in assets\licenses; without it the
 # package gets a placeholder and must not be released (the Windows installer of Node.js leaves the file out)
@@ -62,7 +65,8 @@ while ($queue.Count) {
 }
 foreach ($t in $closure) { Copy-Item -LiteralPath (Join-Path $toolDir $t) -Destination (Join-Path $engine 'tools') }
 
-# our own helpers and builds (written from scratch; none is a game shader or derived from one)
+# our own helpers and builds, compiled from our own sources: none is a game shader (the tonemap build comes from our
+# reconstruction of the game's tonemap shader, see below)
 $helpers = @(
   'gi\gi_ambient.cso', 'gi\gi_ambient_decal.cso', 'gi\gi_only.cso', 'gi\gi_only_decal.cso', 'gi\gtao_gi.cso', 'gi\gtao_gi_far.cso',
   'puddles\puddle_ssr.cso', 'puddles\puddle_ssr_decal.cso', 'reflections\object_ssr.cso', 'smoke\smoke_glow.cso',
@@ -124,9 +128,10 @@ Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $
 Get-ChildItem -LiteralPath (Join-Path $root 'assets\licenses') -File | Where-Object { $_.Name -ne 'Node.js-LICENSE.txt' } | Copy-Item -Destination (Join-Path $pkg 'licenses')
 Copy-Item -LiteralPath (Join-Path $root 'assets\README.txt') -Destination $pkg
 
-# the zip
-if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip }
-Compress-Archive -Path (Join-Path $pkg '*') -DestinationPath $zip -CompressionLevel Optimal
+# the zip is the release's download and is made only on request (-Zip). An older one goes either way, so that no zip
+# outlives the folder it was made from
+if (Test-Path -LiteralPath $zipFile) { Remove-Item -LiteralPath $zipFile }
+if ($Zip) { Compress-Archive -Path (Join-Path $pkg '*') -DestinationPath $zipFile -CompressionLevel Optimal }
 $folderBytes = (Get-ChildItem -LiteralPath $pkg -File -Recurse | Measure-Object Length -Sum).Sum
 '{0}  {1:N1} MB in {2} files ({3} tools, {4} helpers, {5} sprite files; node.exe {6})' -f $pkg, ($folderBytes / 1MB), @(Get-ChildItem -LiteralPath $pkg -File -Recurse).Count, $closure.Count, $helpers.Count, $sprites.Count, $nodeVersion
-'{0}  {1:N1} MB' -f $zip, ((Get-Item -LiteralPath $zip).Length / 1MB)
+if ($Zip) { '{0}  {1:N1} MB' -f $zipFile, ((Get-Item -LiteralPath $zipFile).Length / 1MB) }
