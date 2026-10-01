@@ -1,0 +1,11 @@
+# build outputs; the release zip goes to GitHub Releases
+out/
+*.exe
+*.dll
+
+# working notes and local tools: local only
+HANDOFF.md
+PACKAGE_NOTES.md
+PLAN.md
+tools/
+.claude/
