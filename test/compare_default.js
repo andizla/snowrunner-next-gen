@@ -1,11 +1,13 @@
 // Run after test/package_test.ps1 (node test/compare_default.js): compares what the packaged engine prepared in the
-// package test's state folder (the player's machine) with the dev workspace, then builds the default shader.pak with
-// the dev tools and with the packaged tools on the player-side data; both must equal each other, and the installed
-// game's shader.pak is hashed (read only) for comparison. Writes only out/compare.
+// package test's state folder (the player's machine) with the tools' working tree, then builds the default shader.pak
+// with the working tree's tools and with the packaged tools on the player-side data; both must equal each other, and
+// the installed game's shader.pak is hashed (read only) for comparison. Writes only out/compare.
+// SR_TOOLS_TREE names the working tree (its tools\, dump\ and replacements\ folders).
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const { execFileSync } = require('child_process');
-const DEV = 'C:\\Games\\SnowRunner-shaders';
-const games = 'C:\\Games\\snowrunner-next-gen\\out\\enginetest\\state\\games';
+const ROOT = path.join(__dirname, '..');
+const DEV = process.env.SR_TOOLS_TREE || 'C:\\Games\\SnowRunner-shaders';
+const games = path.join(ROOT, 'out', 'enginetest', 'state', 'games');
 const state = path.join(games, fs.readdirSync(games)[0]);
 const pkgTools = path.join(process.env.TEMP, 'ngen-package-test', 'SnowRunnerNextGen', 'engine', 'tools');
 const OUT = path.join(__dirname, '..', 'out', 'compare');
@@ -62,10 +64,11 @@ for (const set of prepared.sets)
 const LISTS = {
     new_default: 'gtao,aofar,revec,blocker,seam,ambient,fog,tonemap,bloom,water,rivertint,crestglow,puddles,gi,smoke,smokeshade,sssr,contact',
 };
-const INSTALLED = sha('C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/shader.pak').slice(0, 8);   // read only
+const installedPak = 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/shader.pak';
+const INSTALLED = fs.existsSync(installedPak) ? sha(installedPak).slice(0, 8) : 'none';   // read only
 const clean = Object.assign({}, process.env);
 for (const k of Object.keys(clean)) if (/^SR_|^NODE_OPTIONS$|^TRACE_FILE$/.test(k)) delete clean[k];
-const gameCopy = 'C:\\Games\\snowrunner-next-gen\\out\\enginetest\\game\\preload\\paks\\client\\shader.pak';
+const gameCopy = path.join(ROOT, 'out', 'enginetest', 'game', 'preload', 'paks', 'client', 'shader.pak');
 for (const [name, MODULES] of Object.entries(LISTS))
 {
     const pakA = path.join(OUT, name + '_dev.pak'), pakB = path.join(OUT, name + '_package.pak');
