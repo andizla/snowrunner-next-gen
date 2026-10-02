@@ -49,10 +49,10 @@ try {
   function Ticked { ($list.Cards | Where-Object { $_.On } | ForEach-Object { $_.Module.Id }) -join ' ' }
   function Note { $bar.GetType().GetField('note', $flags).GetValue($bar) }
 
-  # on by default: every card but Headlight glare cap, Headlights in reflections, Scenery detail and Grass reach
-  $defaults = 'shadows edges blocker contact gtao aofar ambient fill gi objrefl water puddles rivertint crestglow fog smoke smokeshade particles sky stars tonemap bloom grade logos'
+  # on by default: every card but Headlight glare cap, Scenery detail and Grass reach
+  $defaults = 'shadows edges blocker contact gtao aofar ambient fill gi objrefl headglow water puddles rivertint crestglow fog smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '24 of 28 selected'
+  Check 'count' (Note) '25 of 28 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
@@ -69,18 +69,17 @@ try {
   Check 'selection: the 16-tap filter goes without the seam dither' ((@($s['shader']) -contains 'crisp') -and -not (@($s['shader']) -contains 'seam') -and -not (@($s['shader']) -contains 'revec')) 'True'
   $cards['edges'].Choice[0] = 0
   # the headlights in reflections go out only with the reflection pass
-  $cards['headglow'].On = $true
   $s = & $selection
   Check 'selection: the headlights in reflections with the reflection pass' (@($s['shader']) -contains 'headglow') 'True'
   $cards['objrefl'].Choice[0] = 1
   $s = & $selection
   Check 'selection: not with the march-only method' (@($s['shader']) -contains 'headglow') 'False'
   $cards['objrefl'].Choice[0] = 0
-  $cards['headglow'].On = $false
   $cards['shadows'].ToggleByUser()
-  # Sun glow through waves goes with Water reflections, which needs SnowRunner Shadows
+  # Headlights in reflections goes with Object reflections and Sun glow through waves with Water reflections, which
+  # both need SnowRunner Shadows
   Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint fog smoke smokeshade particles sky stars tonemap bloom grade logos'
-  Check 'its note' (Note) 'Contact shadows, Bounce light, Object reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
+  Check 'its note' (Note) 'Contact shadows, Bounce light, Object reflections, Headlights in reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
   $cards['gi'].ToggleByUser()
   Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint fog smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Bounce light needs SnowRunner Shadows: ticked it too.'

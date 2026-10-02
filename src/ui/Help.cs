@@ -174,7 +174,7 @@ namespace SnowRunnerNextGen
             d["headglow"] = E(
                 Does, "With Object reflections, a hood or roof whose reflection finds nothing on screen shows a picture of the sky. At night this adds the headlights' warm light to those reflections, where the mirrored ray crosses the headlight beam.",
                 Notice, "At night, hoods and roofs pick up the glow of the truck's own lamps.",
-                Costs, "None while the lamps are off.",
+                Costs, "None while the lamps are off. With two lamps on, at most 0.15 ms per frame at 4K if glossy paint filled the whole screen (measured on an RTX 4080), so far less in a real frame.",
                 Know, "Needs Object reflections with the reflection pass.");
 
             d["water"] = E(

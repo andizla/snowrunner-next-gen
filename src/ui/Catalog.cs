@@ -92,7 +92,7 @@ namespace SnowRunnerNextGen
             refl.Options.Add(new OptionSet("Method", new[] { "reflection pass", "march only" }, new[] { "sssr", "reflections" }, 0));
             list.Add(refl);
             // a build of the reflection pass's reader, so the march-only method goes without it
-            list.Add(M("headglow", "REFLECTIONS", "Headlights in reflections", false,
+            list.Add(M("headglow", "REFLECTIONS", "Headlights in reflections", true,
                 "At night, paint that finds nothing on screen to reflect shows the warm light of the headlights.", "objrefl"));
             list.Add(M("water", "WATER", "Water reflections", true,
                 "Banks, trees and trucks mirrored in rivers, mud, lakes, seas and puddles, not just the sky; the water's colour gives way to the reflection at shallow angles.",

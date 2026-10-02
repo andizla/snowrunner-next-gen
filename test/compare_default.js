@@ -62,7 +62,7 @@ for (const set of prepared.sets)
 // 4. bundles both ways: the engine test's default set, every module, and the per-material reflections instead of the pass
 // the window's default shader modules
 const LISTS = {
-    new_default: 'gtao,aofar,revec,blocker,seam,ambient,fog,tonemap,bloom,water,rivertint,crestglow,puddles,gi,smoke,smokeshade,sssr,contact',
+    new_default: 'gtao,aofar,revec,blocker,seam,ambient,fog,tonemap,bloom,water,rivertint,crestglow,puddles,gi,smoke,smokeshade,sssr,headglow,contact',
 };
 const installedPak = 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/shader.pak';
 const INSTALLED = fs.existsSync(installedPak) ? sha(installedPak).slice(0, 8) : 'none';   // read only

@@ -112,11 +112,11 @@ $modFile3 = 'ngen_test/another_mod_3.txt'; $modText3 = "another mod's file 3"; $
 $boot = Join-Path $paks 'boot.pak'; $initial = Join-Path $paks 'initial.pak'; $gfx = Join-Path $paks 'gfx.pak'
 
 # the window's default shader modules, in the bundle's order: every module but the headlight glare cap, the 16-tap
-# filter, the march-only reflections and the headlights in reflections
-$default = 'gtao', 'aofar', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'puddles', 'gi', 'smoke', 'smokeshade', 'sssr', 'contact'
-# every part changed: without the fog and the contact shadows, the 16-tap filter in place of the rebuilt edges (so
-# both filters' sets get made, and the seam dither goes with the rebuilt edges), with the headlights in reflections
-$less = @($default | Where-Object { $_ -notin 'fog', 'seam', 'contact' } | ForEach-Object { if ($_ -eq 'revec') { 'crisp' } elseif ($_ -eq 'sssr') { 'sssr', 'headglow' } else { $_ } })
+# filter and the march-only reflections
+$default = 'gtao', 'aofar', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'puddles', 'gi', 'smoke', 'smokeshade', 'sssr', 'headglow', 'contact'
+# every part changed: without the fog, the contact shadows and the headlights in reflections, the 16-tap filter in
+# place of the rebuilt edges (so both filters' sets get made, and the seam dither goes with the rebuilt edges)
+$less = @($default | Where-Object { $_ -notin 'fog', 'seam', 'contact', 'headglow' } | ForEach-Object { if ($_ -eq 'revec') { 'crisp' } else { $_ } })
 
 'the untouched copy'
 Check 'status: the originals' (Summary (Status)) 'stock [] dll none / scenery vanilla grass vanilla fill vanilla grade vanilla particles vanilla stars vanilla sky vanilla logos vanilla'

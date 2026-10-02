@@ -23,7 +23,7 @@ Light and shadow
 Reflections and water
 
 - Object reflections: paint, glass and chrome mirror the scene around them.
-- Headlights in reflections: at night, paint that finds nothing to reflect shows the light of the headlights. Off by default.
+- Headlights in reflections: at night, paint that finds nothing to reflect shows the light of the headlights.
 - Water reflections: banks, trees and trucks mirrored in rivers, lakes, seas and puddles.
 - Wet ground reflections: wet mud and glossy ground mirror the scene.
 - River depth colour: deeper water tints teal or brown from its own colour.

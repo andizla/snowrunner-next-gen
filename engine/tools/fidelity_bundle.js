@@ -63,7 +63,8 @@
 //            the cubemap gets the headlights' light in the air along that ray added to it (the game's own beam: cone,
 //            reach and colour from CB_GLOBAL_SCENE), so a hood at night shows the lamps' warm light where its rays cross
 //            the beam, not the blue sky alone; needs sssr; with the lamps off or the pass unbound the reader's output
-//            is the default one's; not in DEFAULT
+//            is the plain reader's at no cost; with two lamps on it adds 0.15 ms for a whole 4K screen of glossy pixels
+//            on an RTX 4080, so far less in a real frame; in DEFAULT
 //   gi       bounce light: gi\gtao_gi.cso in the AO pass (GTAO, which it implies, plus the light the surfaces that hide
 //            each pixel's sky send it, into a second target SnowRunner Shadows provides, hid.dll GI=1), and
 //            tools\patch_gi.js + gi\gi_ambient.cso (gi_only.cso without the ambient module; the _decal builds for the
@@ -109,14 +110,13 @@ const R = (...p) => path.join(W, 'replacements', ...p);
 const SETS = process.env.SR_SETS_DIR || path.join(W, 'replacements');
 const S = (...p) => path.join(SETS, ...p);
 const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokeshade', 'sssr', 'headglow', 'contact'];
-// what install and build take without a list: every module but these four, which stay selectable by name
+// what install and build take without a list: every module but these three, which stay selectable by name
 //   reflections  the per-material march alone: sssr took its place (the DLL's reflection pass, with that march only
 //                where the pass has nothing), and normalize refuses the two together
 //   glare        the lower cap on the headlights' highlight on wet ground: off since the reflections were reworked
 //   crisp        revec took its place (with it the shadow resolution default is 1x, SnowRunner Shadows' ini Factor=1)
-//   headglow     the headlights' light in reflections that find nothing: new, off until it has been judged in play
 // The fill light and the photo grade, defaults too, live in initial.pak and boot.pak (the installer's cards)
-const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'headglow');
+const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp');
 
 // known names in ALL's order, "shadows" (older notes and commands) as crisp + blocker, gtao with gi (the bounce light is
 // measured by the GTAO pass); throws on an unknown name
