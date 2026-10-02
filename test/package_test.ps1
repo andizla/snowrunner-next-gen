@@ -37,8 +37,7 @@ try {
   function Said($events, [string]$pattern) { return [bool]@($events | Where-Object { $_.text -match $pattern }).Count }
   $failed = 0
   function Expect([string]$what, [bool]$ok) { if ($ok) { "ok   $what" } else { "FAIL $what"; $script:failed++ } }
-  # the files as the engine test left them (boot.pak and initial.pak with the other mod's files in them): restore at
-  # the end puts them back so
+  # the files as the engine test left them: restore at the end puts them back so
   $paks = Join-Path $game 'preload\paks\client'
   $start = @{}; foreach ($p in 'shader', 'boot') { $start[$p] = (Get-FileHash -LiteralPath (Join-Path $paks "$p.pak")).Hash }
   $r = Run @('apply', '--selection', $selection)

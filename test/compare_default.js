@@ -1,20 +1,32 @@
-// Run after test/package_test.ps1 (node test/compare_default.js): compares what the packaged engine prepared in the
-// package test's state folder (the player's machine) with the tools' working tree, then builds the default shader.pak
-// with the working tree's tools and with the packaged tools on the player-side data; both must equal each other, and
-// the installed game's shader.pak is hashed (read only) for comparison. Writes only out/compare.
-// SR_TOOLS_TREE names the working tree (its tools\, dump\ and replacements\ folders).
+// Run after package.ps1 (node test/compare_default.js). In a state folder of its own, the packaged engine's prepare.js
+// makes the game's shaders and the default selection's sets from an original shader.pak, as it does on a player's
+// machine. They are compared with the tools' working tree; then the default shader.pak is built with the working
+// tree's tools and with the packaged tools on the prepared data. Both must be equal. The installed game's shader.pak is
+// hashed (read only) for comparison. Writes only out/compare.
+// SR_TOOLS_TREE names the working tree (its tools\, dump\, replacements\ and pak_backup\ folders).
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const DEV = process.env.SR_TOOLS_TREE || 'C:\\Games\\SnowRunner-shaders';
-const games = path.join(ROOT, 'out', 'enginetest', 'state', 'games');
-const state = path.join(games, fs.readdirSync(games)[0]);
-const pkgTools = path.join(process.env.TEMP, 'ngen-package-test', 'SnowRunnerNextGen', 'engine', 'tools');
-const OUT = path.join(__dirname, '..', 'out', 'compare');
+const pkgEngine = path.join(ROOT, 'out', 'package', 'SnowRunnerNextGen', 'engine');
+const pkgTools = path.join(pkgEngine, 'tools'), pkgNode = path.join(pkgEngine, 'node.exe');
+const OUT = path.join(ROOT, 'out', 'compare');
+// the window's default shader modules
+const MODULES = 'gtao,aofar,revec,blocker,seam,ambient,fog,tonemap,bloom,water,rivertint,crestglow,puddles,gi,smoke,smokeshade,sssr,headglow,contact';
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
-console.log('state folder ' + state);
+const clean = Object.assign({}, process.env);
+for (const k of Object.keys(clean)) if (/^SR_|^NODE_OPTIONS$|^TRACE_FILE$/.test(k)) delete clean[k];
+
+// 0. the player's side: a state folder that holds the original shader.pak, and what the packaged prepare.js makes there
+const state = path.join(OUT, 'state'), original = path.join(DEV, 'pak_backup', 'shader.pak.orig');
+fs.mkdirSync(state);
+fs.copyFileSync(original, path.join(state, 'shader.pak.orig'));
+const t0 = Date.now();
+const prep = spawnSync(pkgNode, [path.join(pkgEngine, 'prepare.js'), '--state', state, '--tools', pkgTools, '--modules', MODULES], { env: clean, encoding: 'utf8', maxBuffer: 64 << 20 });
+if (prep.status !== 0) { console.log((prep.stdout + prep.stderr).split('\n').filter(Boolean).slice(-5).join('\n')); throw new Error('the packaged prepare.js failed'); }
+console.log('state folder ' + state + ', prepared by the packaged engine in ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
 
 // 1. blobs
 const dumpA = path.join(DEV, 'dump'), dumpB = path.join(state, 'dump');
@@ -59,28 +71,22 @@ for (const set of prepared.sets)
     console.log('  ' + set.padEnd(34) + (xa.join() === xb.join() ? (d.length ? d.length + ' of ' + xa.length + ' DIFFER' : 'equal (' + xa.length + ')') : 'file lists differ (' + xa.length + ' vs ' + xb.length + ')'));
 }
 
-// 4. bundles both ways: the engine test's default set, every module, and the per-material reflections instead of the pass
-// the window's default shader modules
-const LISTS = {
-    new_default: 'gtao,aofar,revec,blocker,seam,ambient,fog,tonemap,bloom,water,rivertint,crestglow,puddles,gi,smoke,smokeshade,sssr,headglow,contact',
-};
+// 4. the default shader.pak both ways. The packaged tool gets a pak of its own to point at: left to its default it
+// would look at the Steam install
 const installedPak = 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/shader.pak';
 const INSTALLED = fs.existsSync(installedPak) ? sha(installedPak).slice(0, 8) : 'none';   // read only
-const clean = Object.assign({}, process.env);
-for (const k of Object.keys(clean)) if (/^SR_|^NODE_OPTIONS$|^TRACE_FILE$/.test(k)) delete clean[k];
-const gameCopy = path.join(ROOT, 'out', 'enginetest', 'game', 'preload', 'paks', 'client', 'shader.pak');
-for (const [name, MODULES] of Object.entries(LISTS))
-{
-    const pakA = path.join(OUT, name + '_dev.pak'), pakB = path.join(OUT, name + '_package.pak');
-    const t0 = Date.now();
-    const la = execFileSync(process.execPath, [path.join(DEV, 'tools', 'fidelity_bundle.js'), 'build', pakA, MODULES], { env: clean, stdio: ['ignore', 'pipe', 'inherit'] }).toString();
-    const lb = execFileSync(path.join(pkgTools, '..', 'node.exe'), [path.join(pkgTools, 'fidelity_bundle.js'), 'build', pakB, MODULES],
-        { env: Object.assign({}, clean, { SR_SHADER_PAK: gameCopy, SR_STATE_DIR: state, SR_DUMP_DIR: dumpB, SR_SETS_DIR: path.join(state, 'sets') }), stdio: ['ignore', 'pipe', 'inherit'] }).toString();
-    const a = sha(pakA), b = sha(pakB), as = sha(pakA + '.stock'), bs = sha(pakB + '.stock');
-    console.log(name.padEnd(12) + 'shader.pak dev ' + a.slice(0, 8) + ', package ' + b.slice(0, 8) + (a === b ? ' EQUAL' : ' DIFFER') +
-        '; stock twins ' + (as === bs ? 'EQUAL' : 'DIFFER') + '; the installed pak ' + INSTALLED + (b.startsWith(INSTALLED) ? ': SAME' : ': not the same') +
-        '  (' + ((Date.now() - t0) / 1000).toFixed(0) + ' s)');
-    console.log('            ' + la.split('\n')[0].replace(/; sha256 .*/, '').slice(0, 600));
-    if (la.split('\n')[0] !== lb.split('\n')[0]) console.log('            package said: ' + lb.split('\n')[0].slice(0, 600));
-    for (const f of [pakA, pakB, pakA + '.stock', pakB + '.stock']) fs.unlinkSync(f);
-}
+const ownPak = path.join(OUT, 'shader.pak');
+fs.copyFileSync(original, ownPak);
+const pakA = path.join(OUT, 'default_dev.pak'), pakB = path.join(OUT, 'default_package.pak');
+const t1 = Date.now();
+const saidA = execFileSync(process.execPath, [path.join(DEV, 'tools', 'fidelity_bundle.js'), 'build', pakA, MODULES], { env: clean, stdio: ['ignore', 'pipe', 'inherit'] }).toString();
+const saidB = execFileSync(pkgNode, [path.join(pkgTools, 'fidelity_bundle.js'), 'build', pakB, MODULES],
+    { env: Object.assign({}, clean, { SR_SHADER_PAK: ownPak, SR_STATE_DIR: state, SR_DUMP_DIR: dumpB, SR_SETS_DIR: path.join(state, 'sets') }), stdio: ['ignore', 'pipe', 'inherit'] }).toString();
+const a = sha(pakA), b = sha(pakB), as = sha(pakA + '.stock'), bs = sha(pakB + '.stock');
+console.log('new_default shader.pak dev ' + a.slice(0, 8) + ', package ' + b.slice(0, 8) + (a === b ? ' EQUAL' : ' DIFFER') +
+    '; stock twins ' + (as === bs ? 'EQUAL' : 'DIFFER') + '; the installed pak ' + INSTALLED + (b.startsWith(INSTALLED) ? ': SAME' : ': not the same') +
+    '  (' + ((Date.now() - t1) / 1000).toFixed(0) + ' s)');
+console.log('            ' + saidA.split('\n')[0].replace(/; sha256 .*/, '').slice(0, 600));
+if (saidA.split('\n')[0] !== saidB.split('\n')[0]) console.log('            package said: ' + saidB.split('\n')[0].slice(0, 600));
+for (const f of [pakA, pakB, pakA + '.stock', pakB + '.stock', ownPak]) fs.unlinkSync(f);
+if (a !== b || as !== bs || !bytesEqual || diff.length || onlyA.length || onlyB.length) process.exitCode = 1;

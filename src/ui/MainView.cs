@@ -385,12 +385,17 @@ namespace SnowRunnerNextGen
         // a part that is neither ours nor the original: a game update, a Steam file check, another mod
         static bool Problem(GameStatus s)
         {
-            return s.Shader == "changed" || s.Shader == "unknown" || s.Scenery == "changed" || s.Grass == "changed" || s.Grade == "changed" || s.Logos == "changed";
+            return s.Shader == "changed" || s.Shader == "unknown" || s.Scenery == "changed" || s.Grass == "changed" || s.Grade == "changed" || s.Logos == "changed"
+                || s.Orphaned.Count > 0;
         }
 
         static string Describe(GameStatus s)
         {
             if (s.Running) return "SnowRunner is running: close it before you apply.";
+            // paks that hold our changes while the originals kept for them are gone: nothing can be built on them or restored
+            if (s.Orphaned.Count > 0)
+                return Look.JoinAnd(s.Orphaned) + (s.Orphaned.Count == 1 ? " still holds" : " still hold") + " SnowRunner Next Gen's changes, but the kept " +
+                    (s.Orphaned.Count == 1 ? "original is" : "originals are") + " gone. Have the store check the game's files (in Steam: Properties, Installed Files, Verify integrity of game files), then apply again.";
             List<string> parts = new List<string>();
             if (s.Shader == "ours") parts.Add(s.Modules.Count + (s.Modules.Count == 1 ? " shader module" : " shader modules"));
             if (s.Dll == "ours") parts.Add("Shadows " + Number(s.Factor) + "x" + (s.DllCurrent ? "" : " (another build)"));

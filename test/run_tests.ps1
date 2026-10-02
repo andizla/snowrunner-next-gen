@@ -93,6 +93,12 @@ try {
   foreach ($c in $list.Cards) { $c.Reset() }
   Check 'defaults again' (Ticked) $defaults
 
+  # the header for a game whose paks hold our changes while their kept originals are gone
+  $status = [Activator]::CreateInstance($asm.GetType('SnowRunnerNextGen.GameStatus'))
+  foreach ($f in 'initial.pak', 'boot.pak') { $status.Orphaned.Add($f) }
+  $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($status))
+  Check 'header: paks without their kept originals' ($said -match '^initial\.pak and boot\.pak still hold SnowRunner Next Gen''s changes, but the kept originals are gone\. Have the store check the game''s files') 'True'
+
   # every module explains itself, and every picture it names is next to the exe
   $help = $asm.GetType('SnowRunnerNextGen.Help')
   $without = @(); $missing = @()

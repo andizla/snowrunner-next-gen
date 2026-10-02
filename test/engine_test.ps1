@@ -5,7 +5,8 @@
 # other, another mod's files added to boot.pak, initial.pak and gfx.pak after Next Gen's changes (the question naming
 # the files, leaving them out, taking them as the originals), the night sky waiting for a changed initial.pak, and
 # restore, which then takes Next Gen's changes out and keeps the other mod's files: shader.pak and shared.pak are the
-# originals byte for byte.
+# originals byte for byte. Last, the kept originals are lost while the changes are still in the game: Apply and
+# Restore stop on the note in the game folder until the files are the game's own again.
 # Takes several minutes (shader.pak builds, 2 GB shared.pak writes) and about 10 GB of disk.
 # usage (after build.ps1): powershell -NoProfile -ExecutionPolicy Bypass -File test\engine_test.ps1
 # -Engine <folder>: test that engine instead (a package's engine\ with its own node.exe, see package_test.ps1)
@@ -55,6 +56,12 @@ function Hash($file) { return (Get-FileHash -LiteralPath $file -Algorithm SHA256
 function Warned($events, [string]$pattern) { return [bool]@($events | Where-Object { $_.type -eq 'warn' -and $_.text -match $pattern }).Count }
 # what the last build of initial.pak in an apply said it holds
 function LastInitial($events) { return "$(@($events | Where-Object { $_.text -match 'initial\.pak now has' } | Select-Object -Last 1).text)" }
+# the paks the engine's note in the game folder names, or none
+function Note {
+  $file = Join-Path $paks 'SnowRunnerNextGen.json'
+  if (-not (Test-Path -LiteralPath $file)) { return 'none' }
+  return (@((Get-Content -LiteralPath $file -Raw | ConvertFrom-Json).files.PSObject.Properties | ForEach-Object { $_.Name }) | Sort-Object) -join ' '
+}
 # a zip's end record: { at, count, cdSize, cdOffset } and the file's open stream
 function EndRecord($fs) {
   $n = [int][Math]::Min(65557, $fs.Length); $tail = New-Object byte[] $n
@@ -129,6 +136,7 @@ Check 'every part: status' (Summary (Status)) ('ours [' + ($default -join ',') +
 Check 'every part: boot.pak holds the grade, the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 90'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'
+Check 'every part: the note in the game folder names the five paks' (Note) 'boot.pak gfx.pak initial.pak shader.pak shared.pak'
 Check 'ini: the ambient occlusion pass at half size' ((Get-Content -LiteralPath (Join-Path $bin 'SnowRunnerShadows.ini')) -contains 'AOHalf=1') 'True'
 Check 'Bin has hid.dll, its ini and the stock twins' ((Test-Path (Join-Path $bin 'hid.dll')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'True'
 
@@ -217,6 +225,36 @@ foreach ($p in 'initial', 'boot', 'gfx') {
 }
 Check 'restore: the other mod''s hid.dll is back' (Hash (Join-Path $bin 'hid.dll')) $foreignHash
 Check 'restore: no hid_chain.dll, ini or stock twins left' ((Test-Path (Join-Path $bin 'hid_chain.dll')) -or (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -or (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'False'
+Check 'restore: the note in the game folder is gone' (Note) 'none'
+
+'the kept originals lost while the changes are still in the game'
+$small = [ordered]@{ shader = @('gtao'); shadows = $null; scenery = $null; grass = $null; fill = '0.7'; grade = '1' }
+$r = Apply $small
+Check 'a small set: done' (Last $r) 'done'
+Check 'a small set: the note names its three paks' (Note) 'boot.pak initial.pak shader.pak'
+# the state folder goes: the engine makes an empty one at the same place
+Rename-Item -LiteralPath $env:NGEN_STATE_ROOT -NewName 'state.lost'
+$shaderPak = Join-Path $paks 'shader.pak'
+$was = @{}; foreach ($pak in $shaderPak, $boot, $initial) { $was[$pak] = Hash $pak }
+Check 'originals lost: the status names the three paks' ((@((Status).orphaned) | Sort-Object) -join ' ') 'boot.pak initial.pak shader.pak'
+$r = Apply $small
+$e = $r[$r.Count - 1]
+Check 'originals lost: Apply stops' ('{0} {1} {2}' -f $e.type, $e.code, ((@($e.files) | Sort-Object) -join ',')) 'error orphaned boot.pak,initial.pak,shader.pak'
+Check 'originals lost: it says why and what to do' (($e.text -match 'would make those changes a second time') -and ($e.text -match 'Have the store check the game''s files')) 'True'
+$r = Engine @('restore')
+$e = $r[$r.Count - 1]
+Check 'originals lost: Restore stops too' ('{0} {1}' -f $e.type, $e.code) 'error orphaned'
+Check 'originals lost: nothing was written' ([bool](-not @($shaderPak, $boot, $initial | Where-Object { (Hash $_) -ne $was[$_] }).Count)) 'True'
+
+'after the store''s file check: the game''s own files are back, the state folder still empty'
+foreach ($p in 'shader', 'boot', 'initial') { Copy-Item -LiteralPath (Join-Path $originals "$p.pak.orig") -Destination (Join-Path $paks "$p.pak") -Force }
+Check 'after the file check: no pak is named any more' (@((Status).orphaned).Count) 0
+$r = Apply ([ordered]@{ shader = @(); shadows = $null; scenery = $null; grass = $null; fill = '0.7'; grade = '1' })
+Check 'after the file check: Apply works again' (Last $r) 'done'
+Check 'after the file check: the note names the two paks' (Note) 'boot.pak initial.pak'
+$r = Engine @('restore')
+Check 'after the file check: restore, and the note is gone' ('{0} {1}' -f (Last $r), (Note)) 'done none'
+foreach ($p in 'boot', 'initial') { Check "after the file check: $p.pak is the original byte for byte" (Hash (Join-Path $paks "$p.pak")) (Hash (Join-Path $originals "$p.pak.orig")) }
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }
 'all passed'

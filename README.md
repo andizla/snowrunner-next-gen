@@ -81,6 +81,8 @@ In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery det
 
 The kept originals live in `%LOCALAPPDATA%\SnowRunnerNextGen`. Every new file is written next to the old one, read back and checked before it takes the old one's place. The program refuses to write while the game runs.
 
+Next to the paks the program leaves a small note, `SnowRunnerNextGen.json`, naming the files that hold its changes. Should the kept originals ever be lost (a new Windows install with the game on another drive, say), the note lets the program see that those files are not the game's own. It then changes nothing and asks you to have the store check the game's files first. Restore originals takes the note away.
+
 ## Build
 
 Windows 10 or 11. The window builds with the C# compiler that ships with Windows. The tools run on Node.js 22.2 or newer, and the package carries a copy of its `node.exe`. The shaders need `fxc.exe` from the Windows SDK, and SnowRunner Shadows needs Visual Studio 2022 with the C++ tools.

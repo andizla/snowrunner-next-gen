@@ -43,6 +43,7 @@ namespace SnowRunnerNextGen
         public string StarsFactor;
         public string Sky = "vanilla";            // the night sky, the third part of boot.pak: the same states
         public string Logos = "vanilla";          // the Next Gen logos in gfx.pak: the same states
+        public readonly List<string> Orphaned = new List<string>();   // paks that hold our changes while their kept originals are gone
 
         public bool AnythingOurs
         {
@@ -79,6 +80,8 @@ namespace SnowRunnerNextGen
             s.StarsFactor = Text(stars, "factor");
             s.Sky = Text(Part(d, "sky"), "state") ?? "missing";
             s.Logos = Text(Part(d, "logos"), "state") ?? "missing";
+            IEnumerable orphaned = d.ContainsKey("orphaned") ? d["orphaned"] as IEnumerable : null;
+            if (orphaned != null && !(orphaned is string)) foreach (object f in orphaned) if (f != null) s.Orphaned.Add(f.ToString());
             return s;
         }
 

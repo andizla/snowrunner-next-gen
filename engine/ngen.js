@@ -6,7 +6,8 @@
 //   {"type":"done","text":...}    finished                {"type":"error","code":...,"text":...}   stopped
 //   error codes: usage, missing (no game there), running (close the game), adopt-files (files another mod or a game
 //   update changed, named in "files": run again with --adopt to take them as they are now as the originals, or with
-//   --leave to leave them and their parts out), failed
+//   --leave to leave them and their parts out), orphaned (the paks named in "files" hold Next Gen's changes while
+//   their kept originals are gone: see the note in the game folder), failed
 // The work is done by the project's own tools (engine\tools: fidelity_bundle.js builds shader.pak, pak_shader_patch.js
 // puts it back, lod_patch.js does shared.pak and the grass, the fill light and the stars in initial.pak, lut_grade.js
 // the colour LUTs, the particle textures and the night sky in boot.pak, gfx_logos.js the logos in gfx.pak); SnowRunner
@@ -296,6 +297,11 @@ function removeStock(g)
 
 async function readStatus(g, state)
 {
+    return Object.assign({ game: g.root, running: gameRunning(g) }, await readPaks(g, state), { dll: dllStatus(g), orphaned: orphaned(g, state), stateDir: state });
+}
+// what the paks hold, as the tools answer it
+async function readPaks(g, state)
+{
     const env = toolEnv(g, state);
     const said = await answer('fidelity_bundle.js', ['modules'], env);   // stock, a comma list, or unknown
     let shader;
@@ -307,16 +313,17 @@ async function readStatus(g, state)
     }
     else shader = { state: 'ours', modules: said.split(',').filter(Boolean) };
     const scenery = fs.existsSync(g.shared) ? await answer('lod_patch.js', ['status'], env) : 'missing';   // nature, all, vanilla, changed
-    const { grass, fill, stars } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
+    const { grass, fill, stars, initialPak } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
     const sky = await readSky(g, env), logos = await readLogos(g, env);
-    return { game: g.root, running: gameRunning(g), shader, dll: dllStatus(g), scenery, grass, fill, stars, grade, particles, sky, logos, stateDir: state };
+    return { shader, scenery, grass, fill, stars, initialPak, grade, particles, sky, logos };
 }
-// initial.pak: the grass and the fill light, two parts of one build: { grass, fill }, each { state, factor }
+// initial.pak: the grass, the fill light and the stars, three parts of one build, each { state, factor }; initialPak
+// is the file's own state (ours also when it holds none of the three: the sky levels of the night sky's photo skies)
 async function readInitial(g, env)
 {
     const init = fs.existsSync(g.initial) ? JSON.parse(await answer('lod_patch.js', ['initial-status'], env)) : { state: 'missing' };
     const part = (v) => (init.state !== 'ours' ? { state: init.state } : v ? { state: 'ours', factor: String(v) } : { state: 'vanilla' });
-    return { grass: part(init.grass), fill: part(init.fill), stars: part(init.stars) };   // ours (with factor), vanilla, changed, missing
+    return { grass: part(init.grass), fill: part(init.fill), stars: part(init.stars), initialPak: init.state };   // ours (with factor), vanilla, changed, missing
 }
 // the photo grade: the daytime colour LUTs in boot.pak ({ state, strength })
 async function readGrade(g, env)
@@ -342,6 +349,78 @@ async function readLogos(g, env)
 {
     const said = fs.existsSync(g.gfx) ? await answer('gfx_logos.js', ['status'], env) : 'missing';
     return { state: said === 'logos' ? 'ours' : said };
+}
+
+// ---- the note in the game folder
+// Next to the paks the engine leaves SnowRunnerNextGen.json: the paks that hold its changes now, each with the hash of
+// its file directory. Their originals are kept in the state folder, outside the game. When that folder is lost (a new
+// Windows install, a cleaned profile) while the game still has the changed paks, the tools would take them for
+// originals and make every change a second time. The note tells the two apart: a pak it names, whose directory still
+// has that hash and whose original is not in the state folder, is one of ours without its original. Apply and Restore
+// stop on it before anything is written.
+const NOTE_NAME = 'SnowRunnerNextGen.json';
+const NOTE_ABOUT = 'SnowRunner Next Gen wrote this note. The files named here hold its changes, and their originals are kept in %LOCALAPPDATA%\\SnowRunnerNextGen. ' +
+    'Should those originals ever be lost, the note tells the program that these are not the game\'s own files. Restore originals takes the note away.';
+const pakFile = (g, name) => g[name.replace(/\.pak$/, '')];
+
+// sha256 of a pak's file directory (the zip's central directory), which changes with any entry; null when the file is
+// missing or has no directory
+function dirHash(file)
+{
+    let fd;
+    try { fd = fs.openSync(file, 'r'); } catch (e) { return null; }
+    try
+    {
+        const size = fs.fstatSync(fd).size, n = Math.min(size, 65557), tail = Buffer.alloc(n);
+        fs.readSync(fd, tail, 0, n, size - n);
+        for (let i = n - 22; i >= 0; i--)   // the end record, behind which a pak may be padded
+        {
+            if (tail.readUInt32LE(i) !== 0x06054b50) continue;
+            const cdSize = tail.readUInt32LE(i + 12), cdOffset = tail.readUInt32LE(i + 16);
+            if (cdOffset + cdSize > size) continue;
+            const cd = Buffer.alloc(cdSize);
+            fs.readSync(fd, cd, 0, cdSize, cdOffset);
+            return crypto.createHash('sha256').update(cd).digest('hex');
+        }
+        return null;
+    }
+    finally { fs.closeSync(fd); }
+}
+// the paks that hold Next Gen's changes, from what readPaks read
+const holdsOurs = (s) => ({
+    'shader.pak': s.shader.state === 'ours', 'shared.pak': s.scenery === 'nature' || s.scenery === 'all', 'initial.pak': s.initialPak === 'ours',
+    'boot.pak': s.grade.state === 'ours' || s.particles.state === 'ours' || s.sky.state === 'ours', 'gfx.pak': s.logos.state === 'ours',
+});
+// the note as the game is now, or no note when no pak holds a change
+async function leaveNote(g, state)
+{
+    const holds = holdsOurs(await readPaks(g, state)), files = {};
+    for (const name of Object.keys(holds))
+    {
+        const hash = holds[name] ? dirHash(pakFile(g, name)) : null;
+        if (hash) files[name] = hash;
+    }
+    const file = path.join(g.paks, NOTE_NAME);
+    if (Object.keys(files).length) fs.writeFileSync(file, JSON.stringify({ about: NOTE_ABOUT, date: stamp(), files }, null, 2) + '\r\n');
+    else if (fs.existsSync(file)) fs.unlinkSync(file);
+}
+// the paks the note names that still are as it describes them while their original is not kept: ours, without a way back
+function orphaned(g, state)
+{
+    let note;
+    try { note = JSON.parse(fs.readFileSync(path.join(g.paks, NOTE_NAME), 'utf8')); } catch (e) { return []; }
+    const files = note && typeof note.files === 'object' && note.files ? note.files : {};
+    return Object.keys(files).filter((name) => pakFile(g, name) && !fs.existsSync(path.join(state, name + '.orig')) && dirHash(pakFile(g, name)) === files[name]);
+}
+const namesOf = (files) => (files.length < 3 ? files.join(' and ') : files.slice(0, -1).join(', ') + ' and ' + files[files.length - 1]);
+function orphanText(files, restoring)
+{
+    const one = files.length === 1, it = one ? 'it' : 'them';
+    return namesOf(files) + (one ? ' still holds' : ' still hold') + ' Next Gen\'s changes, but the ' + (one ? 'original' : 'originals') + ' kept for ' + it +
+        (one ? ' is' : ' are') + ' gone: the folder %LOCALAPPDATA%\\SnowRunnerNextGen was lost, or it belongs to another Windows install. ' +
+        (restoring ? 'Restore has nothing to put back for ' + it + '. ' : 'Building on ' + it + ' would make those changes a second time. ') +
+        'Have the store check the game\'s files (in Steam: Properties, Installed Files, Verify integrity of game files)' +
+        (restoring ? ': that puts the game\'s own files back.' : ', then Apply again.');
 }
 
 // ---- apply and restore
@@ -458,6 +537,7 @@ async function apply(g, state, sel, adopt, leave)
         warn('Bounce light and the reflections read the scene from SnowRunner Shadows: without it they change nothing.');
     step('Reading what is installed');
     const now = await readStatus(g, state);
+    if (now.orphaned.length) throw new EngineError('orphaned', orphanText(now.orphaned, false), { files: now.orphaned });
     const notes = lastNotes(state), last = notes.selection || {};
 
     // the files another mod changed that this selection writes: one question for all of them, before anything is written
@@ -469,6 +549,7 @@ async function apply(g, state, sel, adopt, leave)
     if (now.grade.state === 'changed' && (grade || last.grade || particles || last.particles || sky || last.sky)) changed.push('boot.pak');
     if (now.logos.state === 'changed' && (logos || last.logos)) changed.push('gfx.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, false), { files: changed });
+    g.touched = true;   // from here on files are written: the note in the game folder is renewed at the end, also after a stop (main)
     if (adopt) await adoptPaks(g, env, now, changed);
     const initialLeft = now.grass.state === 'changed';   // still changed after the question: left as it is
 
@@ -600,6 +681,8 @@ async function apply(g, state, sel, adopt, leave)
     else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is, so the Next Gen logo was left out.');
     else { step('Putting the Next Gen logo in (gfx.pak, 700 MB)'); await must('gfx_logos.js', ['install'], env); }
 
+    await leaveNote(g, state);
+    g.touched = false;
     fs.writeFileSync(path.join(state, 'nextgen.json'), JSON.stringify({ selection: sel, parts: PARTS, date: stamp() }, null, 2));
     emit({ type: 'done', text: 'Installed. Start the game to see it.' });
 }
@@ -610,6 +693,7 @@ async function restore(g, state, adopt, leave)
     const env = toolEnv(g, state), bootStamp = fileStamp(g.boot);
     step('Reading what is installed');
     const now = await readStatus(g, state);
+    if (now.orphaned.length) throw new EngineError('orphaned', orphanText(now.orphaned, true), { files: now.orphaned });
     // files another mod changed since the last apply put Next Gen's changes in them: with the player's yes they are taken
     // as they are now, so restore takes Next Gen's changes out of them and keeps the other mod's
     const last = lastNotes(state).selection || {};
@@ -618,6 +702,7 @@ async function restore(g, state, adopt, leave)
     if (now.grade.state === 'changed' && (last.grade || last.particles || last.sky)) changed.push('boot.pak');
     if (now.logos.state === 'changed' && last.logos) changed.push('gfx.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, true), { files: changed });
+    g.touched = true;   // files are written from here on: see apply
     if (adopt) await adoptPaks(g, env, now, changed);
     const initialLeft = now.grass.state === 'changed';   // still changed after the question: left as it is
     if (now.shader.state === 'ours') { step('Putting the original shader.pak back'); await must('pak_shader_patch.js', ['restore'], env); }
@@ -640,6 +725,8 @@ async function restore(g, state, adopt, leave)
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
     if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }
     else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is.');
+    await leaveNote(g, state);
+    g.touched = false;
     fs.writeFileSync(path.join(state, 'nextgen.json'), JSON.stringify({ selection: null, date: stamp() }, null, 2));
     emit({ type: 'done', text: 'The game\'s own files are back.' });
 }
@@ -648,11 +735,13 @@ async function main()
 {
     const args = process.argv.slice(2), cmd = args[0];
     const opt = (name) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : null; };
+    let g = null, state = null;
     try
     {
         const game = opt('game');
         if (!game || !['status', 'apply', 'restore'].includes(cmd)) throw new EngineError('usage', 'usage: node ngen.js status|apply|restore --game <folder> [--selection <file.json>] [--adopt | --leave]');
-        const g = gameFiles(game), state = stateDir(game);
+        g = gameFiles(game);
+        state = stateDir(game);
         if (cmd === 'status') emit(Object.assign({ type: 'status' }, await readStatus(g, state)));
         else if (cmd === 'restore') await restore(g, state, args.includes('--adopt'), args.includes('--leave'));
         else
@@ -664,6 +753,8 @@ async function main()
     }
     catch (e)
     {
+        // a stop after the first write: the note still has to name the paks that hold Next Gen's changes now
+        if (g && g.touched) { try { await leaveNote(g, state); } catch (e2) { /* the stop itself is what is reported */ } }
         emit(Object.assign({ type: 'error', code: e.code || 'failed', text: e.message }, e.extra || {}));
         process.exitCode = 1;
     }
