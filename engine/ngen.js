@@ -7,20 +7,21 @@
 //   error codes: usage, missing (no game there), running (close the game), adopt-files (files another mod or a game
 //   update changed, named in "files": run again with --adopt to take them as they are now as the originals, or with
 //   --leave to leave them and their parts out), failed
-// The work is done by the project's own tools, the code the modules are tested with (SnowRunner-shaders\tools:
-// fidelity_bundle.js builds shader.pak, pak_shader_patch.js puts it back, lod_patch.js does shared.pak and the
-// grass and the fill light in initial.pak, lut_grade.js the colour LUTs in boot.pak); SnowRunner Shadows (hid.dll and
-// its ini in Sources\Bin) is copied in and out here. Every
-// file is built from the game's original, kept in a state folder outside the game (one per game folder).
+// The work is done by the project's own tools (engine\tools: fidelity_bundle.js builds shader.pak, pak_shader_patch.js
+// puts it back, lod_patch.js does shared.pak and the grass, the fill light and the stars in initial.pak, lut_grade.js
+// the colour LUTs, the particle textures and the night sky in boot.pak, gfx_logos.js the logos in gfx.pak); SnowRunner
+// Shadows (hid.dll and its ini in Sources\Bin) is copied in and out here. Every file is built from the game's
+// original, kept in a state folder outside the game (one per game folder).
 // usage: node ngen.js status  --game <folder>
 //        node ngen.js apply   --game <folder> --selection <file.json> [--adopt | --leave]
 //        node ngen.js restore --game <folder> [--adopt | --leave]
 // selection: { "shader": [fidelity_bundle.js module names], "shadows": null | { "factor": "1", "slopeBias": "1", "aoHalf": "1" },
 //              "scenery": null | "nature" | "all", "grass": null | "3" | "2", "fill": null | "0.7" | "0.55" | "0.85",
-//              "grade": null | "1" | "0.5", "particles": null | "1", "stars": null | "3" | "2" }
-// config.json next to this file: { "tools": <folder>, "dll": <hid.dll to install>, "devGame": <folder>,
-//   "devState": <folder> } (the dev build shares devState, the project's pak_backup, with its menu for devGame);
-//   NGEN_STATE_ROOT moves the state folders (tests)
+//              "grade": null | "1" | "0.5", "particles": null | "1", "sky": null | "1", "stars": null | "3" | "2",
+//              "logos": null | "1" }
+// config.json next to this file: { "tools": <folder>, "dll": <hid.dll to install> }. A dev build may add "devGame" and
+//   "devState" (that game folder's state lives in devState) and "dump" and "sets" (folders that already hold the game's
+//   shaders and the sets made from them, so prepare.js is not run); NGEN_STATE_ROOT moves the state folders (tests)
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
@@ -36,9 +37,10 @@ const config = Object.assign({ tools: path.join(__dirname, 'tools'), dll: path.j
     fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf8')) : {});
 if (!path.isAbsolute(config.tools)) config.tools = path.join(__dirname, config.tools);
 if (!path.isAbsolute(config.dll)) config.dll = path.join(__dirname, config.dll);
-// packaged: the tools come without the game's shaders (their dump\ folder); prepare.js makes them per game in the state
-// folder from the player's own shader.pak, and the shader tools read them there (SR_DUMP_DIR, SR_SETS_DIR)
-const packaged = !fs.existsSync(path.join(config.tools, '..', 'dump', 'index.json'));
+// the tools come without the game's shaders: prepare.js makes them per game in the state folder from the player's own
+// shader.pak, and the shader tools read them there (SR_DUMP_DIR, SR_SETS_DIR). A dev config names folders that hold
+// them already
+const ownDump = config.dump && config.sets ? { SR_DUMP_DIR: config.dump, SR_SETS_DIR: config.sets } : null;
 // the fingerprint of each part's code (the package build writes parts.json): a part whose code changed is rebuilt even
 // when the selection is the same, so a new installer version updates an old install
 const partsFile = path.join(__dirname, 'parts.json');
@@ -70,6 +72,7 @@ function gameFiles(game)
     return {
         root, paks, bin: fs.existsSync(path.join(bin, 'SnowRunner.exe')) ? bin : null,
         shader: path.join(paks, 'shader.pak'), shared: path.join(paks, 'shared.pak'), initial: path.join(paks, 'initial.pak'), boot: path.join(paks, 'boot.pak'),
+        gfx: path.join(paks, 'gfx.pak'),
     };
 }
 
@@ -86,9 +89,10 @@ function stateDir(game)
     return dir;
 }
 
+// every pak a tool may write is named here: a tool left to its own default would reach for the Steam install
 const toolEnv = (g, state) => Object.assign({}, process.env,
-    { SR_SHADER_PAK: g.shader, SR_SHARED_PAK: g.shared, SR_INITIAL_PAK: g.initial, SR_BOOT_PAK: g.boot, SR_STATE_DIR: state, LOD_GRASS: 'leave' },
-    packaged ? { SR_DUMP_DIR: path.join(state, 'dump'), SR_SETS_DIR: path.join(state, 'sets') } : {});
+    { SR_SHADER_PAK: g.shader, SR_SHARED_PAK: g.shared, SR_INITIAL_PAK: g.initial, SR_BOOT_PAK: g.boot, SR_GFX_PAK: g.gfx, SR_STATE_DIR: state, LOD_GRASS: 'leave' },
+    ownDump || { SR_DUMP_DIR: path.join(state, 'dump'), SR_SETS_DIR: path.join(state, 'sets') });
 
 // the notes of the last apply: { selection, parts, date }
 function lastNotes(state)
@@ -99,8 +103,8 @@ function lastNotes(state)
 // whether a part installed before was built by the code this installer carries (true when nothing is known: dev build)
 const sameCode = (notes, part) => !PARTS[part] || ((notes.parts || {})[part] === PARTS[part]);
 
-// prepare.js (packaged only): the game's shaders and the sets patched from them, made in the state folder; its events
-// (step, log) are passed on, an error stops the apply
+// prepare.js: the game's shaders and the sets patched from them, made in the state folder; its events (step, log) are
+// passed on, an error stops the apply
 function prepare(state, modules)
 {
     return new Promise((resolve, reject) =>
@@ -304,7 +308,8 @@ async function readStatus(g, state)
     else shader = { state: 'ours', modules: said.split(',').filter(Boolean) };
     const scenery = fs.existsSync(g.shared) ? await answer('lod_patch.js', ['status'], env) : 'missing';   // nature, all, vanilla, changed
     const { grass, fill, stars } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
-    return { game: g.root, running: gameRunning(g), shader, dll: dllStatus(g), scenery, grass, fill, stars, grade, particles, stateDir: state };
+    const sky = await readSky(g, env), logos = await readLogos(g, env);
+    return { game: g.root, running: gameRunning(g), shader, dll: dllStatus(g), scenery, grass, fill, stars, grade, particles, sky, logos, stateDir: state };
 }
 // initial.pak: the grass and the fill light, two parts of one build: { grass, fill }, each { state, factor }
 async function readInitial(g, env)
@@ -325,6 +330,18 @@ async function readParticles(g, env)
 {
     const said = fs.existsSync(g.boot) ? await answer('lut_grade.js', ['particles-status'], env) : 'missing';
     return { state: said === 'particles' ? 'ours' : said === 'none' ? 'vanilla' : said };
+}
+// the night sky in boot.pak, the third part there ({ state }): ours, vanilla, changed, missing
+async function readSky(g, env)
+{
+    const said = fs.existsSync(g.boot) ? await answer('lut_grade.js', ['sky-status'], env) : 'missing';
+    return { state: said === 'sky' ? 'ours' : said === 'none' ? 'vanilla' : said };
+}
+// the Next Gen logos in gfx.pak ({ state }): ours, vanilla, changed, missing
+async function readLogos(g, env)
+{
+    const said = fs.existsSync(g.gfx) ? await answer('gfx_logos.js', ['status'], env) : 'missing';
+    return { state: said === 'logos' ? 'ours' : said };
 }
 
 // ---- apply and restore
@@ -369,6 +386,11 @@ async function refreshInitial(g, env) { if (fs.existsSync(g.initial)) await must
 // a boot.pak that is neither the original nor our build: another mod added its files to it (a texture pack, say) or
 // a game update replaced it
 const BOOT_CHANGED = 'boot.pak has changes from another mod (such as a texture pack) or a game update';
+const GFX_CHANGED = 'gfx.pak has changes from another mod (such as an interface mod) or a game update';
+// the night sky's photo skies carry their stars in the picture's alpha, and the sky levels in initial.pak are set to
+// match (lod_patch.js does that whenever it builds; see refreshInitial). So the night sky goes in or out only while
+// initial.pak can be written with it
+const SKY_NEEDS_INITIAL = 'initial.pak was changed by another mod or a game update since its original was kept, and the night sky\'s photo skies need their levels set in it';
 
 // ---- files another mod changed
 // Every file is built from the copy the engine kept before its first change. A file that another mod (a texture pack
@@ -388,7 +410,8 @@ function adoptQuestion(files, restoring)
             ? 'Restore then takes Next Gen\'s own changes out of ' + it + ' and keeps the other mod\'s: the game\'s own file' + s + (one ? ' does' : ' do') + ' not come back.'
             : 'Next Gen then writes its changes over ' + it + ', and Restore puts ' + it + ' back as ' + is + ' now, the other mod\'s changes included, not the game\'s own file' + s + '.');
 }
-// boot.pak and initial.pak taken as they are now as the originals (after the player's yes); their parts read again
+// boot.pak, initial.pak and gfx.pak taken as they are now as the originals (after the player's yes); their parts read
+// again
 async function adoptPaks(g, env, now, files)
 {
     const kept = (file) => new EngineError('failed', file + ' could not be taken as the original: it still reads as changed (are the tools older than this engine?)');
@@ -405,7 +428,15 @@ async function adoptPaks(g, env, now, files)
         await must('lut_grade.js', ['adopt'], env);
         now.grade = await readGrade(g, env);
         now.particles = await readParticles(g, env);
+        now.sky = await readSky(g, env);
         if (now.grade.state === 'changed') throw kept('boot.pak');
+    }
+    if (files.includes('gfx.pak'))
+    {
+        step('Keeping gfx.pak as it is now as the original (700 MB)');
+        await must('gfx_logos.js', ['adopt'], env);
+        now.logos = await readLogos(g, env);
+        if (now.logos.state === 'changed') throw kept('gfx.pak');
     }
 }
 
@@ -422,7 +453,7 @@ async function apply(g, state, sel, adopt, leave)
     if (stars && !(Number(stars) > 0 && Number(stars) <= 10)) throw new EngineError('usage', 'stars factor ' + stars);
     const grade = sel.grade ? String(sel.grade) : null;
     if (grade && !(Number(grade) > 0 && Number(grade) <= 1)) throw new EngineError('usage', 'photo grade strength ' + grade);
-    const particles = !!sel.particles;
+    const particles = !!sel.particles, sky = !!sel.sky, logos = !!sel.logos;
     if (!sel.shadows && shader.some((m) => NEED_DLL.includes(m)))
         warn('Bounce light and the reflections read the scene from SnowRunner Shadows: without it they change nothing.');
     step('Reading what is installed');
@@ -434,10 +465,12 @@ async function apply(g, state, sel, adopt, leave)
     const changed = [];
     if (shader.length && !shaderSame && shaderNeedsAdopt(g, state, now)) changed.push('shader.pak');
     if (sel.scenery && now.scenery === 'changed') changed.push('shared.pak');
-    if (now.grass.state === 'changed' && (grass || fill || stars || last.grass || last.fill || last.stars)) changed.push('initial.pak');
-    if (now.grade.state === 'changed' && (grade || last.grade || particles || last.particles)) changed.push('boot.pak');
+    if (now.grass.state === 'changed' && (grass || fill || stars || sky || last.grass || last.fill || last.stars || last.sky)) changed.push('initial.pak');
+    if (now.grade.state === 'changed' && (grade || last.grade || particles || last.particles || sky || last.sky)) changed.push('boot.pak');
+    if (now.logos.state === 'changed' && (logos || last.logos)) changed.push('gfx.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, false), { files: changed });
     if (adopt) await adoptPaks(g, env, now, changed);
+    const initialLeft = now.grass.state === 'changed';   // still changed after the question: left as it is
 
     // shader.pak
     if (!shader.length)
@@ -451,7 +484,7 @@ async function apply(g, state, sel, adopt, leave)
     else
     {
         keepShaderOriginal(g, state, now, adopt);
-        const gone = packaged ? await prepare(state, shader) : [];
+        const gone = ownDump ? [] : await prepare(state, shader);
         const build = shader.filter((m) => !gone.includes(m));
         if (build.length)
         {
@@ -538,7 +571,35 @@ async function apply(g, state, sel, adopt, leave)
     else if (now.particles.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the sharper particles were left out.');
     else { step('Putting the sharper particle textures in (boot.pak, 600 MB)'); await must('lut_grade.js', ['particles-install'], env); }
 
+    // the night sky (boot.pak, the third part there)
+    if (now.sky.state === 'missing') { if (sky) warn('No boot.pak in this game folder: the night sky was left out.'); }
+    else if (!sky)
+    {
+        if (now.sky.state === 'ours')
+        {
+            if (initialLeft) warn(SKY_NEEDS_INITIAL + ': the night sky was left in.');
+            else { step('Putting the game\'s own night sky back (boot.pak, 500 MB)'); await must('lut_grade.js', ['sky-restore'], env); }
+        }
+        else if (now.sky.state === 'changed' && last.sky) warn(BOOT_CHANGED + ': left as it is, so the night sky could not be taken out.');
+    }
+    else if (now.sky.state === 'ours' && sameCode(notes, 'sky')) emit({ type: 'log', text: 'boot.pak already has the night sky' });
+    else if (now.sky.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the night sky was left out.');
+    else if (initialLeft) warn(SKY_NEEDS_INITIAL + ': the night sky was left out.');
+    else { step('Putting the night sky in (boot.pak, 600 MB)'); await must('lut_grade.js', ['sky-install'], env); }
+
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
+
+    // the Next Gen logos (gfx.pak)
+    if (now.logos.state === 'missing') { if (logos) warn('No gfx.pak in this game folder: the Next Gen logo was left out.'); }
+    else if (!logos)
+    {
+        if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }
+        else if (now.logos.state === 'changed' && last.logos) warn(GFX_CHANGED + ': left as it is, so the Next Gen logo could not be taken out.');
+    }
+    else if (now.logos.state === 'ours' && sameCode(notes, 'logos')) emit({ type: 'log', text: 'gfx.pak already has the Next Gen logo' });
+    else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is, so the Next Gen logo was left out.');
+    else { step('Putting the Next Gen logo in (gfx.pak, 700 MB)'); await must('gfx_logos.js', ['install'], env); }
+
     fs.writeFileSync(path.join(state, 'nextgen.json'), JSON.stringify({ selection: sel, parts: PARTS, date: stamp() }, null, 2));
     emit({ type: 'done', text: 'Installed. Start the game to see it.' });
 }
@@ -553,22 +614,32 @@ async function restore(g, state, adopt, leave)
     // as they are now, so restore takes Next Gen's changes out of them and keeps the other mod's
     const last = lastNotes(state).selection || {};
     const changed = [];
-    if (now.grass.state === 'changed' && (last.grass || last.fill || last.stars)) changed.push('initial.pak');
-    if (now.grade.state === 'changed' && (last.grade || last.particles)) changed.push('boot.pak');
+    if (now.grass.state === 'changed' && (last.grass || last.fill || last.stars || last.sky)) changed.push('initial.pak');
+    if (now.grade.state === 'changed' && (last.grade || last.particles || last.sky)) changed.push('boot.pak');
+    if (now.logos.state === 'changed' && last.logos) changed.push('gfx.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, true), { files: changed });
     if (adopt) await adoptPaks(g, env, now, changed);
+    const initialLeft = now.grass.state === 'changed';   // still changed after the question: left as it is
     if (now.shader.state === 'ours') { step('Putting the original shader.pak back'); await must('pak_shader_patch.js', ['restore'], env); }
     else if (now.shader.state !== 'stock') warn('shader.pak is not this installer\'s build: left as it is.');
     removeStock(g);
     removeDll(g);
     if (now.scenery === 'nature' || now.scenery === 'all') { step('Putting the original shared.pak back (2 GB)'); await must('lod_patch.js', ['restore'], env); }
     else if (now.scenery === 'changed') warn('shared.pak is not this installer\'s build: left as it is.');
-    if (now.grass.state === 'ours' || now.fill.state === 'ours' || now.stars.state === 'ours') { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
-    else if (now.grass.state === 'changed') warn('initial.pak was changed by something else: left as it is.');
-    if (now.grade.state === 'ours') { step('Putting the original boot.pak back'); await must('lut_grade.js', ['restore'], env); }
+    // boot.pak before initial.pak: the sky levels initial.pak holds follow the night sky in boot.pak
+    if (now.grade.state === 'ours') { step('Putting the game\'s own colour grading back (boot.pak)'); await must('lut_grade.js', ['restore'], env); }
     else if (now.grade.state === 'changed') warn(BOOT_CHANGED + ': left as it is.');
     if (now.particles.state === 'ours') { step('Putting the game\'s own particle textures back (boot.pak)'); await must('lut_grade.js', ['particles-restore'], env); }
+    if (now.sky.state === 'ours')
+    {
+        if (initialLeft) warn(SKY_NEEDS_INITIAL + ': the night sky was left in.');
+        else { step('Putting the game\'s own night sky back (boot.pak)'); await must('lut_grade.js', ['sky-restore'], env); }
+    }
+    if (now.grass.state === 'ours' || now.fill.state === 'ours' || now.stars.state === 'ours') { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
+    else if (initialLeft) warn('initial.pak was changed by something else: left as it is.');
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
+    if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }
+    else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is.');
     fs.writeFileSync(path.join(state, 'nextgen.json'), JSON.stringify({ selection: null, date: stamp() }, null, 2));
     emit({ type: 'done', text: 'The game\'s own files are back.' });
 }

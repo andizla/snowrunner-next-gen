@@ -6,9 +6,10 @@ out/
 *.cso
 *.shader
 
-# working notes and local tools: local only
+# working notes, local tools and this machine's dev settings: local only
 HANDOFF.md
 PACKAGE_NOTES.md
 PLAN.md
 /tools/
+/dev.json
 .claude/

@@ -73,7 +73,7 @@ namespace SnowRunnerNextGen
                 "Pick", "Each card is one module. Ticking a module that needs another ticks that one too, and unticking one unticks what needs it. The (?) on a card tells you what it does. Defaults picks the recommended set.",
                 "Apply", "Builds the game's files for exactly what is ticked, from the game's original files, and installs them. To take a module out, untick it and apply again.",
                 "Restore originals", "Puts the files back as they were before " + Header.AppName + " changed them and takes SnowRunner Shadows out.",
-                "Backups", "Before the first change, shader.pak, shared.pak, initial.pak and boot.pak are kept as they are in %LOCALAPPDATA%\\SnowRunnerNextGen, and every build starts from those copies.",
+                "Backups", "Before the first change, shader.pak, shared.pak, initial.pak, boot.pak and gfx.pak are kept as they are in %LOCALAPPDATA%\\SnowRunnerNextGen, and every build starts from those copies.",
                 "Other mods", "When another mod (a texture pack, say) or a game update has changed one of those files since, Apply and Restore ask first. Take it as it is now as the original, and " + Header.AppName + " writes its changes over it; Restore then puts it back in that modded state, the other mod's changes included, not the game's own file. Or leave it out: the file and its modules stay as they are.",
                 "Before you start", "Close the game: its files cannot be changed while it runs.",
                 "Comparing in the game", "With SnowRunner Shadows installed: F8 switches every shader effect off and on, F4 the contact shadows, F5 the ambient occlusion pass between half and full size, F6 the reflection pass, F10 the bounce light, and F11 GTAO against the game's SSAO.");
@@ -225,14 +225,21 @@ namespace SnowRunnerNextGen
                 Does, "Smoke, dust, spray, sparks, leaves and the other particles are drawn from small textures that the game stretches, so up close they look soft and blocky. This puts in the same textures at twice their size, upscaled from the game's own with NVIDIA's DLSS 5 Visual Enhancer, inside boot.pak next to the photo grade.",
                 Notice, "Crisper exhaust, dust clouds and spray near the camera, with the same colours and shapes.",
                 Costs, "Video memory for the larger textures. The installer is 114 MB larger for the set.",
-                Know, "It changes boot.pak, together with Photo grade, which it keeps. Other mods that change boot.pak, such as a star field, are kept too: Apply asks before it builds on them.");
+                Know, "It changes boot.pak, together with Photo grade and Night sky, which it keeps. Other mods that change boot.pak, such as a texture pack, are kept too: Apply asks before it builds on them.");
+
+            d["sky"] = E(
+                Does, "The game's night sky is a small texture whose stars are one texel each. This puts NASA's star map in its place, with four times the pixels: the real sky's stars as fine points, and the glow of the Milky Way. Scandinavia, Kola and Quebec have a photo for a night sky, with the northern lights in it. There the same stars are painted into the photo.",
+                Notice, "A night sky full of fine stars, with the Milky Way across it.",
+                Costs, "Video memory for the larger sky textures. The installer is 65 MB larger for the set.",
+                Know, "It changes boot.pak, together with Photo grade and Sharper smoke and particles, which it keeps, and it sets the levels its photo skies need in initial.pak. The new stars are finer than the game's and come out dim at the game's own level. Brighter stars is set for them.",
+                Credits, "The star map is made from Deep Star Maps 2020. Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.");
 
             d["stars"] = E(
                 Does, "The night sky draws its stars as one layer, at a low level set per region. This raises that level at night, dusk and dawn in every region where the stars are their own layer, so they stand out against the dark sky.",
                 Notice, "A night sky with clearly visible stars.",
                 Costs, "None: it changes how bright the game draws a layer it draws anyway.",
                 Choices, "Brightness: three or two times the game's level.",
-                Know, "It changes initial.pak, together with Grass reach and Fill light, which it keeps. The level was set for a finer star texture than the game's own (a star map with small point stars); with the game's own texture the stars simply come out that much brighter. Regions whose night sky is a photo keep theirs.");
+                Know, "It changes initial.pak, together with Grass reach and Fill light, which it keeps. Three times is the level set for Night sky's star map, whose fine stars come out dim at the game's own level. With the game's own star texture the stars simply come out that much brighter. The regions whose night sky is a photo are not changed by this: with Night sky their photos carry the stars at a fixed level.");
 
             d["tonemap"] = E(
                 Does, "Tonemapping turns the scene's light into the colours of your screen. This uses a curve with stronger contrast that keeps the game's mid-grey where it was, and lightens the bloom.",
@@ -249,7 +256,7 @@ namespace SnowRunnerNextGen
                 Notice, "Foliage and hills in the calmer colours of a photo, a haze that reads grey-blue rather than lavender, less glare on white paint and snow.",
                 Costs, "None: the game grades the picture anyway.",
                 Choices, "Strength: 100 % is the measured grade, 50 % half of it.",
-                Know, "It changes the four colour tables that the day, dusk and dawn light use (a few night scenes share them), inside boot.pak; the garage, the map and the darkest night table keep theirs. Best together with Fill light, which does the shade: this one does the colour. When another mod has added its files to boot.pak (a texture pack, say), Apply asks before it builds on them, and they stay in (see How it works, Other mods).");
+                Know, "It changes the four colour tables that the day, dusk and dawn light use (a few night scenes share them), inside boot.pak, where Sharper smoke and particles and Night sky go too; the garage, the map and the darkest night table keep theirs. Best together with Fill light, which does the shade: this one does the colour. When another mod has added its files to boot.pak (a texture pack, say), Apply asks before it builds on them, and they stay in (see How it works, Other mods).");
 
             d["scenery"] = E(
                 Does, "Rocks, trees and bushes switch to simpler models close to you (some rocks at 10 metres), and the switch shows as shapes and shadows that flip while you drive. This moves the first switch out to at least 40 metres and the later ones to 70, 110 and 160.",
@@ -263,6 +270,12 @@ namespace SnowRunnerNextGen
                 Costs, "Frame rate in grassy areas: at 3x about nine times as much grass is drawn.",
                 Choices, "Reach: 3x or 2x the game's fade distances.",
                 Know, "It changes initial.pak, a file that other mods change too.");
+
+            d["logos"] = E(
+                Does, "Adds NEXT GEN under the game's logo wherever the interface shows it: on the title screen, the first loading screen, the main menu, the pause menu and the map.",
+                Notice, "The mod's name under the SnowRunner logo, so you can tell at a glance that it is installed.",
+                Costs, "Nothing in the game. The first Apply keeps a copy of gfx.pak, several hundred MB, so that Restore can put it back.",
+                Know, "It changes gfx.pak, the file of the interface. The title screen, the first loading screen and the main menu have a picture of their own for the logo, and those are replaced whole. On the pause menu and the map the logo shares a sheet with other pictures: there only the logo changes, so an interface mod's sheet keeps everything else, and a sheet with another layout is left as it is.");
 
             return d;
         }

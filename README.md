@@ -2,7 +2,7 @@
 
 Graphics modules for SnowRunner, installed from one window.
 
-Each card in the window is one module: sharper shadows, ambient occlusion, bounce light, reflections on paint and water, fog, smoke, colour. Tick what you want and click Apply. The program builds the game's files on your machine, from your own game files, and installs them. Restore puts the files back as they were.
+Each card in the window is one module: sharper shadows, ambient occlusion, bounce light, reflections on paint and water, fog, smoke, colour, the night sky. Tick what you want and click Apply. The program builds the game's files on your machine, from your own game files, and installs them. Restore puts the files back as they were.
 
 It works without ReShade or any other loader. The shaders go into the game's own shader cache, and SnowRunner Shadows is one small DLL next to the game.
 
@@ -36,7 +36,8 @@ Atmosphere and image
 - Smoke glow: smoke glows when the sun is behind it.
 - Smoke shape and softer edges: puffs get a lit and a shaded side and fade softly where they meet the ground.
 - Sharper smoke and particles: the particle textures at twice their size.
-- Brighter stars: the stars of the night sky drawn brighter. Off by default.
+- Night sky: NASA's star map in place of the game's star texture, and its stars in the photo night skies of Scandinavia, Kola and Quebec.
+- Brighter stars: the stars of the night sky drawn brighter.
 - Tonemap: stronger contrast and a lighter bloom.
 - Bloom soft cut: no haze from bright snow and sky.
 - Photo grade: colour closer to a photo.
@@ -45,6 +46,10 @@ Scenery, both off by default
 
 - Scenery detail: scenery keeps its full detail farther out.
 - Grass reach: grass drawn farther out.
+
+Interface
+
+- Next Gen logo: NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map.
 
 The (?) on each card says what the module does, what to look for, and what it costs.
 
@@ -72,22 +77,24 @@ A game update or the store's file check replaces the game's files with the origi
 
 ## What it changes
 
-In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars) and `boot.pak` (photo grade, particles) under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in `Sources\Bin`. Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
+In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars), `boot.pak` (photo grade, particles, night sky) and `gfx.pak` (the logo) under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in `Sources\Bin`. Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
 
 The kept originals live in `%LOCALAPPDATA%\SnowRunnerNextGen`. Every new file is written next to the old one, read back and checked before it takes the old one's place. The program refuses to write while the game runs.
 
 ## Build
 
-Windows 10 or 11. The C# compiler that ships with Windows builds the window. The package needs Node.js 22.2 or newer and carries a copy of its `node.exe`.
+Windows 10 or 11. The window builds with the C# compiler that ships with Windows. The tools run on Node.js 22.2 or newer, and the package carries a copy of its `node.exe`. The shaders need `fxc.exe` from the Windows SDK, and SnowRunner Shadows needs Visual Studio 2022 with the C++ tools.
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1 -Tools <tools folder>
+powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1
 ```
 
-`package.ps1` copies the shader tools, the compiled helper shaders and the particle textures from the tools folder, and `assets\engine\hid.dll` must be the SnowRunner Shadows build named in `assets\engine\hid.dll.sha256`. Neither is part of this repository yet. With `-Zip` it also writes `out\SnowRunnerNextGen.zip`, the download of a release.
+`build.ps1` builds the window and compiles the shaders in `engine\replacements` (`engine\tools\build_shaders.js`). Every compiled shader is checked against the list of tested builds, `engine\replacements\shaders.sha256`, and a difference stops the build. `package.ps1` then puts the package together in `out\package\SnowRunnerNextGen` from the `engine` folder: the tools, the compiled shaders and the texture sets. With `-Zip` it also writes `out\SnowRunnerNextGen.zip`, the download of a release.
 
-The tests run on copies and never touch the game folder: `test\run_tests.ps1` draws the window at four scales and checks the tick rules, `test\engine_test.ps1` runs the engine on a copy of the game made from original paks, and `test\package_test.ps1` runs the same against the packaged engine and fails when it reaches any file outside the package.
+SnowRunner Shadows is in `dll`: `dll\build.bat` builds `dll\out\hid.dll`, and `dll\test\run_all.ps1` tests it. The package takes the DLL from `assets\engine\hid.dll` and wants the build named in `assets\engine\hid.dll.sha256`, the one the modules were tested with. A rebuild never has that hash, because the linker stamps the time into the file: copy the new DLL there and put its SHA-256 into the `.sha256` file.
+
+The tests run on copies and never touch the game folder: `test\run_tests.ps1` draws the window at four scales and checks the tick rules, `test\engine_test.ps1` runs the engine on a copy of the game made from original paks (`-Originals` names their folder), and `test\package_test.ps1` runs the same against the packaged engine and fails when it reaches any file outside the package.
 
 ## Licence and credits
 
@@ -97,6 +104,9 @@ GNU General Public License v3.0 (GPL-3.0-only), see `LICENSE`. Third party notic
 - The reflection pass follows AMD FidelityFX SSSR, with Eric Heitz's visible normal sampling.
 - The contact shadows are a modified copy of Bend Studio's screen-space shadows.
 - The rebuilt shadow edges follow revectorization-based shadow mapping by Macedo and Apolinário (2016) and shadow map silhouette revectorization by Bondarev (2014).
+- The night sky's star map is made from Deep Star Maps 2020 by NASA's Scientific Visualization Studio.
 - The package runs its engine on Node.js.
 
-SnowRunner is a game by Saber Interactive. This project is not affiliated with Saber Interactive or Focus Entertainment. This repository contains no game files.
+SnowRunner is a game by Saber Interactive. This project is not affiliated with Saber Interactive or Focus Entertainment.
+
+The repository holds none of the game's files as they ship: the installer makes the patched shaders on the player's machine, from the player's own game. What is made from the game's own material is listed in `THIRD_PARTY_NOTICES.md`: the particle, logo and photo sky textures, and the tonemap shader. It remains Saber Interactive's and is here only for use with the game.

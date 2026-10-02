@@ -26,7 +26,7 @@ Shot 'narrow' @('--scale', '1', '--size', '560x0')
 Shot 'wide' @('--scale', '1', '--size', '1600x0')
 
 # every (?) pop-up, and the one with pictures at 200 and 225 %
-$ids = 'shadows', 'edges', 'blocker', 'contact', 'gtao', 'ambient', 'gi', 'objrefl', 'headglow', 'water', 'rivertint', 'glare', 'fog', 'smoke', 'smokeshade', 'particles', 'stars', 'tonemap', 'bloom', 'scenery', 'grass', 'installer'
+$ids = 'shadows', 'edges', 'blocker', 'contact', 'gtao', 'ambient', 'gi', 'objrefl', 'headglow', 'water', 'rivertint', 'glare', 'fog', 'smoke', 'smokeshade', 'particles', 'sky', 'stars', 'tonemap', 'bloom', 'scenery', 'grass', 'logos', 'installer'
 foreach ($id in $ids) { Shot "help-$id" @('--scale', '1', '--help', $id) }
 Shot 'help-gtao-2' @('--scale', '2', '--help', 'gtao')
 Shot 'help-gtao-2.25' @('--scale', '2.25', '--help', 'gtao')
@@ -49,10 +49,10 @@ try {
   function Ticked { ($list.Cards | Where-Object { $_.On } | ForEach-Object { $_.Module.Id }) -join ' ' }
   function Note { $bar.GetType().GetField('note', $flags).GetValue($bar) }
 
-  # on by default: every card but Headlight glare cap, Headlights in reflections, Brighter stars, Scenery detail and Grass reach
-  $defaults = 'shadows edges blocker contact gtao aofar ambient fill gi objrefl water puddles rivertint crestglow fog smoke smokeshade particles tonemap bloom grade'
+  # on by default: every card but Headlight glare cap, Headlights in reflections, Scenery detail and Grass reach
+  $defaults = 'shadows edges blocker contact gtao aofar ambient fill gi objrefl water puddles rivertint crestglow fog smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '21 of 26 selected'
+  Check 'count' (Note) '24 of 28 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
@@ -63,6 +63,7 @@ try {
   $selection = { $viewType.GetMethod('Selection', $flags).Invoke($view, @()) }
   $s = & $selection
   Check 'selection: rebuilt edges, the seam dither, AO at half size' ((@($s['shader']) -contains 'revec') -and (@($s['shader']) -contains 'seam') -and ($s['shadows']['aoHalf'] -eq '1')) 'True'
+  Check 'selection: the night sky, the stars at 3x and the logos' ('{0} {1} {2}' -f $s['sky'], $s['stars'], $s['logos']) '1 3 1'
   $cards['edges'].Choice[0] = 1
   $s = & $selection
   Check 'selection: the 16-tap filter goes without the seam dither' ((@($s['shader']) -contains 'crisp') -and -not (@($s['shader']) -contains 'seam') -and -not (@($s['shader']) -contains 'revec')) 'True'
@@ -78,18 +79,18 @@ try {
   $cards['headglow'].On = $false
   $cards['shadows'].ToggleByUser()
   # Sun glow through waves goes with Water reflections, which needs SnowRunner Shadows
-  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint fog smoke smokeshade particles tonemap bloom grade'
+  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint fog smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Contact shadows, Bounce light, Object reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
   $cards['gi'].ToggleByUser()
-  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint fog smoke smokeshade particles tonemap bloom grade'
+  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint fog smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Bounce light needs SnowRunner Shadows: ticked it too.'
   $cards['gtao'].ToggleByUser()
-  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint fog smoke smokeshade particles tonemap bloom grade'
+  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint fog smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Wide occlusion and Bounce light need GTAO: unticked them too.'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($false))
-  Check 'clear' (Note) '0 of 26 selected'
+  Check 'clear' (Note) '0 of 28 selected'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($true))
-  Check 'select all' (Note) '26 of 26 selected'
+  Check 'select all' (Note) '28 of 28 selected'
   foreach ($c in $list.Cards) { $c.Reset() }
   Check 'defaults again' (Ticked) $defaults
 

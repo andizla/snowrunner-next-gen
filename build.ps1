@@ -1,5 +1,8 @@
-# Builds out\SnowRunnerNextGen.exe with the C# compiler that ships with Windows (.NET Framework 4.x).
-# usage: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
+# Builds out\SnowRunnerNextGen.exe with the C# compiler that ships with Windows (.NET Framework 4.x), compiles the
+# project's shaders (engine\tools\build_shaders.js: fxc from the Windows SDK) and sets up out\engine, which runs the
+# tools and the texture sets in place from this repository's engine folder.
+# usage: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 [-Node <node.exe>]
+param([string]$Node = '')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $out = Join-Path $root 'out'
@@ -21,19 +24,30 @@ $pictures = Get-ChildItem -LiteralPath (Join-Path $root 'assets\help') -Filter *
 $pictures | Copy-Item -Destination $help -Force
 '{0}  {1} pictures' -f $help, @($pictures).Count
 
-# the engine: ngen.js, the pinned SnowRunner Shadows build (assets\engine\hid.dll, the one the modules were judged
-# with), and where its tools are. This dev build runs the project's tools in place (SnowRunner-shaders\tools) and, for
-# the clean install their menu works on, shares their backups (pak_backup), so the menu and the window agree.
+# the shaders: every blob compiled from its source and checked against the list of tested builds
+# (engine\replacements\shaders.sha256). A blob that differs stops the build.
+if (-not $Node) { $Node = (Get-Command node -ErrorAction SilentlyContinue).Source }
+if (-not $Node -or -not (Test-Path -LiteralPath $Node)) { throw 'node.exe not found: pass -Node <path> (Node.js 22.2 or newer)' }
+$said = & $Node (Join-Path $root 'engine\tools\build_shaders.js')
+if ($LASTEXITCODE -ne 0) { $said | Out-Host; throw 'the shader build differs from the tested blobs (engine\replacements\shaders.sha256)' }
+$said | Select-Object -Last 1
+
+# the engine: ngen.js and prepare.js, the pinned SnowRunner Shadows build (assets\engine\hid.dll, the one the modules
+# were judged with), and a config that points at the tools in engine\tools. dev.json at the repository's root, when
+# there is one, adds its keys to that config (see engine\ngen.js: devGame, devState, dump, sets).
 $engine = Join-Path $out 'engine'
 New-Item -ItemType Directory -Force -Path $engine | Out-Null
-Copy-Item -LiteralPath (Join-Path $root 'engine\ngen.js') -Destination $engine -Force
-if (-not (Test-Path -LiteralPath (Join-Path $root 'assets\engine\hid.dll'))) { throw 'assets\engine\hid.dll is missing: put the SnowRunner Shadows build named in assets\engine\hid.dll.sha256 there' }
+foreach ($f in 'ngen.js', 'prepare.js') { Copy-Item -LiteralPath (Join-Path $root "engine\$f") -Destination $engine -Force }
+if (-not (Test-Path -LiteralPath (Join-Path $root 'assets\engine\hid.dll'))) { throw 'assets\engine\hid.dll is missing: build SnowRunner Shadows with dll\build.bat and copy dll\out\hid.dll there' }
 Copy-Item -LiteralPath (Join-Path $root 'assets\engine\hid.dll') -Destination $engine -Force
 $config = [ordered]@{
-  tools = 'C:\Games\SnowRunner-shaders\tools'
+  tools = (Join-Path $root 'engine\tools')
   dll = (Join-Path $engine 'hid.dll')
-  devGame = 'C:\Program Files (x86)\Steam\steamapps\common\Snowrunner'
-  devState = 'C:\Games\SnowRunner-shaders\pak_backup'
 }
-$config | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $engine 'config.json') -Encoding ASCII
-'{0}  ngen.js, hid.dll {1}, tools in {2}' -f $engine, (Get-FileHash (Join-Path $engine 'hid.dll') -Algorithm SHA256).Hash.Substring(0, 8).ToLower(), $config.tools
+$devFile = Join-Path $root 'dev.json'
+if (Test-Path -LiteralPath $devFile) {
+  $dev = Get-Content -LiteralPath $devFile -Raw | ConvertFrom-Json
+  foreach ($p in $dev.PSObject.Properties) { $config[$p.Name] = $p.Value }
+}
+[IO.File]::WriteAllText((Join-Path $engine 'config.json'), ($config | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+'{0}  ngen.js, hid.dll {1}, tools in {2}{3}' -f $engine, (Get-FileHash (Join-Path $engine 'hid.dll') -Algorithm SHA256).Hash.Substring(0, 8).ToLower(), $config.tools, $(if (Test-Path -LiteralPath $devFile) { ', with dev.json' } else { '' })

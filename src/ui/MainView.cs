@@ -267,6 +267,12 @@ namespace SnowRunnerNextGen
                         card.On = s.Stars == "ours";
                         if (card.On) Pick(card, 0, s.StarsFactor);
                         break;
+                    case "sky":
+                        card.On = s.Sky == "ours";
+                        break;
+                    case "logos":
+                        card.On = s.Logos == "ours";
+                        break;
                     default:
                         if (s.Shader == "ours" || s.Shader == "stock") card.On = s.Modules.Contains(card.Module.Id);
                         break;
@@ -296,7 +302,7 @@ namespace SnowRunnerNextGen
         Dictionary<string, object> Selection()
         {
             List<object> shader = new List<object>();
-            object shadows = null, scenery = null, grass = null, fill = null, grade = null, particles = null, stars = null;
+            object shadows = null, scenery = null, grass = null, fill = null, grade = null, particles = null, stars = null, sky = null, logos = null;
             foreach (Card card in list.Cards)
             {
                 if (!card.On) continue;
@@ -325,6 +331,8 @@ namespace SnowRunnerNextGen
                         if (byId.TryGetValue("objrefl", out refl) && refl.On && Key(refl, 0) == "sssr") shader.Add("headglow");
                         break;
                     case "stars": stars = Key(card, 0); break;
+                    case "sky": sky = "1"; break;
+                    case "logos": logos = "1"; break;
                     default: shader.Add(card.Module.Id); break;
                 }
             }
@@ -337,6 +345,8 @@ namespace SnowRunnerNextGen
             selection["grade"] = grade;
             selection["particles"] = particles;
             selection["stars"] = stars;
+            selection["sky"] = sky;
+            selection["logos"] = logos;
             return selection;
         }
 
@@ -348,20 +358,22 @@ namespace SnowRunnerNextGen
             foreach (object m in (List<object>)sel["shader"]) shader.Add((string)m);
             Dictionary<string, object> dll = sel["shadows"] as Dictionary<string, object>;
             string mine = Signature(shader, dll == null ? null : (string)dll["factor"], dll == null ? null : (string)dll["slopeBias"], dll == null ? null : (string)dll["aoHalf"],
-                (string)sel["scenery"], (string)sel["grass"], (string)sel["fill"], (string)sel["grade"], (string)sel["particles"], (string)sel["stars"]);
+                (string)sel["scenery"], (string)sel["grass"], (string)sel["fill"], (string)sel["grade"], (string)sel["particles"], (string)sel["stars"], (string)sel["sky"], (string)sel["logos"]);
             GameStatus s = installed;
             string theirs = Signature(s.Shader == "ours" ? s.Modules : new List<string>(), s.Dll == "ours" ? s.Factor : null, s.Dll == "ours" ? s.SlopeBias : null, s.Dll == "ours" ? s.AoHalf : null,
                 s.Scenery == "nature" || s.Scenery == "all" ? s.Scenery : null, s.Grass == "ours" ? s.GrassFactor : null, s.Fill == "ours" ? s.FillFactor : null,
-                s.Grade == "ours" ? s.GradeStrength : null, s.Particles == "ours" ? "1" : null, s.Stars == "ours" ? s.StarsFactor : null);
+                s.Grade == "ours" ? s.GradeStrength : null, s.Particles == "ours" ? "1" : null, s.Stars == "ours" ? s.StarsFactor : null, s.Sky == "ours" ? "1" : null, s.Logos == "ours" ? "1" : null);
             return mine == theirs;
         }
 
-        static string Signature(List<string> shader, string factor, string slopeBias, string aoHalf, string scenery, string grass, string fill, string grade, string particles, string stars)
+        static string Signature(List<string> shader, string factor, string slopeBias, string aoHalf, string scenery, string grass, string fill, string grade, string particles, string stars,
+            string sky, string logos)
         {
             List<string> sorted = new List<string>(shader);
             sorted.Sort(StringComparer.Ordinal);
             return string.Join(",", sorted.ToArray()) + "|" + (factor == null ? "-" : Number(factor) + "/" + slopeBias + "/" + (aoHalf ?? "1")) + "|" + (scenery ?? "-") + "|" + (grass == null ? "-" : Number(grass))
-                + "|" + (fill == null ? "-" : Number(fill)) + "|" + (grade == null ? "-" : Number(grade)) + "|" + (particles ?? "-") + "|" + (stars == null ? "-" : Number(stars));
+                + "|" + (fill == null ? "-" : Number(fill)) + "|" + (grade == null ? "-" : Number(grade)) + "|" + (particles ?? "-") + "|" + (stars == null ? "-" : Number(stars))
+                + "|" + (sky ?? "-") + "|" + (logos ?? "-");
         }
 
         static string Number(string s)
@@ -373,7 +385,7 @@ namespace SnowRunnerNextGen
         // a part that is neither ours nor the original: a game update, a Steam file check, another mod
         static bool Problem(GameStatus s)
         {
-            return s.Shader == "changed" || s.Shader == "unknown" || s.Scenery == "changed" || s.Grass == "changed" || s.Grade == "changed";
+            return s.Shader == "changed" || s.Shader == "unknown" || s.Scenery == "changed" || s.Grass == "changed" || s.Grade == "changed" || s.Logos == "changed";
         }
 
         static string Describe(GameStatus s)
@@ -391,7 +403,9 @@ namespace SnowRunnerNextGen
             if (s.Grade == "ours" && double.TryParse(s.GradeStrength, NumberStyles.Float, CultureInfo.InvariantCulture, out gradeStrength))
                 parts.Add("photo grade " + Math.Round(gradeStrength * 100).ToString(CultureInfo.InvariantCulture) + " %");
             if (s.Particles == "ours") parts.Add("sharper particles");
+            if (s.Sky == "ours") parts.Add("night sky");
             if (s.Stars == "ours") parts.Add("stars " + Number(s.StarsFactor) + "x");
+            if (s.Logos == "ours") parts.Add("logo");
             List<string> notes = new List<string>();
             // files another mod or a game update changed since their originals were kept: Apply asks before it builds on them
             List<string> changed = new List<string>();
@@ -399,6 +413,7 @@ namespace SnowRunnerNextGen
             if (s.Scenery == "changed") changed.Add("shared.pak");
             if (s.Grass == "changed") changed.Add("initial.pak");
             if (s.Grade == "changed") changed.Add("boot.pak");
+            if (s.Logos == "changed") changed.Add("gfx.pak");
             if (changed.Count > 0)
                 notes.Add(Look.JoinAnd(changed) + (changed.Count == 1 ? " has" : " have") + " changes from another mod or a game update: Apply asks before it builds on " + (changed.Count == 1 ? "it" : "them"));
             if (s.Dll == "foreign") notes.Add("another mod's hid.dll is in Bin");

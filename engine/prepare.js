@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SnowRunner Next Gen: builds, on the player's machine and from the player's own shader.pak, what the shader tools read
-// besides their own code. Nothing of the game ships with the installer: its shaders (the tools' dump\ folder and its
+// besides their own code. None of the game's shaders ship with the installer: they (the tools' dump\ folder and its
 // index.json) and the shader sets patched from them are made here, in the game's state folder, from the original
 // shader.pak the engine keeps there:
 //   <state>\dump\     every shader of the pak's main cache and small caches, named by CRC32, and index.json (extract.js)
@@ -30,7 +30,8 @@ function sha256File(file)
     return h.digest('hex');
 }
 // the tools' code and helpers, and this file: a change in any of them remakes the dump and the sets (a new installer
-// version over an old install)
+// version over an old install). The texture sets are no part of the shader build and stay out of it.
+const TEXTURE_SETS = ['replacements/particles', 'replacements/sky', 'replacements/splash'];
 function toolsFingerprint()
 {
     const h = crypto.createHash('sha256');
@@ -41,7 +42,7 @@ function toolsFingerprint()
         for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1)))
         {
             const p = path.join(dir, e.name), r = rel ? rel + '/' + e.name : e.name;
-            if (e.isDirectory()) walk(p, r);
+            if (e.isDirectory()) { if (!TEXTURE_SETS.includes(r)) walk(p, r); }
             else { h.update(r + '\0'); h.update(fs.readFileSync(p)); }
         }
     };

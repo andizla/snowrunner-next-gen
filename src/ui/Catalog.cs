@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // What the window offers: one card per module, in category order. Id is what the engine takes (the fidelity bundle's
-// module names; "shadows" = SnowRunner Shadows, the hid.dll; "scenery" and "grass" = the LOD and grass patches; "fill" =
-// the fill light, the other part of initial.pak; "grade" = the photo grade in the colour LUTs of boot.pak). A card
+// module names; "shadows" = SnowRunner Shadows, the hid.dll; "scenery" and "grass" = the LOD and grass patches; "fill"
+// and "stars" = the fill light and the star levels, the other parts of initial.pak; "grade", "particles" and "sky" =
+// the photo grade, the particle textures and the night sky in boot.pak; "logos" = the logos in gfx.pak). A card
 // may carry option sets (buttons on the card; the first value of each is shown first). Requires: the cards a card needs
 // ticked (ticking it ticks them, unticking one of them unticks it).
 using System.Collections.Generic;
@@ -35,7 +36,7 @@ namespace SnowRunnerNextGen
             return m;
         }
 
-        // the list's sections: two categories each, so every section has an even number of cards
+        // the list's sections
         static string GroupOf(string category)
         {
             switch (category)
@@ -43,6 +44,7 @@ namespace SnowRunnerNextGen
                 case "SHADOWS": case "LIGHT": return "Light and shadow";
                 case "REFLECTIONS": case "WATER": return "Reflections and water";
                 case "ATMOSPHERE": case "IMAGE": return "Atmosphere and image";
+                case "INTERFACE": return "Interface";
                 default: return "Scenery";
             }
         }
@@ -110,8 +112,11 @@ namespace SnowRunnerNextGen
             list.Add(M("particles", "ATMOSPHERE", "Sharper smoke and particles", true,
                 "The game's smoke, dust, spray and spark textures at twice their size, so particles stay crisp up close."));
 
+            // the star map and the photo night skies with its stars painted in, into boot.pak beside the grade and the particles
+            list.Add(M("sky", "ATMOSPHERE", "Night sky", true,
+                "NASA's star map in place of the game's star texture: the real sky's stars as fine points, with the glow of the Milky Way."));
             // the night sky's star layer times a factor, the third part of initial.pak
-            Module stars = M("stars", "ATMOSPHERE", "Brighter stars", false, "The stars of the night sky drawn brighter, so they stand out against the dark.");
+            Module stars = M("stars", "ATMOSPHERE", "Brighter stars", true, "The stars of the night sky drawn brighter, so they stand out against the dark.");
             stars.Options.Add(new OptionSet("Brightness", new[] { "3x", "2x" }, new[] { "3", "2" }, 0));
             list.Add(stars);
 
@@ -129,6 +134,10 @@ namespace SnowRunnerNextGen
             Module grass = M("grass", "SCENERY", "Grass reach", false, "Grass drawn farther out. Costs frame rate in grassy areas.");
             grass.Options.Add(new OptionSet("Reach", new[] { "3x", "2x" }, new[] { "3", "2" }, 0));
             list.Add(grass);
+
+            // NEXT GEN under the game's logo, in gfx.pak
+            list.Add(M("logos", "INTERFACE", "Next Gen logo", true,
+                "NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map."));
             return list;
         }
     }

@@ -30,6 +30,7 @@ namespace SnowRunnerNextGen
                 case "ATMOSPHERE": return Color.FromArgb(206, 208, 220);
                 case "IMAGE": return Color.FromArgb(240, 132, 172);
                 case "SCENERY": return Color.FromArgb(124, 204, 112);
+                case "INTERFACE": return Color.FromArgb(240, 150, 96);
                 default: return Muted;
             }
         }
