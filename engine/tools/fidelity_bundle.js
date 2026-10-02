@@ -16,7 +16,7 @@
 //   ambient  ambient\sky_on_<shadow set in use>       main cache: ~4570 material shaders (sky tinted ambient, built on
 //            (ambient\sky with no shadow change)      top of the shadow set in use, so a shader can carry both)
 //   fog      fog_builds\jitter_phase                  main cache: 0x871EF8CC (slice jitter + forward scattering)
-//   tonemap  tonemap_builds\fidelity                  common_pc_sm50_hdr.sdc: 0x221304E2 (rc_a03_w2 curve, bloom x0.6)
+//   tonemap  tonemap_builds\fidelity                  common_pc_sm50_hdr.sdc: 0x221304E2 (the Next Gen filmic curve, bloom x0.6)
 //   bloom    bloom_builds\softknee                    common_pc_sm50_hdr.sdc: 0x52879E18 (soft knee, no haze)
 //   water    tools\patch_water_ssr.js + water\ssr.cso main cache: the 20 river and mud water shaders and the 176 lake
 //            (the 88 with the planar reflection through tools\patch_water_planar.js + water\ssr_planar.cso: the SSR at

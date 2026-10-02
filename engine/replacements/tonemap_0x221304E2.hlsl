@@ -13,17 +13,13 @@
 // CURVE: 0 = stock Hable driven by the daytime xml
 //        1 = neutral Hable constants, white point 11.2
 //        2 = ACES fit
-//        3 = RoadCraft filmic: the same Hable operator with the constants RoadCraft ships (see RC_PRESET)
+//        3 = Next Gen filmic: y = (x^2 + 0.20 x) / (x^2 + 0.19 x + 0.32), with x = 0.18 at mid grey. The same operator
+//            with its toe term off and no white point. The three constants are fitted to a response per scene stop
+//            around grey (8-bit sRGB): contrast 1.22 at grey (stock 0.91); 34 at three stops under grey (stock 43), so
+//            shade is deeper than stock but keeps its detail; 216 at two stops over (stock 191); and a shoulder that
+//            only nears white (254 at five stops over), so a bright sky rolls off without a clip
 #ifndef CURVE
 #define CURVE 0
-#endif
-
-// RC_PRESET (CURVE 3): 0 = pA 0.5, white point 1 (21 of RoadCraft's 26 map and weather presets)
-//                      1 = pA 0.3, white point 2 (4 presets, softer shoulder)
-//                      2 = engine default, pA 0.12, white point 10 (close to stock contrast, long highlight range)
-// pB to pF are the engine defaults of RoadCraft's HDR parameter block: no map overrides them.
-#ifndef RC_PRESET
-#define RC_PRESET 0
 #endif
 
 // MATCH_GREY: 1 = a replacement curve is exposure matched to the game's own curve, so the scene value the daytime
@@ -131,17 +127,11 @@ static const float4 NEW_ABCD  = float4(0.22, 0.30, 0.10, 0.20);
 static const float2 NEW_EF    = float2(0.01, 0.30);
 static const float  NEW_WHITE = 11.2;
 #elif CURVE == 3
-  #if RC_PRESET == 1
-static const float4 NEW_ABCD  = float4(0.30, 0.05, 0.45, 0.20);
-static const float  NEW_WHITE = 2.0;
-  #elif RC_PRESET == 2
-static const float4 NEW_ABCD  = float4(0.12, 0.05, 0.45, 0.20);
-static const float  NEW_WHITE = 10.0;
-  #else
-static const float4 NEW_ABCD  = float4(0.50, 0.05, 0.45, 0.20);
-static const float  NEW_WHITE = 1.0;
-  #endif
-static const float2 NEW_EF    = float2(0.02, 0.08);
+// (x^2 + 0.20 x) / (x^2 + 0.19 x + 0.32) in the operator's terms: A = D = 1, B = 0.19, C B = 0.20, E = 0, F = 0.32, and a
+// white point so far out that its scale is 1
+static const float4 NEW_ABCD  = float4(1.0, 0.19, 0.20 / 0.19, 1.0);
+static const float2 NEW_EF    = float2(0.0, 0.32);
+static const float  NEW_WHITE = 1.0e6;
 #endif
 // Scene value the ACES fit sends to display 0.18
 static const float ACES_GREY_IN = 0.13017;

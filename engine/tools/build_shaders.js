@@ -53,7 +53,7 @@ const BUILDS = [
     // whole passes, named by the hash of the game shader they replace
     ['ssao_builds/gtao_hq/0xEA2414F8.shader', 'ssao_0xEA2414F8.hlsl', ['AO_SLICES=4', 'AO_STEPS=8']],
     ['ssao_builds/gtao_hq_far/0xEA2414F8.shader', 'ssao_0xEA2414F8.hlsl', ['AO_SLICES=4', 'AO_STEPS=8', ...FAR]],
-    ['tonemap_builds/fidelity/0x221304E2.shader', 'tonemap_0x221304E2.hlsl', ['CURVE=3', 'RC_PRESET=1', 'BLOOM_SCALE=0.6']],
+    ['tonemap_builds/fidelity/0x221304E2.shader', 'tonemap_0x221304E2.hlsl', ['CURVE=3', 'BLOOM_SCALE=0.6']],
 ];
 
 function findFxc()

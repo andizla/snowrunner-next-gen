@@ -242,7 +242,7 @@ namespace SnowRunnerNextGen
                 Know, "It changes initial.pak, together with Grass reach and Fill light, which it keeps. Three times is the level set for Night sky's star map, whose fine stars come out dim at the game's own level. With the game's own star texture the stars simply come out that much brighter. The regions whose night sky is a photo are not changed by this: with Night sky their photos carry the stars at a fixed level.");
 
             d["tonemap"] = E(
-                Does, "Tonemapping turns the scene's light into the colours of your screen. This uses a curve with stronger contrast that keeps the game's mid-grey where it was, and lightens the bloom.",
+                Does, "Tonemapping turns the scene's light into the colours of your screen. This uses a curve with more contrast than the game's own. Mid-grey stays where it was, shade gets deeper and keeps its detail, and bright parts get brighter and roll off without a hard clip. The bloom is turned down to 60 %.",
                 Notice, "Deeper shadows and richer colour, less of a washed-out look.",
                 Costs, "None to speak of.");
 
