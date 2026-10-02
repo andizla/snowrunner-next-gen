@@ -2,10 +2,13 @@
 out/
 *.exe
 *.dll
+# the compiled shaders: engine\tools\build_shaders.js makes them from the .hlsl sources
+*.cso
+*.shader
 
 # working notes and local tools: local only
 HANDOFF.md
 PACKAGE_NOTES.md
 PLAN.md
-tools/
+/tools/
 .claude/

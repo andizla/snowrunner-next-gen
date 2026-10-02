@@ -1,4 +1,7 @@
 * text=auto
 *.ps1 text eol=crlf
 *.cs text eol=crlf
+*.bat text eol=crlf
 *.jpg binary
+*.pct binary
+*.pct_header binary

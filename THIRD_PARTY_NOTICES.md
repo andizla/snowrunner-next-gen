@@ -73,6 +73,19 @@ Licensed under the Apache License, Version 2.0. The licence text is in licenses\
 - engine\replacements\particles: the game's own particle textures, upscaled to twice their size by the author with
   NVIDIA DLSS 5 Visual Enhancer. They remain Saber Interactive's assets and are shipped only for use with the game.
 - engine\replacements\tonemap_builds: compiled from the author's reconstruction of the game's own tonemap shader.
+- engine\replacements\splash: the game's logo textures (title screen, first loading screen, main menu, pause menu and
+  map) with the NEXT GEN line added, three of them at twice their size. They remain Saber Interactive's assets and are
+  shipped only for use with the game.
+- engine\replacements\sky: two of the game's photo night skies (Scandinavia; Kola and Quebec) with the star map's stars
+  painted in. They remain Saber Interactive's assets and are shipped only for use with the game.
+
+## NASA Deep Star Maps
+
+The night sky's star texture (engine\replacements\sky\pct\env_skysphere_stars__d_a.pct) is made from "Deep Star Maps
+2020" by NASA's Scientific Visualization Studio (https://svs.gsfc.nasa.gov/4851), reprojected onto the game's sky dome.
+NASA imagery is in the public domain. NASA asks for this credit:
+
+NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.
 
 ## Node.js
 
