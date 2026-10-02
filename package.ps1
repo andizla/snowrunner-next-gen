@@ -107,6 +107,16 @@ foreach ($set in $textureSets.Keys) {
 Copy-Item -LiteralPath (Join-Path $repl 'particles\list.csv') -Destination (Join-Path $engine 'replacements\particles')
 $textures['particles'] += (Join-Path $engine 'replacements\particles\list.csv')
 
+# the package's text files get fixed line endings, whatever the checkout has: the engine's scripts and lists LF, the
+# texts a player opens CRLF. The same commit then gives the same bytes, and the same fingerprints, on any machine.
+$latin1 = [Text.Encoding]::GetEncoding(28591)   # one character per byte, so the bytes pass through unchanged
+function SetLineEndings([string]$file, [string]$ending) {
+  $text = $latin1.GetString([IO.File]::ReadAllBytes($file)).Replace("`r`n", "`n")
+  if ($ending -ne "`n") { $text = $text.Replace("`n", $ending) }
+  [IO.File]::WriteAllBytes($file, $latin1.GetBytes($text))
+}
+foreach ($f in @((Join-Path $engine 'ngen.js'), (Join-Path $engine 'prepare.js'), (Join-Path $engine 'replacements\particles\list.csv')) + @(Get-ChildItem -LiteralPath (Join-Path $engine 'tools') -File | ForEach-Object { $_.FullName })) { SetLineEndings $f "`n" }
+
 # the fingerprint of each part's code: sha256 over the sorted relative paths and contents of the files it runs on
 function Fingerprint([string[]]$files) {
   $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -138,6 +148,7 @@ Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $pkg 
 Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $pkg
 Get-ChildItem -LiteralPath (Join-Path $root 'assets\licenses') -File | Where-Object { $_.Name -ne 'Node.js-LICENSE.txt' } | Copy-Item -Destination (Join-Path $pkg 'licenses')
 Copy-Item -LiteralPath (Join-Path $root 'assets\README.txt') -Destination $pkg
+foreach ($f in @((Join-Path $pkg 'LICENSE'), (Join-Path $pkg 'THIRD_PARTY_NOTICES.md'), (Join-Path $pkg 'README.txt')) + @(Get-ChildItem -LiteralPath (Join-Path $pkg 'licenses') -File | ForEach-Object { $_.FullName })) { SetLineEndings $f "`r`n" }
 
 # the zip is the release's download and is made only on request (-Zip). An older one goes either way, so that no zip
 # outlives the folder it was made from
