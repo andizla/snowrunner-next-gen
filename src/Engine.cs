@@ -41,6 +41,8 @@ namespace SnowRunnerNextGen
         public string Particles = "vanilla";      // the sharper particle sprites, also in boot.pak: the same states
         public string Stars = "vanilla";          // brighter stars, the third part of initial.pak: the same states
         public string StarsFactor;
+        public string Weather = "vanilla";        // the weather, the fourth part of initial.pak: the same states
+        public string WeatherParts;               // its parts as a comma list (shadows, showers, evening, horizon, far)
         public string Sky = "vanilla";            // the night sky, the third part of boot.pak: the same states
         public string Logos = "vanilla";          // the Next Gen logos in gfx.pak: the same states
         public readonly List<string> Orphaned = new List<string>();   // paks that hold our changes while their kept originals are gone
@@ -49,8 +51,8 @@ namespace SnowRunnerNextGen
         {
             get
             {
-                return Shader == "ours" || Dll == "ours" || Scenery == "nature" || Scenery == "all" || Grass == "ours" || Fill == "ours" || Stars == "ours" || Grade == "ours"
-                    || Particles == "ours" || Sky == "ours" || Logos == "ours";
+                return Shader == "ours" || Dll == "ours" || Scenery == "nature" || Scenery == "all" || Grass == "ours" || Fill == "ours" || Stars == "ours" || Weather == "ours"
+                    || Grade == "ours" || Particles == "ours" || Sky == "ours" || Logos == "ours";
             }
         }
 
@@ -78,6 +80,9 @@ namespace SnowRunnerNextGen
             Dictionary<string, object> stars = Part(d, "stars");
             s.Stars = Text(stars, "state") ?? "missing";
             s.StarsFactor = Text(stars, "factor");
+            Dictionary<string, object> weather = Part(d, "weather");
+            s.Weather = Text(weather, "state") ?? "missing";
+            s.WeatherParts = Text(weather, "parts");
             s.Sky = Text(Part(d, "sky"), "state") ?? "missing";
             s.Logos = Text(Part(d, "logos"), "state") ?? "missing";
             IEnumerable orphaned = d.ContainsKey("orphaned") ? d["orphaned"] as IEnumerable : null;

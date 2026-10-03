@@ -105,6 +105,18 @@ namespace SnowRunnerNextGen
             list.Add(M("glare", "WATER", "Headlight glare cap", false, "Tamer headlight shine on wet ground and puddles, with no long bright band across them."));
 
             list.Add(M("fog", "ATMOSPHERE", "Volumetric fog", true, "No banding, a glow toward the sun, and sun shafts through trees and dust."));
+            // the weather, the fourth part of initial.pak: five parts, each its own row; the key of a row that is on is the
+            // part's name, and the selection joins them into the tool's comma list
+            Module weather = M("weather", "ATMOSPHERE", "Weather", true,
+                "More of the game's own weather: moving cloud shadows on every map, and showers that swell and ease. Drizzle at dusk and night, horizon clouds and rain drawn farther out are there to try.");
+            weather.Options.Add(new OptionSet("Cloud shadows", new[] { "on", "off" }, new[] { "shadows", "" }, 0));
+            weather.Options.Add(new OptionSet("Showers", new[] { "swell and ease", "as they are" }, new[] { "showers", "" }, 0));
+            weather.Options.Add(new OptionSet("Evening drizzle", new[] { "on", "off" }, new[] { "evening", "" }, 1));
+            weather.Options.Add(new OptionSet("Horizon clouds", new[] { "on", "off" }, new[] { "horizon", "" }, 1));
+            weather.Options.Add(new OptionSet("Far rain and snow", new[] { "on", "off" }, new[] { "far", "" }, 1));
+            weather.Options.Add(new OptionSet("Fireflies", new[] { "on", "off" }, new[] { "fireflies", "" }, 1));
+            weather.Options.Add(new OptionSet("Pollen", new[] { "on", "off" }, new[] { "pollen", "" }, 1));
+            list.Add(weather);
             list.Add(M("smoke", "ATMOSPHERE", "Smoke glow", true, "Exhaust and other smoke glows when the sun is behind it."));
             list.Add(M("smokeshade", "ATMOSPHERE", "Smoke shape and softer edges", true,
                 "Smoke and dust puffs get a lit side and a shaded side, and sprites fade more softly where they meet the ground."));

@@ -19,6 +19,7 @@
 // selection: { "shader": [fidelity_bundle.js module names], "shadows": null | { "factor": "1", "slopeBias": "1", "aoHalf": "1" },
 //              "scenery": null | "nature" | "all", "grass": null | "3" | "2", "fill": null | "0.7" | "0.55" | "0.85",
 //              "grade": null | "1" | "0.5", "particles": null | "1", "sky": null | "1", "stars": null | "3" | "2",
+//              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen),
 //              "logos": null | "1" }
 // config.json next to this file: { "tools": <folder>, "dll": <hid.dll to install> }. A dev build may add "devGame" and
 //   "devState" (that game folder's state lives in devState) and "dump" and "sets" (folders that already hold the game's
@@ -313,18 +314,24 @@ async function readPaks(g, state)
     }
     else shader = { state: 'ours', modules: said.split(',').filter(Boolean) };
     const scenery = fs.existsSync(g.shared) ? await answer('lod_patch.js', ['status'], env) : 'missing';   // nature, all, vanilla, changed
-    const { grass, fill, stars, initialPak } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
+    const { grass, fill, stars, weather, initialPak } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
     const sky = await readSky(g, env), logos = await readLogos(g, env);
-    return { shader, scenery, grass, fill, stars, initialPak, grade, particles, sky, logos };
+    return { shader, scenery, grass, fill, stars, weather, initialPak, grade, particles, sky, logos };
 }
-// initial.pak: the grass, the fill light and the stars, three parts of one build, each { state, factor }; initialPak
-// is the file's own state (ours also when it holds none of the three: the sky levels of the night sky's photo skies)
+// initial.pak: the grass, the fill light, the stars and the weather, four parts of one build, each { state, factor }
+// (the weather: { state, parts }, a comma list); initialPak is the file's own state (ours also when it holds none of
+// the four: the sky levels of the night sky's photo skies)
 async function readInitial(g, env)
 {
     const init = fs.existsSync(g.initial) ? JSON.parse(await answer('lod_patch.js', ['initial-status'], env)) : { state: 'missing' };
     const part = (v) => (init.state !== 'ours' ? { state: init.state } : v ? { state: 'ours', factor: String(v) } : { state: 'vanilla' });
-    return { grass: part(init.grass), fill: part(init.fill), stars: part(init.stars), initialPak: init.state };   // ours (with factor), vanilla, changed, missing
+    const weather = init.state !== 'ours' ? { state: init.state } : init.weather ? { state: 'ours', parts: String(init.weather) } : { state: 'vanilla' };
+    return { grass: part(init.grass), fill: part(init.fill), stars: part(init.stars), weather, initialPak: init.state };   // ours (with factor), vanilla, changed, missing
 }
+// the weather's parts as a comma list in the tool's order, for one comparison
+const WEATHER_PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen'];
+const weatherList = (spec) => WEATHER_PARTS.filter((p) => String(spec || '').split(',').map((s) => s.trim()).includes(p)).join(',');
+const WEATHER_WORDS = { shadows: 'cloud shadows', showers: 'showers that swell and ease', evening: 'evening drizzle', horizon: 'horizon clouds', far: 'rain and snow drawn farther', fireflies: 'fireflies', pollen: 'pollen' };
 // the photo grade: the daytime colour LUTs in boot.pak ({ state, strength })
 async function readGrade(g, env)
 {
@@ -533,6 +540,8 @@ async function apply(g, state, sel, adopt, leave)
     const grade = sel.grade ? String(sel.grade) : null;
     if (grade && !(Number(grade) > 0 && Number(grade) <= 1)) throw new EngineError('usage', 'photo grade strength ' + grade);
     const particles = !!sel.particles, sky = !!sel.sky, logos = !!sel.logos;
+    const weather = sel.weather ? weatherList(sel.weather) : null;
+    if (sel.weather && (!weather || !/^[a-z,]+$/.test(String(sel.weather)))) throw new EngineError('usage', 'weather parts ' + sel.weather);
     if (!sel.shadows && shader.some((m) => NEED_DLL.includes(m)))
         warn('Bounce light and the reflections read the scene from SnowRunner Shadows: without it they change nothing.');
     step('Reading what is installed');
@@ -545,7 +554,7 @@ async function apply(g, state, sel, adopt, leave)
     const changed = [];
     if (shader.length && !shaderSame && shaderNeedsAdopt(g, state, now)) changed.push('shader.pak');
     if (sel.scenery && now.scenery === 'changed') changed.push('shared.pak');
-    if (now.grass.state === 'changed' && (grass || fill || stars || sky || last.grass || last.fill || last.stars || last.sky)) changed.push('initial.pak');
+    if (now.grass.state === 'changed' && (grass || fill || stars || weather || sky || last.grass || last.fill || last.stars || last.weather || last.sky)) changed.push('initial.pak');
     if (now.grade.state === 'changed' && (grade || last.grade || particles || last.particles || sky || last.sky)) changed.push('boot.pak');
     if (now.logos.state === 'changed' && (logos || last.logos)) changed.push('gfx.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, false), { files: changed });
@@ -630,6 +639,17 @@ async function apply(g, state, sel, adopt, leave)
     else if (now.stars.state === 'changed') warn('initial.pak was changed by another mod or a game update since its original was kept: the brighter stars were left out.');
     else { step('Making the stars ' + stars + 'x brighter (initial.pak)'); await must('lod_patch.js', ['stars-install', stars], env); }
 
+    // the weather (initial.pak, the fourth part: the parts above keep it)
+    const weatherWords = (list) => list.split(',').map((p) => WEATHER_WORDS[p] || p).join(', ');
+    if (now.weather.state === 'missing') { if (weather) warn('No initial.pak in this game folder: the weather was left out.'); }
+    else if (!weather)
+    {
+        if (now.weather.state === 'ours') { step('Putting the game\'s own weather back (initial.pak)'); await must('lod_patch.js', ['weather-restore'], env); }
+    }
+    else if (now.weather.state === 'ours' && weatherList(now.weather.parts) === weather && sameCode(notes, 'initial')) emit({ type: 'log', text: 'the weather already has ' + weatherWords(weather) });
+    else if (now.weather.state === 'changed') warn('initial.pak was changed by another mod or a game update since its original was kept: the weather was left out.');
+    else { step('Putting the weather in: ' + weatherWords(weather) + ' (initial.pak)'); await must('lod_patch.js', ['weather-install', weather], env); }
+
     // photo grade (the daytime colour LUTs in boot.pak)
     if (now.grade.state === 'missing') { if (grade) warn('No boot.pak in this game folder: the photo grade was left out.'); }
     else if (!grade)
@@ -698,7 +718,7 @@ async function restore(g, state, adopt, leave)
     // as they are now, so restore takes Next Gen's changes out of them and keeps the other mod's
     const last = lastNotes(state).selection || {};
     const changed = [];
-    if (now.grass.state === 'changed' && (last.grass || last.fill || last.stars || last.sky)) changed.push('initial.pak');
+    if (now.grass.state === 'changed' && (last.grass || last.fill || last.stars || last.weather || last.sky)) changed.push('initial.pak');
     if (now.grade.state === 'changed' && (last.grade || last.particles || last.sky)) changed.push('boot.pak');
     if (now.logos.state === 'changed' && last.logos) changed.push('gfx.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, true), { files: changed });
@@ -720,7 +740,7 @@ async function restore(g, state, adopt, leave)
         if (initialLeft) warn(SKY_NEEDS_INITIAL + ': the night sky was left in.');
         else { step('Putting the game\'s own night sky back (boot.pak)'); await must('lut_grade.js', ['sky-restore'], env); }
     }
-    if (now.grass.state === 'ours' || now.fill.state === 'ours' || now.stars.state === 'ours') { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
+    if (now.grass.state === 'ours' || now.fill.state === 'ours' || now.stars.state === 'ours' || now.weather.state === 'ours') { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
     else if (initialLeft) warn('initial.pak was changed by something else: left as it is.');
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
     if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }

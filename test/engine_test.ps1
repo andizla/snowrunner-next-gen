@@ -50,7 +50,7 @@ function Check([string]$what, $got, $want) {
   if ("$got" -eq "$want") { "ok   $what" } else { "FAIL $what"; "     got:  $got"; "     want: $want"; $script:failed++ }
 }
 function Summary($s) {
-  '{0} [{1}] dll {2} {3}/{4} scenery {5} grass {6}{7} fill {8}{9} grade {10}{11} particles {12} stars {13}{14} sky {15} logos {16}' -f $s.shader.state, ($s.shader.modules -join ','), $s.dll.state, $s.dll.factor, $s.dll.slopeBias, $s.scenery, $s.grass.state, $s.grass.factor, $s.fill.state, $s.fill.factor, $s.grade.state, $s.grade.strength, $s.particles.state, $s.stars.state, $s.stars.factor, $s.sky.state, $s.logos.state
+  '{0} [{1}] dll {2} {3}/{4} scenery {5} grass {6}{7} fill {8}{9} grade {10}{11} particles {12} stars {13}{14} sky {15} logos {16} weather {17}{18}' -f $s.shader.state, ($s.shader.modules -join ','), $s.dll.state, $s.dll.factor, $s.dll.slopeBias, $s.scenery, $s.grass.state, $s.grass.factor, $s.fill.state, $s.fill.factor, $s.grade.state, $s.grade.strength, $s.particles.state, $s.stars.state, $s.stars.factor, $s.sky.state, $s.logos.state, $s.weather.state, $s.weather.parts
 }
 function Hash($file) { return (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash }
 function Warned($events, [string]$pattern) { return [bool]@($events | Where-Object { $_.type -eq 'warn' -and $_.text -match $pattern }).Count }
@@ -126,13 +126,13 @@ $default = 'gtao', 'aofar', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonem
 $less = @($default | Where-Object { $_ -notin 'fog', 'seam', 'contact', 'headglow' } | ForEach-Object { if ($_ -eq 'revec') { 'crisp' } else { $_ } })
 
 'the untouched copy'
-Check 'status: the originals' (Summary (Status)) 'stock [] dll none / scenery vanilla grass vanilla fill vanilla grade vanilla particles vanilla stars vanilla sky vanilla logos vanilla'
+Check 'status: the originals' (Summary (Status)) 'stock [] dll none / scenery vanilla grass vanilla fill vanilla grade vanilla particles vanilla stars vanilla sky vanilla logos vanilla weather vanilla'
 
-'every part: the default set with the scenery detail and the grass reach'
-$everything = [ordered]@{ shader = $default; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = 'all'; grass = '3'; fill = '0.7'; grade = '1'; particles = '1'; sky = '1'; stars = '3'; logos = '1' }
+'every part: the default set with the scenery detail, the grass reach and every weather part'
+$everything = [ordered]@{ shader = $default; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = 'all'; grass = '3'; fill = '0.7'; grade = '1'; particles = '1'; sky = '1'; stars = '3'; weather = 'shadows,showers,evening,horizon,far,fireflies,pollen'; logos = '1' }
 $r = Apply $everything
 Check 'every part: done' (Last $r) 'done'
-Check 'every part: status' (Summary (Status)) ('ours [' + ($default -join ',') + '] dll ours 1/1 scenery all grass ours3 fill ours0.7 grade ours1 particles ours stars ours3 sky ours logos ours')
+Check 'every part: status' (Summary (Status)) ('ours [' + ($default -join ',') + '] dll ours 1/1 scenery all grass ours3 fill ours0.7 grade ours1 particles ours stars ours3 sky ours logos ours weather oursshadows,showers,evening,horizon,far,fireflies,pollen')
 Check 'every part: boot.pak holds the grade, the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 90'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'
@@ -148,10 +148,10 @@ Check 'same again: done' (Last $r) 'done'
 Check 'same again: nothing rebuilt (under 30 s)' ($clock.Elapsed.TotalSeconds -lt 30) 'True'
 
 'every part changed'
-$r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3'; slopeBias = '0'; aoHalf = '0' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5'; stars = '2' })
+$r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3'; slopeBias = '0'; aoHalf = '0' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5'; stars = '2'; weather = 'showers,shadows' })
 Check 'changed: done' (Last $r) 'done'
 Check 'changed: the ambient occlusion pass at full size' ((Get-Content -LiteralPath (Join-Path $bin 'SnowRunnerShadows.ini')) -contains 'AOHalf=0') 'True'
-Check 'changed: status' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3/0 scenery nature grass ours2 fill ours0.55 grade ours0.5 particles vanilla stars ours2 sky vanilla logos vanilla')
+Check 'changed: status (the weather parts in the tool''s order)' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3/0 scenery nature grass ours2 fill ours0.55 grade ours0.5 particles vanilla stars ours2 sky vanilla logos vanilla weather oursshadows,showers')
 Check 'changed: gfx.pak is the original byte for byte' (Hash $gfx) (Hash (Join-Path $originals 'gfx.pak.orig'))
 Check 'changed: boot.pak holds the grade alone' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 4'
 Check 'changed: initial.pak is built again without the photo skies'' sky levels' ('{0} {1}' -f ((LastInitial $r) -match 'initial\.pak now has'), ((LastInitial $r) -match 'sky alpha')) 'True False'
@@ -171,10 +171,10 @@ Check 'beside it: ours is hid.dll' ((Status).dll.state) 'ours'
 'the fill light and the grass, one without the other (two parts of initial.pak)'
 $r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; slopeBias = '1' }; scenery = 'nature'; grass = '2'; fill = $null; grade = '0.5' })
 Check 'fill off: done' (Last $r) 'done'
-Check 'fill off: the grass stays' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3.5/1 scenery nature grass ours2 fill vanilla grade ours0.5 particles vanilla stars vanilla sky vanilla logos vanilla')
+Check 'fill off: the grass stays' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3.5/1 scenery nature grass ours2 fill vanilla grade ours0.5 particles vanilla stars vanilla sky vanilla logos vanilla weather vanilla')
 $r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; slopeBias = '1' }; scenery = 'nature'; grass = $null; fill = '0.85'; grade = $null })
 Check 'grass and grade off, fill on: done' (Last $r) 'done'
-Check 'grass and grade off, fill on: status' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3.5/1 scenery nature grass vanilla fill ours0.85 grade vanilla particles vanilla stars vanilla sky vanilla logos vanilla')
+Check 'grass and grade off, fill on: status' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3.5/1 scenery nature grass vanilla fill ours0.85 grade vanilla particles vanilla stars vanilla sky vanilla logos vanilla weather vanilla')
 Check 'grade off: boot.pak is the original byte for byte' (Hash $boot) (Hash (Join-Path $originals 'boot.pak.orig'))
 
 'other mods: files added to boot.pak, initial.pak and gfx.pak after Next Gen''s changes'
@@ -195,7 +195,7 @@ Check 'leave them out: says so' ((Warned $r '^boot\.pak .*so the photo grade was
 Check 'leave them out: the three untouched' (Untouched) 'True'
 $r = Apply (& $sel '1' '1') @('--adopt')
 Check 'take them as the originals: done' (Last $r) 'done'
-Check 'take them as the originals: status' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3.5/1 scenery nature grass vanilla fill ours0.85 grade ours1 particles vanilla stars vanilla sky ours logos ours')
+Check 'take them as the originals: status' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3.5/1 scenery nature grass vanilla fill ours0.85 grade ours1 particles vanilla stars vanilla sky ours logos ours weather vanilla')
 Check 'take them as the originals: the other mod''s file is still in the three' ('{0} {1} {2}' -f (Entries $boot)[$modFile1], (Entries $initial)[$modFile1], (Entries $gfx)[$modFile1]) ('{0:x8}/20 {0:x8}/20 {0:x8}/20' -f $modCrc1)
 
 'the night sky and a changed initial.pak: its photo skies need their levels set there'
@@ -215,7 +215,7 @@ Check 'restore: asks first, naming the three files' ('{0} {1} {2}' -f $e.type, $
 Check 'restore: the notice' ($e.text -match 'Restore then takes Next Gen''s own changes out of them and keeps the other mod''s: the game''s own files do not come back') 'True'
 $r = Engine @('restore', '--adopt')
 Check 'restore: done' (Last $r) 'done'
-Check 'restore: status' (Summary (Status)) 'stock [] dll foreign / scenery vanilla grass vanilla fill vanilla grade vanilla particles vanilla stars vanilla sky vanilla logos vanilla'
+Check 'restore: status' (Summary (Status)) 'stock [] dll foreign / scenery vanilla grass vanilla fill vanilla grade vanilla particles vanilla stars vanilla sky vanilla logos vanilla weather vanilla'
 foreach ($p in 'shader', 'shared') { Check "restore: $p.pak is the original byte for byte" (Hash (Join-Path $paks "$p.pak")) (Hash (Join-Path $originals "$p.pak.orig")) }
 foreach ($p in 'initial', 'boot', 'gfx') {
   $want = Entries (Join-Path $originals "$p.pak.orig")
