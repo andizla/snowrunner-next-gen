@@ -33,7 +33,7 @@ Reflections and water
 Atmosphere and image
 
 - Volumetric fog: no banding, a glow toward the sun, and sun shafts through trees and dust.
-- Weather: moving cloud shadows on every map and showers that swell and ease; drizzle at dusk and night, horizon clouds, rain drawn farther out, fireflies and pollen are there to try.
+- Weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds and rain drawn farther out; fireflies and pollen are there to try.
 - Smoke glow: smoke glows when the sun is behind it.
 - Smoke shape and softer edges: puffs get a lit and a shaded side and fade softly where they meet the ground.
 - Sharper smoke and particles: the particle textures at twice their size.

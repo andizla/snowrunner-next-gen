@@ -77,14 +77,14 @@ try {
   $cards['objrefl'].Choice[0] = 0
   # the weather: the rows that are on, as the tool's comma list
   $s = & $selection
-  Check 'selection: the weather, cloud shadows and showers by default' ($s['weather']) 'shadows,showers'
-  $cards['weather'].Choice[2] = 0
+  Check 'selection: the weather, five parts by default' ($s['weather']) 'shadows,showers,evening,horizon,far'
+  $cards['weather'].Choice[5] = 0
   $s = & $selection
-  Check 'selection: evening drizzle joins the list' ($s['weather']) 'shadows,showers,evening'
-  $cards['weather'].Choice[0] = 1; $cards['weather'].Choice[1] = 1; $cards['weather'].Choice[2] = 1
+  Check 'selection: fireflies join the list' ($s['weather']) 'shadows,showers,evening,horizon,far,fireflies'
+  foreach ($row in 0..5) { $cards['weather'].Choice[$row] = 1 }
   $s = & $selection
   Check 'selection: every row off sends no weather' ("$($s['weather'])") ''
-  $cards['weather'].Choice[0] = 0; $cards['weather'].Choice[1] = 0
+  foreach ($row in 0..4) { $cards['weather'].Choice[$row] = 0 }
   $cards['shadows'].ToggleByUser()
   # Headlights in reflections goes with Object reflections and Sun glow through waves with Water reflections, which
   # both need SnowRunner Shadows

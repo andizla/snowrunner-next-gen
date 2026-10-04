@@ -33,7 +33,7 @@ const DAYTIME_ENTRY = /classes[\\/]daytimes[\\/]([^\\/]+)\.xml$/i;
 const SKY_ENTRY = /classes[\\/]skies[\\/](sky_[^\\/]+)\.xml$/i;
 const WEATHER_ENTRY = /classes[\\/]weather[\\/]([^\\/]+)\.xml$/i;
 const PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen'];
-const WEATHER_DEFAULT = 'shadows,showers';
+const WEATHER_DEFAULT = 'shadows,showers,evening,horizon,far';
 const RAIN_SNOW = /^(light|heavy)_(rain|snow)(_|$)/i;
 const SHADOW_LINE = (map) => '<CloudShadowMap Map="env/shadow_clouds/cloud_shadow_0' + map + '.tga" Scale="6" Speed="2.0" Direction="(1.0; 0.5)"/>';
 const fmt = (v) => v.toFixed(3).replace(/\.?0+$/, '');
