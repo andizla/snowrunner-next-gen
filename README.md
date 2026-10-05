@@ -97,7 +97,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1
 
 SnowRunner Shadows is in `dll`: `dll\build.bat` builds `dll\out\hid.dll`, and `dll\test\run_all.ps1` tests it. The package takes the DLL from `assets\engine\hid.dll` and wants the build named in `assets\engine\hid.dll.sha256`, the one the modules were tested with. A rebuild never has that hash, because the linker stamps the time into the file: copy the new DLL there and put its SHA-256 into the `.sha256` file.
 
-The tests run on copies and never touch the game folder: `test\run_tests.ps1` draws the window at four scales and checks the tick rules, `test\engine_test.ps1` runs the engine on a copy of the game made from original paks (`-Originals` names their folder), and `test\package_test.ps1` runs the same against the packaged engine and fails when it reaches any file outside the package.
+The tests run on copies and never touch the game folder: `test\run_tests.ps1` draws the window at four scales and checks the tick rules, `test\engine_test.ps1` runs the engine on a copy of the game made from original paks (`-Originals` names their folder), `test\package_test.ps1` runs the same against the packaged engine and fails when it reaches any file outside the package, and `test\paths_test.ps1` runs the packaged engine and the exe on a copy whose every folder has a space and a letter outside ASCII in its name, as a Windows user name gives them.
 
 ## Licence and credits
 
