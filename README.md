@@ -32,7 +32,7 @@ Reflections and water
 
 Atmosphere and image
 
-- Volumetric fog: no banding, a glow toward the sun, and sun shafts through trees and dust.
+- Volumetric fog: no banding, a glow toward the sun, and sun shafts through trees and dust. The shafts are experimental: they also show over the truck and other things close to the camera.
 - Weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out, fireflies at night and pollen by day.
 - Smoke glow: smoke glows when the sun is behind it.
 - Smoke shape and softer edges: puffs get a lit and a shaded side and fade softly where they meet the ground.

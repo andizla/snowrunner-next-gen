@@ -208,7 +208,7 @@ namespace SnowRunnerNextGen
                 Does, "The game draws its fog in steps that show as bands. This breaks the bands up, adds a glow toward the sun and lets the fog see the sun's shadows, so shafts of light show through trees and dust.",
                 Notice, "Smooth fog and a bright haze toward the sun; with fog and a low sun behind trees, rays of light.",
                 Costs, "Small.",
-                Know, "The rays need fog and a low sun. On a clear day there is little to see.");
+                Know, "The rays need fog and a low sun. On a clear day there is little to see.\nThe rays are experimental: the fog is drawn without knowing what stands in front of it, so with a low sun they also show over your truck and other things close to the camera.");
 
             d["weather"] = E(
                 Does, "The game cycles each region through day states that can carry rain or snow, and on two maps moving cloud shadows. This adds more of that, from the game's own weather system. Cloud shadows: every map gets them, drawn from the game's own shadow textures. Showers: rain and snow swell and ease over time instead of holding one strength. Evening drizzle: the rain regions get light rain at dusk, at night and at dawn, as the snow regions already have flurries then. Horizon clouds: the cloud layer on the horizon that 17 sky files hold switched off, switched on. Far rain and snow: drawn out to 1.5 times the distance, 48 metres instead of 32. Fireflies: fireflies at night in the rain regions, drawn with the game's own firefly sprite. Pollen: pollen drifting through the clear days of the same regions. These two are weather types from the game's later engine, written in as two new files.",

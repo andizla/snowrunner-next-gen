@@ -9,3 +9,4 @@
 - When the kept originals are lost while the game still has the changed files, Apply and Restore change nothing and ask for the store's file check first.
 - SnowRunner Shadows (`hid.dll`) installs beside another mod's `hid.dll`, which stays loaded.
 - It finds the game through Steam, Epic Games and the Microsoft Store.
+- Known: the volumetric fog's sun shafts are experimental. The fog is drawn without the scene's depth, so with a low sun the shafts also show over the truck and other things close to the camera. A fix is planned for 1.0.1.

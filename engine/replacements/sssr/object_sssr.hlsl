@@ -8,8 +8,9 @@
 // reprojected with last frame's view-projection (cb1[10..13]) and checked against last frame's depth (t121); where an
 // object moved (t124.z at this pixel's uv) the previous uv is this uv minus the motion, with a looser depth test. The
 // composite is premultiplied: reflection + cube x (1 - a), then faded by the same gloss gate as object_ssr. Where the
-// pass has nothing for a pixel (a see-through surface such as blended window glass, whose depth the pass never saw; a
-// pixel last frame did not see; a miss; the pass off with F6) the per-material march of object_ssr runs instead
+// pass has nothing for a pixel (a see-through surface such as window glass, whose depth the pass never saw: the depth
+// there is the cab's, behind the glass, and a static fragment with the pass's depth clearly behind it does not count as
+// seen, OSSSR_BEHIND_TOL; a pixel last frame did not see; a miss; the pass off with F6) the per-material march of object_ssr runs instead
 // (OSSSR_MARCH=1: without it the glass keeps no reflections), so F6 compares the pass against the march alone. With
 // neither the pass nor the feed bound (no DLL) the cubemap sample stays exactly as stock; F8 draws the stock shaders.
 // Build: fxc -T ps_5_0 -E main object_sssr.hlsl -Fo object_sssr.cso; -D OSSSR_STRENGTH=0 -Fo object_sssr_off.cso (proof);
@@ -28,6 +29,23 @@
 #endif
 #ifndef OSSSR_MOVING_TOL
 #define OSSSR_MOVING_TOL 0.15 // the same for pixels an object moved through (their depth changed with the motion)
+#endif
+#ifndef OSSSR_BEHIND_TOL
+#define OSSSR_BEHIND_TOL 0.01 // how far BEHIND a static fragment the depth the pass saw may lie and still count as the
+#endif                        // fragment's own surface: relative, plus OSSSR_BEHIND_ADD metres, plus OSSSR_BEHIND_PX
+                              // pixels of the fragment's own depth slope (the copy is read at a texel's centre, up to a
+                              // texel from the fragment's spot, and on a slanted surface, the far ground above all, a
+                              // texel is a long way in depth: without the slope the pass and the march took turns there
+                              // as the camera moved), never more than OSSSR_DEPTH_TOL allows. Farther behind lies another
+                              // surface, seen through the fragment: window glass over the cab, where the pass's result
+                              // belongs to what is behind the glass, so the glass marches instead (OSSSR_MARCH_FRONT_ONLY
+                              // lets a fragment in front march). In front of the fragment the full tolerance stays: a
+                              // surface there means the fragment was hidden last frame
+#ifndef OSSSR_BEHIND_ADD
+#define OSSSR_BEHIND_ADD 0.02
+#endif
+#ifndef OSSSR_BEHIND_PX
+#define OSSSR_BEHIND_PX 1.5
 #endif
 #ifndef OSSSR_EDGE
 #define OSSSR_EDGE 0.02       // fraction of the screen over which the reflection fades towards last frame's border
@@ -232,6 +250,9 @@ float4 main(float4 dirIn : TEXCOORD0, float4 lodIn : TEXCOORD1, float4 posIn : T
 {
     const float3 cube = g_txReflCubeGGX.SampleLevel(sCube, dirIn.xyz, lodIn.x).rgb;   // the stock sample
     const float gloss = saturate((OSSSR_LOD_END - lodIn.x) / (OSSSR_LOD_END - OSSSR_LOD_FULL)) * OSSSR_STRENGTH;
+    // the fragment's view depth change per pixel along its surface, from the position's derivatives (of the input itself,
+    // so they hold wherever the splice lands); the view depth is the clip w, the view-projection's last column
+    const float slope = abs(dot(ddx(posIn.xyz), g_vViewProjCol[3].xyz)) + abs(dot(ddy(posIn.xyz), g_vViewProjCol[3].xyz));
     uint w, h, zw, zh, sw, sh;
     g_txSSR.GetDimensions(w, h);
     g_txPrevZ.GetDimensions(zw, zh);
@@ -264,7 +285,12 @@ float4 main(float4 dirIn : TEXCOORD0, float4 lodIn : TEXCOORD1, float4 posIn : T
         const float2 zSize = float2(zw, zh);
         const float zPrev = g_txPrevZ.Load(int3(min(saturate(uvPrev) * zSize, zSize - 1.0), 0));
         const bool inView = cPrev.w > 0.05 && all(uvPrev >= 0.0) && all(uvPrev <= 1.0);
-        const bool depthOK = abs(zPrev - cPrev.w) < cPrev.w * (moving ? OSSSR_MOVING_TOL : OSSSR_DEPTH_TOL) + 0.05;
+        // the pass saw this fragment when its depth there is the fragment's: within the tolerance in front (else the
+        // fragment was hidden), and for a static fragment only a little behind (else the pass saw what lies behind a
+        // see-through fragment); a moving fragment's depth changed with the motion, so it keeps the wide tolerance both ways
+        const float dz = zPrev - cPrev.w, tol = cPrev.w * (moving ? OSSSR_MOVING_TOL : OSSSR_DEPTH_TOL) + 0.05;
+        const float behind = min(cPrev.w * OSSSR_BEHIND_TOL + OSSSR_BEHIND_ADD + OSSSR_BEHIND_PX * slope, tol);
+        const bool depthOK = dz > -tol && dz < (moving ? tol : behind);
         const float2 edge = saturate(min(uvPrev, 1.0 - uvPrev) / OSSSR_EDGE);
         const float keep = (inView && depthOK) ? edge.x * edge.y : 0.0;
         const float4 s = g_txSSR.SampleLevel(sLinear, uvPrev, 0) * keep;     // premultiplied, so one factor for both

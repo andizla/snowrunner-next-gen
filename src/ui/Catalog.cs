@@ -104,7 +104,8 @@ namespace SnowRunnerNextGen
                 "River waves between you and a low sun light up in the water's own colour, wherever the sun really reaches them.", "water"));
             list.Add(M("glare", "WATER", "Headlight glare cap", false, "Tamer headlight shine on wet ground and puddles, with no long bright band across them."));
 
-            list.Add(M("fog", "ATMOSPHERE", "Volumetric fog", true, "No banding, a glow toward the sun, and sun shafts through trees and dust."));
+            list.Add(M("fog", "ATMOSPHERE", "Volumetric fog", true,
+                "No banding, a glow toward the sun, and sun shafts through trees and dust. The shafts are experimental: they also show over your truck and other things close to the camera."));
             // the weather, the fourth part of initial.pak: five parts, each its own row; the key of a row that is on is the
             // part's name, and the selection joins them into the tool's comma list
             Module weather = M("weather", "ATMOSPHERE", "Weather", true,
