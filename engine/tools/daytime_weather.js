@@ -143,7 +143,7 @@ function weatherEdit(text, entryName, parts, ctx = { rainRegions: new Set() })
             out = out.replace(/<WeatherParticles\b[^>]*>/g, (tag) =>
             {
                 const type = /\bType="([^"]+)"/.exec(tag), lo = /\bMinIntensity="([^"]+)"/.exec(tag), hi = /\bMaxIntensity="([^"]+)"/.exec(tag);
-                if (!type || !lo || !hi || !RAIN_SNOW.test(type[1]) || !(Number(hi[1]) < 10)) return tag;
+                if (!type || !lo || !hi || !RAIN_SNOW.test(type[1]) || !(Number(hi[1]) < 10) || !(Number(lo[1]) >= 0)) return tag;
                 const a = fmt(Number(lo[1]) * 0.3), b = fmt(Number(hi[1]) * 1.2);
                 notes.push(type[1] + ' ' + lo[1] + '-' + hi[1] + ' -> ' + a + '-' + b);
                 kinds.add('showers');

@@ -33,7 +33,7 @@
 //        restore takes its own part out, the others staying as they are)
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
-const { readZip, readEntry, writePak, cdHash, fileHash, keptName } = require('./lod_patch.js');
+const { readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt } = require('./lod_patch.js');
 
 const BOOT = process.env.SR_BOOT_PAK || 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/boot.pak';
 const STATE = process.env.SR_STATE_DIR || path.join(__dirname, '..', 'pak_backup');
@@ -200,7 +200,10 @@ function verify(file, p)
 }
 
 // ---- status, install, restore ----------------------------------------------------------------------------------------
-const readNote = () => (fs.existsSync(NOTE) ? JSON.parse(fs.readFileSync(NOTE, 'utf8')) : {});
+const readNote = () => readJson(NOTE);
+// the note's record of the build boot.pak holds now (lod_patch.js built(): the note itself, or the build that was going
+// in when an install stopped); the note itself when boot.pak is none of them
+const record = () => { const note = readNote(); return (fs.existsSync(BOOT) && built(note, cdHash(BOOT))) || note; };
 const stamp = () => { const d = new Date(), p = (v) => String(v).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
 // what boot.pak is: 'ours' (this tool's build, the note says which parts), 'vanilla' (the original, or none kept yet),
 // 'changed' (a game update, another tool) or 'missing'
@@ -208,14 +211,14 @@ function state()
 {
     if (!fs.existsSync(BOOT)) return 'missing';
     const cur = cdHash(BOOT), note = readNote();
-    if (note.cdSha256 === cur) return 'ours';
+    if (built(note, cur)) return 'ours';
     if (!fs.existsSync(ORIG)) return 'vanilla';
     return (note.origCdSha256 || cdHash(ORIG)) === cur ? 'vanilla' : 'changed';
 }
 // the parts in boot.pak now (none when it is not this tool's build)
 function partsNow()
 {
-    const note = readNote();
+    const note = record();
     return state() === 'ours' ? { grade: note.strength || null, particles: !!note.particles, sky: !!note.sky } : { grade: null, particles: false, sky: false };
 }
 // for the grade, as before: 'grade <strength>', 'vanilla' (no grade in it: the original, or a build of the particles
@@ -224,20 +227,20 @@ function status()
 {
     const st = state();
     if (st !== 'ours') return st;
-    const note = readNote();
+    const note = record();
     return note.strength ? 'grade ' + note.strength : 'vanilla';
 }
 // for the particles: 'particles', 'none', 'changed' or 'missing'
 function particleStatus()
 {
     const st = state();
-    return st === 'ours' ? (readNote().particles ? 'particles' : 'none') : st === 'vanilla' ? 'none' : st;
+    return st === 'ours' ? (record().particles ? 'particles' : 'none') : st === 'vanilla' ? 'none' : st;
 }
 // for the night sky: 'sky', 'none', 'changed' or 'missing'
 function skyStatus()
 {
     const st = state();
-    return st === 'ours' ? (readNote().sky ? 'sky' : 'none') : st === 'vanilla' ? 'none' : st;
+    return st === 'ours' ? (record().sky ? 'sky' : 'none') : st === 'vanilla' ? 'none' : st;
 }
 // boot.pak built from its original with these parts, or the original itself when neither is asked for. Refuses a file that
 // is neither the original nor this tool's build (label names the caller), unless an adopt has just made it the base
@@ -251,7 +254,7 @@ function buildBoot(parts, label, adopted = false)
     {
         if (st !== 'ours') return;
         // the note keeps the last build's parts (adopt reads them)
-        try { fs.copyFileSync(ORIG, tmp); fs.renameSync(tmp, BOOT); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+        try { fs.copyFileSync(ORIG, tmp); swapIn(tmp, BOOT); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
         if (cdHash(BOOT) !== cdHash(ORIG)) throw new Error('boot.pak does not match its backup after the copy');
         console.log(label + ': the original boot.pak is back');
         return;
@@ -261,14 +264,20 @@ function buildBoot(parts, label, adopted = false)
         const keep = ORIG + '.tmp';
         fs.copyFileSync(BOOT, keep);
         if (fileHash(keep) !== fileHash(BOOT)) { fs.unlinkSync(keep); throw new Error('the boot.pak copy differs'); }
-        fs.renameSync(keep, ORIG);
+        swapIn(keep, ORIG);
     }
     const p = plan(ORIG, parts);
+    let note;
     try
     {
         writePak(ORIG, tmp, p);
         const sampled = verify(tmp, p);
-        fs.renameSync(tmp, BOOT);
+        note = { origCdSha256: cdHash(ORIG), cdSha256: cdHash(tmp), size: p.size, date: stamp() };
+        if (p.strength) Object.assign(note, { strength: p.strength, luts: TARGETS });
+        if (p.particles) Object.assign(note, { particles: true, particleSet: particleSetHash() });
+        if (p.sky) Object.assign(note, { sky: true, skySet: skySetHash() });
+        writeJson(NOTE, withPending(readNote(), note));
+        swapIn(tmp, BOOT);
         const has = [];
         if (p.strength) has.push(TARGETS.length + ' daytime LUTs graded at ' + Math.round(p.strength * 100) + ' %');
         const count = (type) => [...p.jobs.values()].filter((j) => j.type === type).length;
@@ -277,31 +286,27 @@ function buildBoot(parts, label, adopted = false)
         console.log(label + ': boot.pak now has ' + has.join(' and ') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
     }
     finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
-    const note = { origCdSha256: cdHash(ORIG), cdSha256: cdHash(BOOT), size: p.size, date: stamp() };
-    if (p.strength) Object.assign(note, { strength: p.strength, luts: TARGETS });
-    if (p.particles) Object.assign(note, { particles: true, particleSet: particleSetHash() });
-    if (p.sky) Object.assign(note, { sky: true, skySet: skySetHash() });
-    fs.writeFileSync(NOTE, JSON.stringify(note, null, 2));
+    writeJson(NOTE, note);
 }
 function install(strength) { buildBoot(Object.assign(partsNow(), { grade: strength }), 'photo grade'); }
 function restore()
 {
     const st = state();
-    if (st !== 'ours' || !readNote().strength) { if (st === 'changed') console.log('photo grade: boot.pak changed by something else: left alone'); return; }
+    if (st !== 'ours' || !record().strength) { if (st === 'changed') console.log('photo grade: boot.pak changed by something else: left alone'); return; }
     buildBoot(Object.assign(partsNow(), { grade: null }), 'photo grade');
 }
 function particlesInstall() { buildBoot(Object.assign(partsNow(), { particles: true }), 'particles'); }
 function particlesRestore()
 {
     const st = state();
-    if (st !== 'ours' || !readNote().particles) { if (st === 'changed') console.log('particles: boot.pak changed by something else: left alone'); return; }
+    if (st !== 'ours' || !record().particles) { if (st === 'changed') console.log('particles: boot.pak changed by something else: left alone'); return; }
     buildBoot(Object.assign(partsNow(), { particles: false }), 'particles');
 }
 function skyInstall() { buildBoot(Object.assign(partsNow(), { sky: true }), 'night sky'); }
 function skyRestore()
 {
     const st = state();
-    if (st !== 'ours' || !readNote().sky) { if (st === 'changed') console.log('night sky: boot.pak changed by something else: left alone'); return; }
+    if (st !== 'ours' || !record().sky) { if (st === 'changed') console.log('night sky: boot.pak changed by something else: left alone'); return; }
     buildBoot(Object.assign(partsNow(), { sky: false }), 'night sky');
 }
 
@@ -324,7 +329,12 @@ function adopt()
     {
         let p;
         try { p = plan(ORIG, had); }
-        catch (err) { if (!had.particles && !had.sky) throw err; p = had.grade ? plan(ORIG, { grade: had.grade, particles: false, sky: false }) : { jobs: new Map() }; }
+        catch (err)
+        {
+            if (!had.particles && !had.sky) throw err;
+            console.log('warning: the particle and night sky files of the last build could not be worked out again (' + err.message + '): those still in boot.pak stay in the new original');
+            p = had.grade ? plan(ORIG, { grade: had.grade, particles: false, sky: false }) : { jobs: new Map() };
+        }
         const fdo = fs.openSync(ORIG, 'r');
         try { for (const [ent, job] of p.jobs) last.set(ent.name, { job, ent, orig: readEntry(fdo, ent) }); } finally { fs.closeSync(fdo); }
     }
@@ -365,11 +375,12 @@ function adopt()
         if (still.grade || still.particles || still.sky) plan(tmp, still);
     }
     catch (err) { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); throw err; }
+    flush(tmp);
     const kept = keptName(ORIG);
-    fs.renameSync(ORIG, kept);
-    fs.renameSync(tmp, ORIG);
+    renameOver(ORIG, kept);
+    renameOver(tmp, ORIG);
     const keptSay = '; the old original is kept as ' + path.basename(kept);
-    fs.writeFileSync(NOTE, JSON.stringify({ origCdSha256: cdHash(ORIG), date: stamp(), adopted: path.basename(kept) }, null, 2));
+    writeJson(NOTE, { origCdSha256: cdHash(ORIG), date: stamp(), adopted: path.basename(kept) });
     if (!jobs.size)
     {
         console.log('photo grade: the current boot.pak is the new original (none of this tool\'s parts were in it' + keptSay + ')');
@@ -388,6 +399,7 @@ if (require.main === module)
     const [cmd, a1, a2] = process.argv.slice(2);
     try
     {
+        finishAdopt(ORIG);
         if (cmd === 'status') console.log(status());
         else if (cmd === 'particles-status') console.log(particleStatus());
         else if (cmd === 'install') install(a1 ? Number(a1) : 1);

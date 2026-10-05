@@ -236,7 +236,9 @@ function build(orig, modules)
     const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact');
     let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, checked = 0;
     const z = pak.parseZip(orig);
-    if (main.size || river || wet || bounce || refl || glow || shape || sssr || cont)
+    // whether any module touches the main cache (the check of the untouched entries at the end asks the same)
+    const mainRebuilt = !!(main.size || river || wet || bounce || refl || glow || shape || sssr || cont);
+    if (mainRebuilt)
     {
         const ent = z.entries.find((x) => x.name.endsWith(pak.ENTRY_TAIL));
         const { stamp, inflated } = pak.readSdc(pak.readEntry(orig, ent));
@@ -465,7 +467,7 @@ function build(orig, modules)
         if (!pak.readSdc(sdc).inflated.equals(rebuilt)) throw new Error('packed main cache failed its read back');
         out = pak.rewriteZip(out, ent.name, sdc);
         mainHits = seen.size;
-        if (seen.size !== main.size) console.log('note: ' + (main.size - seen.size) + ' main cache replacements have no shader in this pak');
+        if (seen.size !== main.size) console.log('warning: ' + (main.size - seen.size) + ' of the ' + main.size + ' replaced shaders are not in this game version\'s shader.pak: their modules are in only in part');
     }
     if (hdr.size)
     {
@@ -484,7 +486,7 @@ function build(orig, modules)
     {
         const e2 = zb.entries.find((x) => x.name === e.name);
         if (!e2) throw new Error('entry lost: ' + e.name);
-        const changed = ((main.size || river || wet || bounce || refl || glow || sssr) && e.name.endsWith(pak.ENTRY_TAIL)) || (hdr.size && e.name.endsWith(SIDE_ENTRY));
+        const changed = (mainRebuilt && e.name.endsWith(pak.ENTRY_TAIL)) || (hdr.size && e.name.endsWith(SIDE_ENTRY));
         if (!changed && !pak.readEntry(orig, e).equals(pak.readEntry(out, e2))) throw new Error('entry changed: ' + e.name);
         if (pak.crc32(pak.readEntry(out, e2)) !== e2.crc) throw new Error('crc check failed: ' + e.name);
     }
@@ -508,6 +510,9 @@ function summary(modules, r, gtao)
         '; shader.pak ' + r.out.length + ' bytes';
 }
 
+// the stock twins table, one line
+const twinsNote = (t) => t.count + ' shaders, ' + t.bytes + ' bytes' + (t.shared ? ' (' + t.shared + ' changed shaders share a key with another and have no twin)' : '');
+
 if (require.main === module)
 {
     const [cmd, arg] = process.argv.slice(2);
@@ -516,17 +521,27 @@ if (require.main === module)
         const modules = arg ? normalize(arg.split(',')) : DEFAULT;
         if (!modules.length) throw new Error('no modules given; the original shader.pak is put back by pak_shader_patch.js restore');
         if (!fs.existsSync(pak.ORIG)) throw new Error('no original backup at ' + pak.ORIG);
-        const r = build(fs.readFileSync(pak.ORIG), modules);
-        const tmp = pak.PAK + '.tmp';
-        fs.writeFileSync(tmp, r.out);
-        fs.renameSync(tmp, pak.PAK);
-        // the stock twins for SnowRunner Shadows' dev switches (F8 every effect, F11 the AO pass), next to hid.dll
-        const t = twins.buildTwins(fs.readFileSync(pak.ORIG), r.out);
-        const bin = path.join(path.dirname(pak.PAK), '..', '..', '..', 'Sources', 'Bin');
-        if (fs.existsSync(bin)) { fs.writeFileSync(path.join(bin, 'SnowRunnerShadows.stock'), t.file); console.log('stock twins for the dev switches: ' + t.count + ' shaders, ' + t.bytes + ' bytes'); }
+        const orig = fs.readFileSync(pak.ORIG);
+        const r = build(orig, modules);
+        // the stock twins for SnowRunner Shadows' dev switches (F8 every effect, F11 the AO pass), next to hid.dll: made
+        // before the first write, so a table that cannot be made stops the install with the game untouched
+        const t = twins.buildTwins(orig, r.out);
         const gtao = modules.includes('gtao') ? gtaoBuild(modules) : null, helpers = helperNote(modules) || null;
         const fog = modules.includes('fog') && fogVariant() !== FOG_DEFAULT ? fogVariant() : null;
-        fs.writeFileSync(pak.NOTE, JSON.stringify({ variant: 'fidelity: ' + modules.join(',') + (fog ? ' (fog build ' + fog + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : ''), modules, gtaoVariant: gtao, fogVariant: fog, helpers, patchedSha256: pak.sha256(r.out), date: pak.localStamp() }, null, 2));
+        pak.installBuild(r.out, { variant: 'fidelity: ' + modules.join(',') + (fog ? ' (fog build ' + fog + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : ''), modules, gtaoVariant: gtao, fogVariant: fog, helpers, patchedSha256: pak.sha256(r.out), date: pak.localStamp() });
+        // the table goes in last: the pak and its note stand without it, and the switches then have nothing to switch
+        const bin = path.join(path.dirname(pak.PAK), '..', '..', '..', 'Sources', 'Bin');
+        if (fs.existsSync(bin))
+        {
+            const stock = path.join(bin, 'SnowRunnerShadows.stock');
+            try { pak.writeSwap(stock, t.file); console.log('stock twins for the dev switches: ' + twinsNote(t)); }
+            catch (e)
+            {
+                // an earlier build's table would name other shaders: better none
+                try { fs.unlinkSync(stock); } catch (e2) { /* there is none, or it cannot be removed */ }
+                console.log('note: the stock twins table for the dev switches was not written (' + e.message + '): F8 and F11 switch nothing until the next install');
+            }
+        }
         console.log('installed ' + summary(modules, r, gtao));
     }
     else if (cmd === 'build')
@@ -542,27 +557,27 @@ if (require.main === module)
         const t = twins.buildTwins(fs.readFileSync(pak.ORIG), r.out);
         fs.writeFileSync(arg + '.stock', t.file);
         console.log('built ' + summary(modules, r, modules.includes('gtao') ? gtaoBuild(modules) : null) + '; sha256 ' + pak.sha256(r.out));
-        console.log('stock twins for the dev switches: ' + t.count + ' shaders, ' + t.bytes + ' bytes, in ' + arg + '.stock');
+        console.log('stock twins for the dev switches: ' + twinsNote(t) + ', in ' + arg + '.stock');
     }
     else if (cmd === 'status')
     {
-        const note = fs.existsSync(pak.NOTE) ? JSON.parse(fs.readFileSync(pak.NOTE, 'utf8')) : {};
-        const cur = pak.sha256(fs.readFileSync(pak.PAK));
-        console.log(note.patchedSha256 === cur ? 'shader.pak holds "' + note.variant + '" since ' + note.date : 'shader.pak is not a fidelity build of this tool');
+        const note = pak.noteFor(pak.readNote(), pak.sha256(fs.readFileSync(pak.PAK)));
+        console.log(note ? 'shader.pak holds "' + note.variant + '" since ' + note.date : 'shader.pak is not a fidelity build of this tool');
     }
     else if (cmd === 'modules')
     {
         const cur = pak.sha256(fs.readFileSync(pak.PAK));
-        const note = fs.existsSync(pak.NOTE) ? JSON.parse(fs.readFileSync(pak.NOTE, 'utf8')) : {};
         if (fs.existsSync(pak.ORIG) && pak.sha256(fs.readFileSync(pak.ORIG)) === cur) console.log('stock');
-        else if (note.patchedSha256 === cur && Array.isArray(note.modules)) console.log(normalize(note.modules).join(','));
-        else console.log('unknown');
+        else
+        {
+            const note = pak.noteFor(pak.readNote(), cur);
+            console.log(note && Array.isArray(note.modules) ? normalize(note.modules).join(',') : 'unknown');
+        }
     }
     else if (cmd === 'gtao')
     {
-        const cur = pak.sha256(fs.readFileSync(pak.PAK));
-        const note = fs.existsSync(pak.NOTE) ? JSON.parse(fs.readFileSync(pak.NOTE, 'utf8')) : {};
-        console.log(note.patchedSha256 === cur && note.gtaoVariant ? note.gtaoVariant : 'gtao_hq');
+        const note = pak.noteFor(pak.readNote(), pak.sha256(fs.readFileSync(pak.PAK)));
+        console.log(note && note.gtaoVariant ? note.gtaoVariant : 'gtao_hq');
     }
     else console.log('usage: install [' + ALL.join(',') + '] | build <out file> [modules] | status | modules | gtao');
 }

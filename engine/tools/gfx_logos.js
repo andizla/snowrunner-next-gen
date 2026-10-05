@@ -19,7 +19,7 @@
 //        install, restore and adopt with the game closed
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
-const { readZip, readEntry, writePak, cdHash, fileHash, keptName } = require('./lod_patch.js');
+const { readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt } = require('./lod_patch.js');
 
 const GFX = process.env.SR_GFX_PAK || 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/gfx.pak';
 const STATE = process.env.SR_STATE_DIR || path.join(__dirname, '..', 'pak_backup');
@@ -123,14 +123,14 @@ function verify(file, p)
     finally { fs.closeSync(fd); }
 }
 
-const readNote = () => (fs.existsSync(NOTE) ? JSON.parse(fs.readFileSync(NOTE, 'utf8')) : {});
+const readNote = () => readJson(NOTE);
 const stamp = () => { const d = new Date(), p = (v) => String(v).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
 // 'ours' (this tool's build), 'vanilla' (the original, or none kept yet), 'changed' or 'missing'
 function state()
 {
     if (!fs.existsSync(GFX)) return 'missing';
     const cur = cdHash(GFX), note = readNote();
-    if (note.cdSha256 === cur) return 'ours';
+    if (built(note, cur)) return 'ours';
     if (!fs.existsSync(ORIG)) return 'vanilla';
     return (note.origCdSha256 || cdHash(ORIG)) === cur ? 'vanilla' : 'changed';
 }
@@ -148,20 +148,24 @@ function install(adopted = false)
         const keep = ORIG + '.tmp';
         fs.copyFileSync(GFX, keep);
         if (fileHash(keep) !== fileHash(GFX)) { fs.unlinkSync(keep); throw new Error('the gfx.pak copy differs'); }
-        fs.renameSync(keep, ORIG);
+        swapIn(keep, ORIG);
     }
     const p = plan(ORIG), tmp = GFX + '.tmp';
+    let next;
     try
     {
         writePak(ORIG, tmp, p);
         const sampled = verify(tmp, p);
-        fs.renameSync(tmp, GFX);
+        next = { origCdSha256: cdHash(ORIG), cdSha256: cdHash(tmp), size: p.size, date: stamp(), logos: true, set: setHash(), left: p.left };
+        writeJson(NOTE, withPending(readNote(), next));
+        swapIn(tmp, GFX);
         const sheets = [...p.jobs.values()].filter((j) => j.type === 'sheet').length;
         console.log('logos: gfx.pak now has the Next Gen logo on the title screen, the loading screen and the main menu' + (sheets ? ' and in ' + sheets + ' of the 2 menu sheets' : '') +
             (p.left.length ? ' (left as they are, another layout: ' + p.left.join(', ') + ')' : '') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
+        if (p.left.length) console.log('warning: the Next Gen logo is not in ' + p.left.join(' and ') + ': this game version lays ' + (p.left.length > 1 ? 'these sheets' : 'this sheet') + ' out another way');
     }
     finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
-    fs.writeFileSync(NOTE, JSON.stringify({ origCdSha256: cdHash(ORIG), cdSha256: cdHash(GFX), size: p.size, date: stamp(), logos: true, set: setHash(), left: p.left }, null, 2));
+    writeJson(NOTE, next);
 }
 function restore()
 {
@@ -169,7 +173,7 @@ function restore()
     if (st !== 'ours') { if (st === 'changed') console.log('logos: gfx.pak changed by something else: left alone'); return; }
     const tmp = GFX + '.tmp';
     // the note keeps the last build (adopt reads it)
-    try { fs.copyFileSync(ORIG, tmp); fs.renameSync(tmp, GFX); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+    try { fs.copyFileSync(ORIG, tmp); swapIn(tmp, GFX); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
     if (cdHash(GFX) !== cdHash(ORIG)) throw new Error('gfx.pak does not match its backup after the copy');
     console.log('logos: the original gfx.pak is back');
 }
@@ -224,9 +228,10 @@ function adopt()
     }
     catch (err) { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); throw err; }
     let keptSay = '';
-    if (fs.existsSync(ORIG)) { const kept = keptName(ORIG); fs.renameSync(ORIG, kept); keptSay = '; the old original is kept as ' + path.basename(kept); }
-    fs.renameSync(tmp, ORIG);
-    fs.writeFileSync(NOTE, JSON.stringify({ origCdSha256: cdHash(ORIG), date: stamp() }, null, 2));
+    flush(tmp);
+    if (fs.existsSync(ORIG)) { const kept = keptName(ORIG); renameOver(ORIG, kept); keptSay = '; the old original is kept as ' + path.basename(kept); }
+    renameOver(tmp, ORIG);
+    writeJson(NOTE, { origCdSha256: cdHash(ORIG), date: stamp() });
     if (!jobs.size) { console.log('logos: the current gfx.pak is the new original (none of this tool\'s logos were in it' + keptSay + ')'); return; }
     console.log('logos: the current gfx.pak is the new original (this tool\'s logos were still in it: left out of the original; the other changes kept' + keptSay + ')');
     install(true);
@@ -239,6 +244,7 @@ if (require.main === module)
     const [cmd, a1] = process.argv.slice(2);
     try
     {
+        finishAdopt(ORIG);
         if (cmd === 'status') console.log(status());
         else if (cmd === 'install') install();
         else if (cmd === 'restore') restore();

@@ -494,7 +494,46 @@ function fileHash(file)
     try { for (let k; (k = fs.readSync(fd, buf, 0, buf.length, null)) > 0;) h.update(buf.subarray(0, k)); } finally { fs.closeSync(fd); }
     return h.digest('hex');
 }
-const readNote = () => (fs.existsSync(NOTE) ? JSON.parse(fs.readFileSync(NOTE, 'utf8')) : {});
+// ---- files put in place whole (lut_grade.js and gfx_logos.js use these too)
+// the disk takes a written file before it gets its final name: a power cut then leaves no part of it under that name
+function flush(file)
+{
+    const fd = fs.openSync(file, 'r+');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+// a rename that waits out a scanner holding the fresh file for a moment (Windows answers EPERM, EBUSY or EACCES then)
+function renameOver(from, to)
+{
+    for (let tries = 0; ; tries++)
+    {
+        try { fs.renameSync(from, to); return; }
+        catch (e)
+        {
+            if (tries >= 9 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+        }
+    }
+}
+const swapIn = (tmp, target) => { flush(tmp); renameOver(tmp, target); };
+// a note is written under a second name first, so it is the old note or the new one, never a part of one; a note that
+// cannot be read stops the tool with the note's name
+function writeJson(file, o) { const tmp = file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(o, null, 2)); swapIn(tmp, file); }
+function readJson(file)
+{
+    if (!fs.existsSync(file)) return {};
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch (e) { throw new Error(path.basename(file) + ' in ' + path.dirname(file) + ' cannot be read (' + e.message + ')'); }
+}
+// A build writes its note twice: before the pak goes in, with the coming build under "pending" next to the note as it
+// was, and after it, with the new build alone. So whichever of the two the pak is after a stop in between, the note
+// names it. built() gives the record of the build with this directory hash, or null when the note knows none.
+const built = (note, cur) => (note.cdSha256 === cur ? note : note.pending && note.pending.cdSha256 === cur ? note.pending : null);
+const withPending = (note, next) => { const o = Object.assign({}, note); o.pending = next; return o; };
+// An adopt gives the old original a dated name and then the new one its place. Stopped between the two, the new
+// original (complete: it is written and flushed before the old one moves) waits as <original>.new: it takes its place.
+function finishAdopt(orig) { if (!fs.existsSync(orig) && fs.existsSync(orig + '.new')) renameOver(orig + '.new', orig); }
+
+const readNote = () => readJson(NOTE);
 const stamp = () => { const d = new Date(), p = (v) => String(v).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
 
 // the installed set ('nature' or 'all'), 'vanilla' (the backup, or no backup yet), 'changed' (neither: a game update,
@@ -502,13 +541,14 @@ const stamp = () => { const d = new Date(), p = (v) => String(v).padStart(2, '0'
 function status()
 {
     if (!fs.existsSync(PAK)) return 'missing';
-    const cur = cdHash(PAK), note = readNote();
-    if (note.cdSha256 === cur) return note.set || 'nature';
+    const cur = cdHash(PAK), note = readNote(), rec = built(note, cur);
+    if (rec) return rec.set || 'nature';
     if (!fs.existsSync(ORIG)) return 'vanilla';
     return (note.origCdSha256 || cdHash(ORIG)) === cur ? 'vanilla' : 'changed';
 }
 
-// takes the current shared.pak as the original (first install, or after a game update)
+// takes the current shared.pak as the original (first install, or after a game update); an original kept before stays
+// under a dated name (keptName)
 function backup()
 {
     const tmp = ORIG + '.tmp';
@@ -516,8 +556,10 @@ function backup()
     fs.copyFileSync(PAK, tmp);
     const sum = fileHash(PAK);
     if (fileHash(tmp) !== sum) { fs.unlinkSync(tmp); throw new Error('the copy differs from shared.pak'); }
-    fs.renameSync(tmp, ORIG);
-    fs.writeFileSync(NOTE, JSON.stringify({ origSha256: sum, origCdSha256: cdHash(ORIG), origDate: stamp() }, null, 2));
+    flush(tmp);
+    if (fs.existsSync(ORIG)) { const kept = keptName(ORIG); renameOver(ORIG, kept); console.log('the earlier original is kept as ' + path.basename(kept)); }
+    renameOver(tmp, ORIG);
+    writeJson(NOTE, { origSha256: sum, origCdSha256: cdHash(ORIG), origDate: stamp() });
 }
 
 // ---- initial.pak: four parts, built together from the original. The grass: every grass brand's FadeDistances times its
@@ -549,9 +591,10 @@ function planInitial(file, parts, photoWas)
     try
     {
         const z = readZip(fd), jobs = new Map(), changed = {}, weatherCount = {};
-        // the evening part asks which regions have rain in their day states: the day states read once ahead
+        // the evening part, the fireflies and the pollen ask which regions have rain in their day states: the day states
+        // read once ahead
         let ctx = { rainRegions: new Set() };
-        if (wParts.has('evening'))
+        if (wParts.has('evening') || wParts.has('fireflies') || wParts.has('pollen'))
         {
             const texts = [];
             for (const ent of z.entries) if (WEATHER_DAYTIME.test(ent.name) && ent.flags === 0 && (ent.method === 0 || ent.method === 8)) texts.push({ name: ent.name, text: readEntry(fd, ent).data.toString('latin1') });
@@ -641,7 +684,7 @@ function verifyInitial(file, p)
     }
     finally { fs.closeSync(fd); }
 }
-const readGrassNote = () => (fs.existsSync(GRASS_NOTE) ? JSON.parse(fs.readFileSync(GRASS_NOTE, 'utf8')) : {});
+const readGrassNote = () => readJson(GRASS_NOTE);
 // what initial.pak holds: { state: 'ours', grass, fill, stars } (this tool's build; a part left out is null), 'vanilla'
 // (the original, or no original kept yet), 'changed' (another tool, a game update) or 'missing'. The note is the grass
 // note of old; a note from before the fill light has no fill, one from before the stars no stars.
@@ -649,8 +692,8 @@ function initialState()
 {
     const none = { grass: null, fill: null, stars: null, weather: null };
     if (!fs.existsSync(INITIAL)) return Object.assign({ state: 'missing' }, none);
-    const cur = cdHash(INITIAL), note = readGrassNote();
-    if (note.cdSha256 === cur) return { state: 'ours', grass: note.factor || null, fill: note.fill || null, stars: note.stars || null, weather: note.weather || null };
+    const cur = cdHash(INITIAL), note = readGrassNote(), rec = built(note, cur);
+    if (rec) return { state: 'ours', grass: rec.factor || null, fill: rec.fill || null, stars: rec.stars || null, weather: rec.weather || null };
     if (!fs.existsSync(INITIAL_ORIG)) return Object.assign({ state: 'vanilla' }, none);
     return Object.assign({ state: (note.origCdSha256 || cdHash(INITIAL_ORIG)) === cur ? 'vanilla' : 'changed' }, none);
 }
@@ -673,7 +716,7 @@ function buildInitial(parts, label)
     if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !photoSkies(BOOT).size)
     {
         if (now.state !== 'ours') return;
-        try { fs.copyFileSync(INITIAL_ORIG, tmp); fs.renameSync(tmp, INITIAL); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+        try { fs.copyFileSync(INITIAL_ORIG, tmp); swapIn(tmp, INITIAL); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
         if (cdHash(INITIAL) !== cdHash(INITIAL_ORIG)) throw new Error('initial.pak does not match its backup after the copy');
         console.log(label + ': the original initial.pak is back');
         return;
@@ -683,14 +726,17 @@ function buildInitial(parts, label)
         const keep = INITIAL_ORIG + '.tmp';
         fs.copyFileSync(INITIAL, keep);
         if (fileHash(keep) !== fileHash(INITIAL)) { fs.unlinkSync(keep); throw new Error('the initial.pak copy differs'); }
-        fs.renameSync(keep, INITIAL_ORIG);
+        swapIn(keep, INITIAL_ORIG);
     }
     const p = planInitial(INITIAL_ORIG, parts);
+    let next;
     try
     {
         writePak(INITIAL_ORIG, tmp, p);
         const sampled = verifyInitial(tmp, p);
-        fs.renameSync(tmp, INITIAL);
+        next = { origCdSha256: cdHash(INITIAL_ORIG), factor: p.parts.grass, fill: p.parts.fill, stars: p.parts.stars, weather: p.parts.weather, starsPhoto: p.photo, cdSha256: cdHash(tmp), size: p.size, date: stamp(), changed: p.jobs.size };
+        writeJson(GRASS_NOTE, withPending(readGrassNote(), next));
+        swapIn(tmp, INITIAL);
         const has = [];
         if (p.parts.grass) has.push((p.changed.grass || 0) + ' grass types fade ' + p.parts.grass + 'x further');
         if (p.parts.fill) has.push('the fill light at ' + Math.round(p.parts.fill * 100) + ' % in ' + (p.changed.fill || 0) + ' daytime states');
@@ -698,9 +744,16 @@ function buildInitial(parts, label)
         if (p.parts.weather) has.push('the weather (' + p.parts.weather.split(',').map((k) => k + ' ' + (p.weatherCount[k] || 0)).join(', ') + ' files)');
         if (p.photo.length) has.push('the sky alpha that boot.pak\'s photo night skies need (' + p.photo.join(', ') + ')');
         console.log(label + ': initial.pak now has ' + has.join(' and ') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
+        // a chosen part that found nothing to change in this game version's files
+        const none = [];
+        if (p.parts.grass && !p.changed.grass) none.push('grass reach');
+        if (p.parts.fill && !p.changed.fill) none.push('the fill light');
+        if (p.parts.stars && !p.changed.stars) none.push('the brighter stars');
+        for (const k of (p.parts.weather || '').split(',').filter(Boolean)) if (!p.weatherCount[k]) none.push('the weather\'s ' + k);
+        if (none.length) console.log('warning: ' + none.join(', ') + ' changed nothing: this game version\'s files do not have what ' + (none.length > 1 ? 'they change' : 'it changes'));
     }
     finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
-    fs.writeFileSync(GRASS_NOTE, JSON.stringify({ origCdSha256: cdHash(INITIAL_ORIG), factor: p.parts.grass, fill: p.parts.fill, stars: p.parts.stars, weather: p.parts.weather, starsPhoto: p.photo, cdSha256: cdHash(INITIAL), size: p.size, date: stamp(), changed: p.jobs.size }, null, 2));
+    writeJson(GRASS_NOTE, next);
 }
 // the parts in initial.pak now (none when it is not this tool's build)
 const partsNow = () => { const s = initialState(); return s.state === 'ours' ? { grass: s.grass, fill: s.fill, stars: s.stars, weather: s.weather } : { grass: null, fill: null, stars: null, weather: null }; };
@@ -798,16 +851,17 @@ function initialAdopt()
         }
     }
     catch (err) { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); throw err; }
+    flush(tmp);
     const kept = fs.existsSync(INITIAL_ORIG) ? keptName(INITIAL_ORIG) : null;
-    if (kept) fs.renameSync(INITIAL_ORIG, kept);
-    fs.renameSync(tmp, INITIAL_ORIG);
+    if (kept) renameOver(INITIAL_ORIG, kept);
+    renameOver(tmp, INITIAL_ORIG);
     const keptNote = kept ? path.basename(kept) : null, keptSay = kept ? '; the old original is kept as ' + path.basename(kept) : '';
     const parts = { grass: still.grass ? had.grass : null, fill: still.fill ? had.fill : null, stars: still.stars ? had.stars : null, weather: still.weather ? had.weather : null };
     // the photo skies' alpha (the stars group without a stars part) counts as ours while boot.pak still asks for it
     const photoNow = photoSkies(BOOT), photoKept = still.stars > 0 && hadPhoto.size > 0 && photoNow.size > 0;
     if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !photoKept)
     {
-        fs.writeFileSync(GRASS_NOTE, JSON.stringify({ origCdSha256: cdHash(INITIAL_ORIG), date: stamp(), adopted: keptNote }, null, 2));
+        writeJson(GRASS_NOTE, { origCdSha256: cdHash(INITIAL_ORIG), date: stamp(), adopted: keptNote });
         console.log('initial.pak: the current file is the new original (none of this tool\'s changes were in it' + keptSay + ')');
         if (photoNow.size) buildInitial(parts, 'initial.pak');   // boot.pak's photo skies need their sky alpha in any case
         return;
@@ -826,7 +880,7 @@ function initialAdopt()
         }
     }
     finally { fs.closeSync(fdc); }
-    fs.writeFileSync(GRASS_NOTE, JSON.stringify({ origCdSha256: cdHash(INITIAL_ORIG), factor: parts.grass, fill: parts.fill, stars: parts.stars, weather: parts.weather, starsPhoto: want.photo, cdSha256: cdHash(INITIAL), size: fs.statSync(INITIAL).size, date: stamp(), changed: want.jobs.size, adopted: keptNote }, null, 2));
+    writeJson(GRASS_NOTE, { origCdSha256: cdHash(INITIAL_ORIG), factor: parts.grass, fill: parts.fill, stars: parts.stars, weather: parts.weather, starsPhoto: want.photo, cdSha256: cdHash(INITIAL), size: fs.statSync(INITIAL).size, date: stamp(), changed: want.jobs.size, adopted: keptNote });
     const which = [parts.grass ? 'grass x' + parts.grass : null, parts.fill ? 'fill light ' + parts.fill : null, parts.stars ? 'stars x' + parts.stars : null, parts.weather ? 'weather ' + parts.weather : null, photoKept && !parts.stars ? 'photo skies\' alpha' : null].filter(Boolean).join(' and ');
     console.log('initial.pak: the current file is the new original (this tool\'s ' + which + ' was still in it: left out of the original; the other changes kept' + keptSay + ')');
     if (!exact) buildInitial(parts, 'initial.pak');
@@ -854,6 +908,7 @@ if (require.main === module)
     const source = () => (fs.existsSync(ORIG) ? ORIG : PAK);
     try
     {
+        finishAdopt(INITIAL_ORIG);
         if (cmd === 'list') { const from = source(); console.log('from ' + from); report(plan(from, set), args.includes('names')); }
         else if (cmd === 'status') console.log(status());
         else if (cmd === 'build' && args[1] && !SETS[args[1]])
@@ -876,16 +931,20 @@ if (require.main === module)
             console.log('planning ' + SETS[set] + ' from the original shared.pak');
             const p = plan(ORIG, set), tmp = PAK + '.tmp';
             console.log('writing ' + p.jobs.size + ' changed meshes into a new shared.pak (' + p.size + ' bytes)');
+            if (!p.jobs.size) console.log('warning: scenery detail changed no mesh: this game version\'s meshes do not have the switch distances it raises');
+            let next;
             try
             {
                 writePak(ORIG, tmp, p);
                 const sampled = verify(tmp, p);
-                fs.renameSync(tmp, PAK);
+                const note = readNote();
+                next = { origSha256: note.origSha256, origCdSha256: note.origCdSha256, origDate: note.origDate, set, cdSha256: cdHash(tmp), size: p.size, date: stamp(), floors: FLOORS, changed: p.changed };
+                writeJson(NOTE, withPending(note, next));
+                swapIn(tmp, PAK);
                 console.log('read back ok (' + sampled + ' untouched entries sampled)');
             }
             finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
-            const note = readNote();
-            fs.writeFileSync(NOTE, JSON.stringify({ origSha256: note.origSha256, origCdSha256: note.origCdSha256, origDate: note.origDate, set, cdSha256: cdHash(PAK), size: p.size, date: stamp(), floors: FLOORS, changed: p.changed }, null, 2));
+            writeJson(NOTE, next);
             // the grass goes with the all set only (unless the caller handles it: LOD_GRASS=leave)
             if (GRASS_WITH_SETS) { if (set === 'all') installGrass(); else restoreGrass(); }
             console.log('scenery detail: ' + SETS[set]);
@@ -943,7 +1002,7 @@ if (require.main === module)
             if (!fs.existsSync(ORIG)) { console.log('no backup: shared.pak was never changed by this tool'); return; }
             if (status() === 'vanilla') { console.log('shared.pak is already the original'); return; }
             const tmp = PAK + '.tmp';
-            try { fs.copyFileSync(ORIG, tmp); fs.renameSync(tmp, PAK); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+            try { fs.copyFileSync(ORIG, tmp); swapIn(tmp, PAK); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
             if (cdHash(PAK) !== readNote().origCdSha256) throw new Error('shared.pak does not match the backup after the copy');
             console.log('scenery detail: vanilla');
         }
@@ -951,4 +1010,4 @@ if (require.main === module)
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
-module.exports = { classify, raise, patchMesh, meshType, plan, readZip, readEntry, writePak, cdHash, fileHash, keptName, FLOORS, SETS };
+module.exports = { classify, raise, patchMesh, meshType, plan, readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt, FLOORS, SETS };

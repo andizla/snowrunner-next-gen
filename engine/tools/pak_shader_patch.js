@@ -206,14 +206,57 @@ function resolveBlob(arg) {
 // Backup and note live outside the game folder, so the game never meets a second pak-like file next to its paks;
 // SR_STATE_DIR puts them in a folder of its own (the installer, SnowRunner Next Gen, keeps one per game)
 const STATE_DIR = process.env.SR_STATE_DIR || (process.env.SR_SHADER_PAK ? path.dirname(PAK) : path.join(project, 'pak_backup'));
-fs.mkdirSync(STATE_DIR, { recursive: true });
+if (process.env.SR_STATE_DIR) fs.mkdirSync(STATE_DIR, { recursive: true });
 const NOTE = path.join(STATE_DIR, 'shader.pak.look.json');
 const ORIG = path.join(STATE_DIR, 'shader.pak.orig');
 // local time, as YYYY-MM-DD hh:mm
 const localStamp = () => { const d = new Date(), p = (v) => String(v).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
-const readNote = () => (fs.existsSync(NOTE) ? JSON.parse(fs.readFileSync(NOTE, 'utf8')) : {});
 
-module.exports = { PAK, ORIG, NOTE, ENTRY_TAIL, parseZip, rewriteZip, readEntry, parseCache, rebuildCache, readSdc, writeSdc, crc32, hex8, sha256, localStamp };
+// A rename that waits out a scanner holding the fresh file for a moment (Windows answers EPERM, EBUSY or EACCES then)
+function renameOver(from, to) {
+  for (let tries = 0; ; tries++) {
+    try { fs.renameSync(from, to); return; }
+    catch (e) {
+      if (tries >= 9 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+    }
+  }
+}
+// Writes a file whole under a second name, has the disk take it (so a power cut leaves no part of it behind under
+// the final name), reads it back and only then gives it the target's place. Until that last step the target is as
+// it was.
+function writeSwap(target, data) {
+  const tmp = target + '.tmp';
+  try {
+    const fd = fs.openSync(tmp, 'w');
+    try { for (let at = 0; at < data.length;) at += fs.writeSync(fd, data, at, data.length - at, at); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    if (!fs.readFileSync(tmp).equals(data)) throw new Error(path.basename(target) + ' did not read back as written');
+    renameOver(tmp, target);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch (e2) { /* it is gone already, or it cannot be removed: the first error is the one to report */ }
+    throw e;
+  }
+}
+
+function readNote() {
+  if (!fs.existsSync(NOTE)) return {};
+  try { return JSON.parse(fs.readFileSync(NOTE, 'utf8')); }
+  catch (e) { throw new Error(path.basename(NOTE) + ' in ' + STATE_DIR + ' cannot be read (' + e.message + ')'); }
+}
+const writeNote = (o) => writeSwap(NOTE, Buffer.from(JSON.stringify(o, null, 2)));
+// An install writes the note twice: before the pak goes in, with the coming build under "pending" next to the build
+// that is in, and after it, with the new build alone. So whichever of the two the pak is after a stop in between, the
+// note names it. noteFor gives the record of the pak with this sha256, or null when the note knows no such build.
+const noteFor = (note, cur) => (note.patchedSha256 === cur ? note : note.pending && note.pending.patchedSha256 === cur ? note.pending : null);
+function installBuild(out, record) {
+  const before = readNote();
+  delete before.pending;
+  writeNote(Object.assign(before, { pending: record }));
+  writeSwap(PAK, out);
+  writeNote(record);
+}
+
+module.exports = { PAK, ORIG, NOTE, ENTRY_TAIL, parseZip, rewriteZip, readEntry, parseCache, rebuildCache, readSdc, writeSdc, crc32, hex8, sha256, localStamp, renameOver, writeSwap, readNote, noteFor, installBuild };
 if (require.main === module) {
 const [cmd, arg] = process.argv.slice(2);
 if (cmd === 'selftest') {
@@ -229,49 +272,45 @@ if (cmd === 'selftest') {
   console.log('targets: ' + [...findTargets(inflated, parsed).entries()].map(([h, i]) => '0x' + h + ' = blob ' + i).join(', '));
 } else if (cmd === 'status') {
   const cur = sha256(fs.readFileSync(PAK));
-  const note = readNote();
+  const note = noteFor(readNote(), cur);
   const orig = fs.existsSync(ORIG) ? sha256(fs.readFileSync(ORIG)) : null;
   if (orig && cur === orig) console.log('shader.pak is the original (backup present)');
-  else if (note.patchedSha256 === cur) console.log('shader.pak holds "' + note.variant + '" since ' + note.date + ' (backup ' + (orig ? 'present' : 'MISSING') + ')');
+  else if (note) console.log('shader.pak holds "' + note.variant + '" since ' + note.date + ' (backup ' + (orig ? 'present' : 'MISSING') + ')');
   else console.log(orig ? 'shader.pak differs from the backup and from the last install: changed outside this tool (game update?)' : 'shader.pak is untouched by this tool (no backup yet)');
 } else if (cmd === 'install') {
   const { blob, file } = resolveBlob(arg);
   const curBuf = fs.readFileSync(PAK);
   const cur = sha256(curBuf);
-  const note = readNote();
+  fs.mkdirSync(STATE_DIR, { recursive: true });
   if (!fs.existsSync(ORIG)) {
-    fs.copyFileSync(PAK, ORIG);
-    if (sha256(fs.readFileSync(ORIG)) !== cur) throw new Error('backup copy does not match');
+    writeSwap(ORIG, curBuf);
     console.log('backup written: ' + ORIG);
-  } else if (cur !== sha256(fs.readFileSync(ORIG)) && cur !== note.patchedSha256) {
+  } else if (cur !== sha256(fs.readFileSync(ORIG)) && !noteFor(readNote(), cur)) {
     patchPak(curBuf, blob);   // throws unless the changed pak still holds the original shaders
-    const kept = ORIG + '.' + new Date().toISOString().slice(0, 10);
-    fs.renameSync(ORIG, kept);
-    fs.copyFileSync(PAK, ORIG);
+    const day = new Date().toISOString().slice(0, 10);
+    let kept = ORIG + '.' + day;
+    for (let n = 2; fs.existsSync(kept); n++) kept = ORIG + '.' + day + '-' + n;
+    writeSwap(kept, fs.readFileSync(ORIG));
+    writeSwap(ORIG, curBuf);
     console.log('shader.pak changed outside this tool: it is the new backup, the old backup is kept as ' + kept);
   }
   const r = patchPak(fs.readFileSync(ORIG), blob);
-  const tmp = PAK + '.tmp';
-  fs.writeFileSync(tmp, r.out);
-  fs.renameSync(tmp, PAK);
-  fs.writeFileSync(NOTE, JSON.stringify({ variant: arg, blobFile: file, blobCrc32: hex8(crc32(blob)), patchedSha256: sha256(r.out), date: localStamp() }, null, 2));
+  installBuild(r.out, { variant: arg, blobFile: file, blobCrc32: hex8(crc32(blob)), patchedSha256: sha256(r.out), date: localStamp() });
   console.log('installed ' + arg + ' (blob 0x' + hex8(crc32(blob)) + ', ' + blob.length + ' bytes) into blobs ' + r.slots.map(([h, i]) => i + ' (was 0x' + h + ')').join(' and ') + ' of ' + r.blobs + '; shader.pak ' + r.out.length + ' bytes');
 } else if (cmd === 'install-set') {
   // always built from the backup, so sets never stack; the backup is made from the current pak if it is missing
   const dir = fs.existsSync(arg) ? arg : path.join(project, 'replacements', arg);
   if (!fs.existsSync(dir)) throw new Error('no such folder: ' + arg);
-  if (!fs.existsSync(ORIG)) { fs.copyFileSync(PAK, ORIG); console.log('backup written: ' + ORIG); }
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  if (!fs.existsSync(ORIG)) { writeSwap(ORIG, fs.readFileSync(PAK)); console.log('backup written: ' + ORIG); }
   const r = patchPakSet(fs.readFileSync(ORIG), dir);
   if (!r.found) throw new Error('none of the ' + r.files + ' replacements matches a shader in the backup pak');
-  const tmp = PAK + '.tmp';
-  fs.writeFileSync(tmp, r.out);
-  fs.renameSync(tmp, PAK);
-  fs.writeFileSync(NOTE, JSON.stringify({ variant: arg, set: dir, patchedSha256: sha256(r.out), date: localStamp() }, null, 2));
+  installBuild(r.out, { variant: arg, set: dir, patchedSha256: sha256(r.out), date: localStamp() });
   console.log('installed ' + arg + ': ' + r.found + ' of ' + r.files + ' replacements matched, ' + r.slots + ' of ' + r.blobs + ' blobs replaced; shader.pak ' + r.out.length + ' bytes');
 } else if (cmd === 'restore') {
   if (!fs.existsSync(ORIG)) throw new Error('no backup to restore');
-  fs.copyFileSync(ORIG, PAK);
-  if (fs.existsSync(NOTE)) fs.writeFileSync(NOTE, JSON.stringify({ variant: null, date: localStamp() }, null, 2));
+  writeSwap(PAK, fs.readFileSync(ORIG));
+  if (fs.existsSync(NOTE)) writeNote({ variant: null, date: localStamp() });
   console.log('shader.pak restored from the backup');
 } else console.log('usage: selftest [pak] | status | install <blob.cso|variant> | install-set <folder|replacements subfolder> | restore');
 

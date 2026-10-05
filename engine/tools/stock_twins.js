@@ -7,8 +7,9 @@
 //   sorted by key, keys unique
 //   the original blobs
 // Main cache: blob i against blob i of the original; side cache (tonemap, bloom): the same stream and index.
-// Library: buildTwins(origPak, builtPak) -> { file, count, ao, bytes }. The AO pass's two slots must differ in the built
-// pak (fidelity_bundle.js makes its second copy distinct), else the table would not know which original is which.
+// Library: buildTwins(origPak, builtPak) -> { file, count, ao, bytes, shared }. The AO pass's two slots must differ in
+// the built pak (fidelity_bundle.js makes its second copy distinct), else the table would not know which original is
+// which and would leave both out (shared counts the changed shaders left out for that reason).
 // usage: node stock_twins.js <built shader.pak> <out file>
 const fs = require('fs');
 const pak = require('./pak_shader_patch.js');
@@ -30,24 +31,35 @@ function sideList(buf)
 
 function buildTwins(orig, built)
 {
-    const pairs = [];
+    const all = [];
     const o = mainBlobs(orig), b = mainBlobs(built);
     if (o.length !== b.length) throw new Error('main caches differ in length: ' + o.length + ' vs ' + b.length);
     for (let i = 0; i < o.length; i++)
     {
         if (o[i].equals(b[i])) continue;
-        pairs.push({ key: pak.crc32(b[i]) >>> 0, group: AO.has(pak.hex8(pak.crc32(o[i]))) ? 1 : 2, stock: o[i] });
+        all.push({ key: pak.crc32(b[i]) >>> 0, group: AO.has(pak.hex8(pak.crc32(o[i]))) ? 1 : 2, stock: o[i] });
     }
     const so = sideList(orig), sb = sideList(built);
     for (const x of sb)
     {
         const y = so.find((s) => s.stream === x.stream && s.index === x.index);
         if (!y) throw new Error('side cache entry ' + x.stream + '/' + x.index + ' has no original');
-        if (!y.blob.equals(x.blob)) pairs.push({ key: pak.crc32(x.blob) >>> 0, group: 2, stock: y.blob });
+        if (!y.blob.equals(x.blob)) all.push({ key: pak.crc32(x.blob) >>> 0, group: 2, stock: y.blob });
     }
-    pairs.sort((p, q) => p.key - q.key);
-    for (let i = 1; i < pairs.length; i++)
-        if (pairs[i].key === pairs[i - 1].key) throw new Error('two changed shaders share the key ' + pak.hex8(pairs[i].key) + ': the DLL could not tell their originals apart');
+    all.sort((p, q) => p.key - q.key);
+    // Changed shaders that share a key (a CRC32 can repeat among thousands): with one original between them a single
+    // entry serves them all; with different originals the DLL could not tell which is whose, so none of them gets a
+    // twin and the switches leave those shaders as they are. shared counts the shaders left out.
+    const pairs = [];
+    let shared = 0;
+    for (let i = 0; i < all.length;)
+    {
+        let j = i + 1;
+        while (j < all.length && all[j].key === all[i].key) j++;
+        if (all.slice(i + 1, j).every((p) => p.stock.equals(all[i].stock))) pairs.push(all[i]);
+        else shared += j - i;
+        i = j;
+    }
     const head = Buffer.alloc(16 + pairs.length * 16);
     head.write('SRTW', 0, 'latin1');
     head.writeUInt32LE(1, 4);
@@ -63,7 +75,7 @@ function buildTwins(orig, built)
         at += p.stock.length;
     });
     const file = Buffer.concat([head, ...pairs.map((p) => p.stock)]);
-    return { file, count: pairs.length, ao: pairs.filter((p) => p.group === 1).length, bytes: file.length };
+    return { file, count: pairs.length, ao: pairs.filter((p) => p.group === 1).length, bytes: file.length, shared };
 }
 
 module.exports = { buildTwins };
