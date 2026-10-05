@@ -13,6 +13,7 @@
 //   ... bounceoff          dev switch F10 off at start (ini BounceOn=0): no bounce light, as with nogi
 //   ... aohalf             with ini AOHalf=1: the bounce-light checks with the AO pass drawn at half size (an R8 AO target,
 //                          as the game's), plus the half-size target, the full-size result at t1, the game's viewport and t1 back
+//   shadow_test aohalfodd  the AO pass at half size on a 65 x 37 target (see AOHalfOddTest): the last column and row too
 //   shadow_test maketable  writes SnowRunnerShadows.stock (the stock twins table) from this test's own shaders, then exits
 //   ... twins [stockall|stockao]   with that table next to the DLL: the dev switches F8 (ini StockAll=1) and F11 (ini
 //                          StockAO=1) at start: a changed shader draws with its original exactly when its group is stock
@@ -646,16 +647,26 @@ static int ContactLab(ID3D11Device *dev, ID3D11DeviceContext *ctx, ID3D11VertexS
     if (!made) return 2;
     const D3D11_VIEWPORT vp = { 0, 0, (float)W, (float)H, 0, 1 };
     const D3D11_RECT sc = { 0, 0, (LONG)W, (LONG)H };
+    // the lit pass's blend state as the game has it: target 6 unwritten (mask 0). The DLL puts a plain copy in its
+    // place for the pass, with the bounce light and the reflections off too (ini GI=0 SSR=0), or nothing reaches target 6
+    D3D11_BLEND_DESC gameBlendDesc = {};
+    gameBlendDesc.IndependentBlendEnable = TRUE;
+    for (auto &t : gameBlendDesc.RenderTarget) t.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    gameBlendDesc.RenderTarget[6].RenderTargetWriteMask = 0;
+    ID3D11BlendState *gameBlend = nullptr;
+    dev->CreateBlendState(&gameBlendDesc, &gameBlend);
     auto frame = [&]() {
         ctx->VSSetShader(vs, nullptr, 0); ctx->IASetInputLayout(nullptr); ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ctx->RSSetState(rs); ctx->OMSetDepthStencilState(nullptr, 0); ctx->RSSetViewports(1, &vp); ctx->RSSetScissorRects(1, &sc);
         ID3D11Buffer *cbs[3] = { labCB, camCB, sceneCB };
         ctx->PSSetConstantBuffers(0, 3, cbs);
         ID3D11RenderTargetView *mrt[3] = { colour.rtv, normal.rtv, factor.rtv };
+        ctx->OMSetBlendState(gameBlend, nullptr, 0xffffffff);
         ctx->OMSetRenderTargets(3, mrt, nullptr);
         ctx->PSSetShader(lit, nullptr, 0);
         ctx->Draw(3, 0);
         ctx->OMSetRenderTargets(1, &z.rtv, nullptr);
+        ctx->OMSetBlendState(nullptr, nullptr, 0xffffffff);
         ctx->PSSetShader(depthPS, nullptr, 0);
         ctx->Draw(3, 0);
         ctx->OMSetRenderTargets(1, &aoOut.rtv, nullptr);
@@ -1245,6 +1256,155 @@ static int ZMipsTest(bool expectOff)
     return g_failures ? 1 : 0;
 }
 
+// AO at half size on a target with an odd width and height (65 x 37; a DLSS scale gives such sizes): the half-size
+// pass must fill its whole 33 x 19 target. A viewport of half the size as a fraction (32.5 x 18.5) leaves the last
+// column and row undrawn, and the upsample then reads them for the picture's last columns and rows. The AO pass here
+// writes 1 everywhere, the apply pass puts what it reads at t1 into the colour target's alpha: 1 in every corner.
+static int AOHalfOddTest()
+{
+    Rig r;
+    D3D_FEATURE_LEVEL fl = D3D_FEATURE_LEVEL_11_0;
+    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, &fl, 1, D3D11_SDK_VERSION, &r.dev, nullptr, &r.ctx);
+    if (!r.dev) { printf("FAIL  no device\n"); return 2; }
+    const UINT W = 65, H = 37;
+    const char *kVSFull = "float4 main(uint id : SV_VertexID) : SV_Position { float2 p = float2((id << 1) & 2, id & 2); return float4(p.x * 2 - 1, 1 - p.y * 2, 0.5, 1); }";
+    const char *kLit = "float4 c; struct O { float4 c : SV_Target0; float4 v : SV_Target1; float f : SV_Target2; };"
+                       "O main() { O o; o.c = c; o.v = 0; o.f = 1; return o; }";
+    const char *kAOGI = "Texture2D g_txDither : register(t0); Texture2D g_txFactor : register(t2); Texture2D g_txZ : register(t80); Texture2D g_txScene : register(t120);"
+                        "struct O { float4 ao : SV_Target0; float4 gi : SV_Target1; };"
+                        "O main(float4 p : SV_Position) { O o; o.ao = g_txDither.Load(int3(0, 0, 0)) + g_txFactor.Load(int3(p.xy, 0)) * g_txZ.Load(int3(p.xy, 0)).x;"
+                        " o.gi = float4(g_txScene.Load(int3(p.xy, 0)).rgb * 2, 1); return o; }";
+    const char *kApply = "cbuffer CB_INSTANCE : register(b4) { float4 g_vSSAOColor; }; Texture2D g_txMask : register(t1); Texture2D g_txFactor : register(t2);"
+                         "float4 main(float4 p : SV_Position) : SV_Target { return float4(g_vSSAOColor.rgb, g_txMask.Load(int3(p.xy, 0)).x * g_txFactor.Load(int3(p.xy, 0)).x); }";
+    ID3DBlob *code = nullptr;
+    ID3D11VertexShader *vs = nullptr;
+    if (SUCCEEDED(D3DCompile(kVSFull, strlen(kVSFull), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, &code, nullptr))) { r.dev->CreateVertexShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &vs); code->Release(); }
+    auto ps = [&](const char *src) {
+        ID3DBlob *b = nullptr;
+        ID3D11PixelShader *s = nullptr;
+        if (SUCCEEDED(D3DCompile(src, strlen(src), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, &b, nullptr))) { r.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &s); b->Release(); }
+        return s;
+    };
+    ID3D11PixelShader *lit = ps(kLit), *aoGI = ps(kAOGI), *apply = ps(kApply);
+    struct Target { ID3D11Texture2D *tex = nullptr; ID3D11RenderTargetView *rtv = nullptr; ID3D11ShaderResourceView *srv = nullptr; };
+    auto target = [&](DXGI_FORMAT f) {
+        Target t;
+        D3D11_TEXTURE2D_DESC td = {};
+        td.Width = W; td.Height = H; td.MipLevels = 1; td.ArraySize = 1; td.Format = f; td.SampleDesc.Count = 1;
+        td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        r.dev->CreateTexture2D(&td, nullptr, &t.tex);
+        if (t.tex) { r.dev->CreateRenderTargetView(t.tex, nullptr, &t.rtv); r.dev->CreateShaderResourceView(t.tex, nullptr, &t.srv); }
+        return t;
+    };
+    Target colour = target(DXGI_FORMAT_R16G16B16A16_FLOAT), velocity = target(DXGI_FORMAT_R16G16_FLOAT), factor = target(DXGI_FORMAT_R8_UNORM),
+        z = target(DXGI_FORMAT_R32_FLOAT), aoMask = target(DXGI_FORMAT_R8_UNORM);
+    D3D11_BUFFER_DESC bd = { 16, D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 };
+    ID3D11Buffer *cb = nullptr;
+    r.dev->CreateBuffer(&bd, nullptr, &cb);
+    D3D11_TEXTURE2D_DESC sd = {};
+    sd.Width = W; sd.Height = H; sd.MipLevels = 1; sd.ArraySize = 1; sd.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; sd.SampleDesc.Count = 1;
+    sd.Usage = D3D11_USAGE_STAGING; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    ID3D11Texture2D *st = nullptr;
+    r.dev->CreateTexture2D(&sd, nullptr, &st);
+    const bool ready = vs && lit && aoGI && apply && colour.srv && velocity.rtv && factor.srv && z.srv && aoMask.srv && cb && st;
+    Check(ready, "AO at half size, odd size: shaders and targets made");
+    if (!ready) return 2;
+    const D3D11_VIEWPORT vp = { 0, 0, (float)W, (float)H, 0, 1 };
+    const D3D11_RECT rect = { 0, 0, (LONG)W, (LONG)H };
+    UINT aoRT0Width = 0, aoRT0Height = 0;
+    // one frame as the game orders it: lighting, the AO pass with its second output, the apply pass onto the lit colour
+    auto frame = [&](ID3D11DeviceContext *c) {
+        c->VSSetShader(vs, nullptr, 0); c->IASetInputLayout(nullptr); c->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        c->RSSetViewports(1, &vp); c->RSSetScissorRects(1, &rect);
+        const float lc[4] = { 0.25f, 0.5f, 0.75f, 1 };
+        c->UpdateSubresource(cb, 0, nullptr, lc, 0, 0);
+        c->PSSetConstantBuffers(0, 1, &cb);
+        ID3D11RenderTargetView *mrt[3] = { colour.rtv, velocity.rtv, factor.rtv };
+        c->OMSetRenderTargets(3, mrt, nullptr);
+        c->PSSetShader(lit, nullptr, 0);
+        c->Draw(3, 0);
+        const float seven[4] = { 7, 7, 7, 7 };
+        c->ClearRenderTargetView(z.rtv, seven);
+        c->OMSetRenderTargets(1, &aoMask.rtv, nullptr);
+        c->PSSetShaderResources(0, 1, &factor.srv);
+        c->PSSetShaderResources(2, 1, &factor.srv);
+        c->PSSetShaderResources(80, 1, &z.srv);
+        c->PSSetShader(aoGI, nullptr, 0);
+        ID3D11RenderTargetView *rt0 = nullptr;
+        c->OMGetRenderTargets(1, &rt0, nullptr);
+        if (rt0)
+        {
+            ID3D11Resource *res = nullptr;
+            ID3D11Texture2D *t = nullptr;
+            D3D11_TEXTURE2D_DESC d = {};
+            rt0->GetResource(&res);
+            if (res && SUCCEEDED(res->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&t)) && t) { t->GetDesc(&d); t->Release(); }
+            aoRT0Width = d.Width; aoRT0Height = d.Height;
+            if (res) res->Release();
+            rt0->Release();
+        }
+        c->Draw(3, 0);
+        ID3D11ShaderResourceView *none = nullptr;
+        c->PSSetShaderResources(80, 1, &none);
+        c->OMSetRenderTargets(1, &colour.rtv, nullptr);
+        c->PSSetShaderResources(1, 1, &aoMask.srv);
+        c->PSSetShader(apply, nullptr, 0);
+        c->PSSetConstantBuffers(4, 1, &cb);
+        c->Draw(3, 0);
+        c->PSSetShaderResources(1, 1, &none);
+    };
+    // the alpha of the colour target at a pixel (half float)
+    auto half = [](uint16_t h) {
+        const int e = (h >> 10) & 31, m = h & 1023;
+        const float v = e == 0 ? ldexpf((float)m, -24) : ldexpf((float)(m + 1024), e - 25);
+        return (h & 0x8000) ? -v : v;
+    };
+    auto alphaAt = [&](UINT x, UINT y) {
+        float v = -9;
+        r.ctx->CopyResource(st, colour.tex);
+        D3D11_MAPPED_SUBRESOURCE m = {};
+        if (SUCCEEDED(r.ctx->Map(st, 0, D3D11_MAP_READ, 0, &m)))
+        {
+            uint16_t a = 0;
+            memcpy(&a, (const BYTE *)m.pData + y * m.RowPitch + x * 8 + 6, 2);
+            v = half(a);
+            r.ctx->Unmap(st, 0);
+        }
+        return v;
+    };
+    for (int i = 0; i < 4; i++) frame(r.ctx);   // the first frames show the DLL which target is the AO pass's own
+    char line[240];
+    snprintf(line, sizeof line, "AO at half size, odd size: the AO pass draws into a %u x %u target (half of 65 x 37, rounded up)", aoRT0Width, aoRT0Height);
+    Check(aoRT0Width == 33 && aoRT0Height == 19, line);
+    const float inner = alphaAt(10, 10), right = alphaAt(W - 1, 10), bottom = alphaAt(10, H - 1), corner = alphaAt(W - 1, H - 1), beforeRight = alphaAt(W - 2, 10), beforeBottom = alphaAt(10, H - 2);
+    snprintf(line, sizeof line, "AO at half size, odd size: the apply pass reads %.3g inside, %.3g and %.3g in the last two columns, %.3g and %.3g in the last two rows, %.3g in the corner (1 everywhere)",
+        inner, beforeRight, right, beforeBottom, bottom, corner);
+    auto one = [](float v) { return std::fabs(v - 1.0f) < 1e-3f; };
+    Check(one(inner) && one(right) && one(bottom) && one(corner) && one(beforeRight) && one(beforeBottom), line);
+    // on a deferred context too
+    ID3D11DeviceContext *d = nullptr;
+    r.dev->CreateDeferredContext(0, &d);
+    if (d)
+    {
+        frame(d);
+        ID3D11CommandList *l = nullptr;
+        d->FinishCommandList(FALSE, &l);
+        if (l) { r.ctx->ExecuteCommandList(l, FALSE); l->Release(); }
+        d->Release();
+        const float r2 = alphaAt(W - 1, 10), b2 = alphaAt(10, H - 1), c2 = alphaAt(W - 1, H - 1);
+        snprintf(line, sizeof line, "AO at half size, odd size, on a deferred context: %.3g, %.3g and %.3g in the last column, the last row and the corner", r2, b2, c2);
+        Check(one(r2) && one(b2) && one(c2), line);
+    }
+    Check(ReadDllLog().find("AO at half size: targets 33 x 19 for the pass's 65 x 37") != std::string::npos, "AO at half size, odd size: the log names the targets");
+    for (IUnknown *u : { (IUnknown *)st, (IUnknown *)cb, (IUnknown *)apply, (IUnknown *)aoGI, (IUnknown *)lit, (IUnknown *)vs })
+        if (u) u->Release();
+    for (Target *t : { &colour, &velocity, &factor, &z, &aoMask }) { if (t->srv) t->srv->Release(); if (t->rtv) t->rtv->Release(); if (t->tex) t->tex->Release(); }
+    r.ctx->Release();
+    r.dev->Release();
+    printf("%s\n", g_failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
+    return g_failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     bool expectOff = false, hardware = false, twoDevices = false, noFeed = false, noGI = false, puddlesOff = false, bounceOff = false;
@@ -1267,6 +1427,7 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "noframes") == 0) return FramesTest(false);
         if (strcmp(argv[i], "gputimers") == 0) return GpuTimersTest(false);
         if (strcmp(argv[i], "gpuprofile") == 0) return GpuTimersTest(true);
+        if (strcmp(argv[i], "aohalfodd") == 0) return AOHalfOddTest();
         if (strcmp(argv[i], "zmips") == 0) return ZMipsTest(false);
         if (strcmp(argv[i], "zmipsoff") == 0) return ZMipsTest(true);
     }

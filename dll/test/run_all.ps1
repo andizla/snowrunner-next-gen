@@ -49,6 +49,8 @@ $configs = @(
     # half size is the default: without an ini it is on; AOHalf=0 keeps the game's own target
     @{ name = 'ao half default'; ini = @();                         args = @('aohalf') },
     @{ name = 'ao full';        ini = @('AOHalf=0');                args = @('aofull') },
+    # an odd render size (a DLSS scale gives one): the half-size pass fills its last column and row too
+    @{ name = 'ao half odd';    ini = @();                          args = @('aohalfodd') },
     # the AO pass's depth mips at t126: on by default; ZMips=0 leaves t126 empty; the default run with them off
     @{ name = 'zmips';          ini = @();                          args = @('zmips') },
     @{ name = 'zmips off';      ini = @('ZMips=0');                 args = @('zmipsoff') },
@@ -57,6 +59,8 @@ $configs = @(
     # on the GPU; and every check of the default run with a ContactDebug view set (nothing writes output 6 there)
     @{ name = 'contact';        ini = @();                          args = @('contact') },
     @{ name = 'contact no ssr'; ini = @('SSR=0');                   args = @('contact') },
+    # contact shadows without the bounce light and the reflections: they alone need the blend state hook then
+    @{ name = 'contact alone';  ini = @('GI=0', 'SSR=0');           args = @('contact') },
     @{ name = 'contact off';    ini = @('ContactOn=0');             args = @('contact', 'off') },
     @{ name = 'contact hw';     ini = @();                          args = @('contact', 'hw') },
     @{ name = 'contact default'; ini = @('ContactDebug=1');         args = @() }

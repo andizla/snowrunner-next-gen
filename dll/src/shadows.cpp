@@ -69,8 +69,9 @@
 // top-left full-size pixel of its block exactly); a depth target bound with the pass or a dump in progress keeps it at
 // full size. On a captured 4K frame: the pass 4.77 -> 1.39 ms, blur and upsample 0.20 ms.
 //
-// Dev switches, for A/B comparisons in game (hotkeys, read while a window of the game is in front; every flip is
-// written to the log):
+// Dev switches, for A/B comparisons in game (hotkeys, read while a window of the game is in front and none of Alt,
+// Ctrl, Shift and the Windows keys is held: Alt+F10 belongs to an overlay, Alt+F4 to Windows; every flip is written to
+// the log):
 //   F8   every shader.pak effect off / on: the game draws with the original of every shader the fidelity bundle
 //        changed. The originals come from SnowRunnerShadows.stock next to this DLL (written by the bundle builder,
 //        engine\tools\stock_twins.js, mapped read-only): when the game creates a changed shader, its
@@ -82,8 +83,9 @@
 //   F11  the AO pass: the game's own SSAO (its stock twin) or GTAO; the bounce light is off with the game's SSAO.
 // Ini: KeyStock=119 KeyPuddles=120 KeyBounce=121 KeyAO=122 (virtual-key codes, 0 = no key) and the states at start:
 // StockAll=0 PuddlesOn=1 BounceOn=1 StockAO=0.
-// Dump (KeyDump=118 = F7; DumpAfter=<seconds>: once, that long after the AO pass first runs, 0 = off; DumpDir=<folder>,
-// default this DLL's): one frame's bounce-light chain saved to files for offline measurement. The next AO pass set up
+// Dump (KeyDump=<virtual-key code>, 118 = F7, no key unless the ini names one: a dump is about 150 MB at 4K;
+// DumpAfter=<seconds>: once, that long after the AO pass first runs, 0 = off; DumpDir=<folder>, default this DLL's):
+// one frame's bounce-light chain saved to files for offline measurement. The next AO pass set up
 // with the feed copied has its inputs copied (the scene and depth as copied for it, t120/t121; g_txFactor at t2;
 // g_txDither at t0; its pixel shader constant buffers) and, when it is over, its outputs (the AO target, the bounce-light
 // texture, the constant buffers again), into staging resources; once the command lists holding those copies have run
@@ -429,11 +431,15 @@ static DWORD WINAPI HotkeyThread(void *)
         DWORD pid = 0;
         const HWND fg = GetForegroundWindow();
         if (fg) GetWindowThreadProcessId(fg, &pid);
-        const bool front = pid == GetCurrentProcessId();
+        // a press counts when it starts with the game in front and no modifier held; a key that went down otherwise
+        // stays "down" until it is let go, so letting go of Alt first does not turn Alt+F10 into F10
+        bool mods = false;
+        for (int vk : { VK_MENU, VK_CONTROL, VK_SHIFT, VK_LWIN, VK_RWIN }) mods |= (GetAsyncKeyState(vk) & 0x8000) != 0;
+        const bool mine = pid == GetCurrentProcessId() && !mods;
         for (Switch &s : sw)
         {
-            const bool down = front && s.key && (GetAsyncKeyState((int)s.key) & 0x8000) != 0;
-            if (down && !s.down)
+            const bool down = s.key && (GetAsyncKeyState((int)s.key) & 0x8000) != 0;
+            if (down && !s.down && mine)
             {
                 const bool now = !s.state->load();
                 s.state->store(now);
@@ -444,8 +450,8 @@ static DWORD WINAPI HotkeyThread(void *)
             s.down = down;
         }
         // the dump key: one shot per press; and the dump's timer and timeout
-        const bool dumpNow = front && g_keyDump && (GetAsyncKeyState((int)g_keyDump) & 0x8000) != 0;
-        if (dumpNow && !dumpDown) { char name[16]; KeyName(g_keyDump, name, sizeof name); DumpRequest(name); }
+        const bool dumpNow = g_keyDump && (GetAsyncKeyState((int)g_keyDump) & 0x8000) != 0;
+        if (dumpNow && !dumpDown && mine) { char name[16]; KeyName(g_keyDump, name, sizeof name); DumpRequest(name); }
         dumpDown = dumpNow;
         DumpTick(GetTickCount64());
         ProbeTick(GetTickCount64());
@@ -1758,12 +1764,14 @@ static bool AOHalfSetup(ID3D11Device *dev, UINT w, UINT h)
     return ok;
 }
 
-// the context's viewports as the game set them (else the AO target's size), halved
+// the context's viewports as the game set them (else the AO target's size), halved. An odd size rounds up like the
+// half-size targets do: half of 2561 is 1280.5, and a viewport that wide leaves the 1281st column undrawn (its pixel
+// centre lies on the edge), which the upsample then reads for the picture's last columns.
 static void AOHalfViewports(ID3D11DeviceContext *ctx, const ContextOrig *o, const ContextState *s)
 {
     std::vector<D3D11_VIEWPORT> v = s->viewports;
     if (v.empty()) v.push_back({ 0.0f, 0.0f, (float)g_aoHalfRes.w, (float)g_aoHalfRes.h, 0.0f, 1.0f });
-    for (D3D11_VIEWPORT &x : v) { x.TopLeftX *= 0.5f; x.TopLeftY *= 0.5f; x.Width *= 0.5f; x.Height *= 0.5f; }
+    for (D3D11_VIEWPORT &x : v) { x.TopLeftX = floorf(x.TopLeftX * 0.5f); x.TopLeftY = floorf(x.TopLeftY * 0.5f); x.Width = ceilf(x.Width * 0.5f); x.Height = ceilf(x.Height * 0.5f); }
     o->setViewports(ctx, (UINT)v.size(), v.data());
 }
 
@@ -5074,7 +5082,7 @@ static void CheckHooks(ID3D11DeviceContext *ctx)
     };
     for (const auto &h : hooks)
     {
-        if (vt[h.slot] == h.hook || (h.slot == kSlotOMSetBlendState && !g_gi && !g_ssr) || (h.slot == kSlotVSSetShader && !g_twinCount)) continue; // (not installed with GI=0 SSR=0 / no table)
+        if (vt[h.slot] == h.hook || (h.slot == kSlotOMSetBlendState && !g_gi && !g_ssr && !g_contact) || (h.slot == kSlotVSSetShader && !g_twinCount)) continue; // (not installed with GI=0 SSR=0 Contact=0 / no table)
         std::lock_guard<std::mutex> lock(g_lostLock);
         bool known = false;
         for (const auto &l : g_lostHooks) known |= l.first == vt && l.second == h.slot;
@@ -5112,7 +5120,7 @@ static void HookContext(ID3D11DeviceContext *ctx)
     }
     if (g_twinCount) e.vsSet = (PFN_VSSetShader)vt[kSlotVSSetShader];
     if (g_gpuProfile) e.csSet = (PFN_CSSetShader)vt[kSlotCSSetShader];
-    if (g_gi || g_ssr) e.omSetBlend = (PFN_OMSetBlendState)vt[kSlotOMSetBlendState];
+    if (g_gi || g_ssr || g_contact) e.omSetBlend = (PFN_OMSetBlendState)vt[kSlotOMSetBlendState];   // each of the three plains a target's blend (PlainBlend)
     if (g_trace || (g_feed && g_fogRefl) || g_depthProbe)
     {
         e.draw = (PFN_Draw)vt[kSlotDraw];               // also hooked for the fog composite's draw (FogAtDraw)
@@ -5155,7 +5163,7 @@ static void HookContext(ID3D11DeviceContext *ctx)
     }
     if (g_twinCount) ok &= PatchSlot(vt, kSlotVSSetShader, (void *)&Hook_VSSetShader);
     if (g_gpuProfile) ok &= PatchSlot(vt, kSlotCSSetShader, (void *)&Hook_CSSetShader);
-    if (g_gi || g_ssr) ok &= PatchSlot(vt, kSlotOMSetBlendState, (void *)&Hook_OMSetBlendState);
+    if (g_gi || g_ssr || g_contact) ok &= PatchSlot(vt, kSlotOMSetBlendState, (void *)&Hook_OMSetBlendState);
     if (!g_trace && ((g_feed && g_fogRefl) || g_depthProbe))
     {
         // the fog composite's draw (the water's reflections, see FogCapture): these two alone
@@ -5794,7 +5802,7 @@ static void ReadSettings()
     g_keySSR = GetPrivateProfileIntW(L"Shadows", L"KeySSR", VK_F6, ini.c_str());
     g_ssrOn = GetPrivateProfileIntW(L"Shadows", L"SSROn", 1, ini.c_str()) != 0;
     // dump: the key, the timer (seconds after the AO pass first runs, 0 = none), the folder (default this DLL's; a relative one is under it)
-    g_keyDump = GetPrivateProfileIntW(L"Shadows", L"KeyDump", VK_F7, ini.c_str());
+    g_keyDump = GetPrivateProfileIntW(L"Shadows", L"KeyDump", 0, ini.c_str());   // no key unless the ini names one (118 = F7)
     GetPrivateProfileStringW(L"Shadows", L"DumpAfter", L"0", value, 32, ini.c_str());
     g_dumpAfter = (float)_wtof(value);
     wchar_t dir[MAX_PATH] = {};
