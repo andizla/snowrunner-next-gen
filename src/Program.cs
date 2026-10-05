@@ -15,19 +15,33 @@ using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace SnowRunnerNextGen
 {
     static class Program
     {
+        // one window at a time (and no headless engine run beside one): a second would run a second engine on the same
+        // files. The engine keeps a lock of its own in the state folder as well
+        const string OneAtATime = "Local\\SnowRunnerNextGen";
+
         [STAThread]
         static int Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             if (args.Length >= 2 && args[0] == "--shot") return Shot(args);
-            Application.Run(new MainForm(args.Length == 1 ? args[0] : null));
+            bool first;
+            using (Mutex one = new Mutex(true, OneAtATime, out first))
+            {
+                if (!first)
+                {
+                    MessageBox.Show(Header.AppName + " is already running.", Header.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return 1;
+                }
+                Application.Run(new MainForm(args.Length == 1 ? args[0] : null));
+            }
             return 0;
         }
 
@@ -125,6 +139,16 @@ namespace SnowRunnerNextGen
             if (game == null) throw new ArgumentException("--progress needs --game <folder>");
             string[] engineArgs = what == "restore" ? new[] { "restore", "--game", game }
                 : new[] { "apply", "--game", game, "--selection", selection ?? "" };
+            bool first;
+            using (Mutex one = new Mutex(true, OneAtATime, out first))
+            {
+                if (!first) throw new InvalidOperationException(Header.AppName + " is already running: no second engine on the same files.");
+                return ProgressRun(png, scale, what, engineArgs);
+            }
+        }
+
+        static int ProgressRun(string png, float scale, string what, string[] engineArgs)
+        {
             Look look;
             using (Font body = Look.BaseFont(scale)) look = new Look(body);
             try

@@ -56,6 +56,13 @@ try {
     Expect 'same again: the new fingerprint was recorded (nothing made again)' ((Said $r '^the photo grade is already at 50 %') -and -not (Said $r '^Grading the colour'))
   }
   finally { [IO.File]::WriteAllText($partsFile, $partsText) }
+  # the contact shadows without the shadow edges and the blocker search: the bundle reads a shadow filter set for the
+  # names of the sun shadow receivers, which prepare.js makes as the rebuilt edges set for that
+  $contact = Join-Path $work 'selection_contact.json'
+  [ordered]@{ shader = @('contact'); shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = $null; grass = $null; fill = $null; grade = $null } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $contact -Encoding ASCII
+  $r = Run @('apply', '--selection', $contact)
+  Expect 'contact shadows alone: done' ($r[$r.Count - 1].type -eq 'done')
+  Expect 'contact shadows alone: the receivers'' set was made' (Said $r '^shadow filter: rebuilt edges$')
   $r = Run @('restore')
   Expect 'restore: done' ($r[$r.Count - 1].type -eq 'done')
   foreach ($p in 'shader', 'boot') {

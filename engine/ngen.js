@@ -3,11 +3,13 @@
 // the game's own files back. The window runs it and reads one JSON object per line from it:
 //   {"type":"step","text":...}    a stage begins          {"type":"log","text":...}   a line from one of the tools
 //   {"type":"warn","text":...}    something left alone    {"type":"status",...}       the answer to status
-//   {"type":"done","text":...}    finished                {"type":"error","code":...,"text":...}   stopped
-//   error codes: usage, missing (no game there), running (close the game), adopt-files (files another mod or a game
-//   update changed, named in "files": run again with --adopt to take them as they are now as the originals, or with
-//   --leave to leave them and their parts out), orphaned (the paks named in "files" hold Next Gen's changes while
-//   their kept originals are gone: see the note in the game folder), failed
+//   {"type":"done","text":...,"warnings":n}   finished; n warn lines came before it, and the text says so
+//   {"type":"error","code":...,"text":...,"touched":bool}   stopped; touched = files were written before the stop
+//   error codes: usage, missing (no game there), running (close the game), busy (another Apply or Restore runs on this
+//   game), adopt-files (files another mod or a game update changed, named in "files": run again with --adopt to take
+//   them as they are now as the originals, or with --leave to leave them and their parts out), orphaned (the paks
+//   named in "files" hold Next Gen's changes while their kept originals are gone: see the note in the game folder),
+//   failed
 // The work is done by the project's own tools (engine\tools: fidelity_bundle.js builds shader.pak, pak_shader_patch.js
 // puts it back, lod_patch.js does shared.pak and the grass, the fill light and the stars in initial.pak, lut_grade.js
 // the colour LUTs, the particle textures and the night sky in boot.pak, gfx_logos.js the logos in gfx.pak); SnowRunner
@@ -52,7 +54,8 @@ class EngineError extends Error { constructor(code, text, extra) { super(text); 
 
 const emit = (o) => process.stdout.write(JSON.stringify(o) + '\n');
 const step = (text) => emit({ type: 'step', text });
-const warn = (text) => emit({ type: 'warn', text });
+let warned = 0;   // the warn lines so far: the done event carries the count, and its text says when there were any
+const warn = (text) => { warned++; emit({ type: 'warn', text }); };
 const stamp = () => { const d = new Date(), p = (v) => String(v).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
 
 function sha256File(file)
@@ -102,6 +105,13 @@ function lastNotes(state)
     const f = path.join(state, 'nextgen.json');
     try { return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {}; } catch (e) { return {}; }
 }
+// a note written whole: into a file next to it, then renamed over the old one, so a stop while writing leaves the old
+function writeJson(file, o, ending = '\n')
+{
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(o, null, 2) + ending);
+    fs.renameSync(tmp, file);
+}
 // whether a part installed before was built by the code this installer carries (true when nothing is known: dev build)
 const sameCode = (notes, part) => !PARTS[part] || ((notes.parts || {})[part] === PARTS[part]);
 
@@ -143,7 +153,8 @@ function runTool(tool, args, env, shown)
         {
             let rest = '';
             stream.setEncoding('utf8');
-            const line = (l) => { sink.push(l); if (shown && l.trim()) emit({ type: 'log', text: l }); };
+            // a tool line that starts with "warning: " is a warning: the tools say so where a chosen part changed nothing
+            const line = (l) => { sink.push(l); if (!shown || !l.trim()) return; const m = /^\s*warning: (.*)$/i.exec(l); if (m) warn(m[1]); else emit({ type: 'log', text: l }); };
             stream.on('data', (chunk) =>
             {
                 rest += chunk;
@@ -158,12 +169,13 @@ function runTool(tool, args, env, shown)
     });
 }
 
-// the reason a tool gave: its "Error: ..." or "error: ..." line, else its last line
+// the reason a tool gave: its "Error: ..." or "error: ..." line (a TypeError's or a RangeError's counts the same), else
+// its last line
 function reason(r)
 {
     const lines = r.err.concat(r.out).filter((l) => l.trim());
-    const e = lines.find((l) => /^\s*(Error|error): /.test(l));
-    return (e || lines[lines.length - 1] || 'exit code ' + r.code).replace(/^\s*(Error|error): /, '');
+    const e = lines.find((l) => /^\s*(\w*Error|error): /.test(l));
+    return (e || lines[lines.length - 1] || 'exit code ' + r.code).replace(/^\s*(\w*Error|error): /, '');
 }
 
 async function must(tool, args, env)
@@ -181,21 +193,24 @@ async function answer(tool, args, env)
     return (lines[lines.length - 1] || '').trim();
 }
 
-// whether the game of this folder runs (another install of it running does not count); when the running game's path
-// cannot be read, any SnowRunner.exe counts
+// whether the game of this folder runs (another install of it running does not count). A SnowRunner.exe whose path
+// cannot be read (one started with higher rights) counts as running, and so does a failure of both probes: the engine
+// then refuses to write rather than stop at the first locked file with earlier steps done. Paths are compared
+// resolved, so a junction or a subst drive spells the same install
 function gameRunning(g)
 {
-    const exe = path.join(g.root, 'Sources', 'Bin', 'SnowRunner.exe').toLowerCase();
+    const real = (p) => { try { return fs.realpathSync.native(p).toLowerCase(); } catch (e) { return path.resolve(p).toLowerCase(); } };
+    const ours = real(path.join(g.root, 'Sources', 'Bin', 'SnowRunner.exe'));
     try
     {
-        const paths = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
-            'Get-Process SnowRunner -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }'], { encoding: 'utf8', windowsHide: true });
-        return paths.split(/\r?\n/).some((p) => p.trim().toLowerCase() === exe);
+        const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
+            'Get-Process SnowRunner -ErrorAction SilentlyContinue | ForEach-Object { "" + $_.Id + "|" + $_.Path }'], { encoding: 'utf8', windowsHide: true });
+        return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).some((l) => { const p = l.slice(l.indexOf('|') + 1).trim(); return !p || real(p) === ours; });
     }
     catch (e)
     {
         try { return /SnowRunner\.exe/i.test(execFileSync('tasklist', ['/FI', 'IMAGENAME eq SnowRunner.exe', '/NH'], { encoding: 'utf8', windowsHide: true })); }
-        catch (e2) { return false; }
+        catch (e2) { return true; }
     }
 }
 
@@ -267,6 +282,7 @@ function installDll(g, want)
     const ini = path.join(g.bin, 'SnowRunnerShadows.ini'), before = readIni(ini);
     const set = { Factor: want.factor, SlopeBias: want.slopeBias, AOHalf: want.aoHalf };
     if (!('Trace' in before)) set.Trace = '0';
+    if (!('KeyDump' in before)) set.KeyDump = '0';   // F7's dump (150 MB into the game folder per press) stays off: no key the help names
     if (before.Factor !== want.factor || before.SlopeBias !== want.slopeBias || before.AOHalf !== want.aoHalf || !fs.existsSync(ini))
     {
         writeIni(ini, set);
@@ -408,7 +424,7 @@ async function leaveNote(g, state)
         if (hash) files[name] = hash;
     }
     const file = path.join(g.paks, NOTE_NAME);
-    if (Object.keys(files).length) fs.writeFileSync(file, JSON.stringify({ about: NOTE_ABOUT, date: stamp(), files }, null, 2) + '\r\n');
+    if (Object.keys(files).length) writeJson(file, { about: NOTE_ABOUT, date: stamp(), files }, '\r\n');
     else if (fs.existsSync(file)) fs.unlinkSync(file);
 }
 // the paks the note names that still are as it describes them while their original is not kept: ours, without a way back
@@ -432,7 +448,9 @@ function orphanText(files, restoring)
 
 // ---- apply and restore
 
-// the untouched shader.pak kept as the original, before the first build (and after a game update, when asked)
+// the untouched shader.pak kept as the original, before the first build (and after a game update, when asked): the copy
+// is made and checked first, then an earlier original moves aside under a dated name no other is lost to, and the copy
+// takes its place; a file without a zip directory (a download cut short) is refused before it is kept
 function keepShaderOriginal(g, state, now, adopt)
 {
     const orig = path.join(state, 'shader.pak.orig');
@@ -440,17 +458,26 @@ function keepShaderOriginal(g, state, now, adopt)
     const cur = sha256File(g.shader);
     if (fs.existsSync(orig) && sha256File(orig) === cur) return;
     if (!KNOWN_SHADER.includes(cur) && !adopt) throw new EngineError('adopt-files', adoptQuestion(['shader.pak'], false), { files: ['shader.pak'] });
-    if (fs.existsSync(orig))
-    {
-        const kept = orig + '.' + stamp().slice(0, 10);
-        fs.renameSync(orig, kept);
-        emit({ type: 'log', text: 'the earlier original is kept as ' + path.basename(kept) });
-    }
+    if (!dirHash(g.shader)) throw new EngineError('failed', 'shader.pak is not a whole pak file (its directory is missing): have the store check the game\'s files, then Apply again.');
     const tmp = orig + '.tmp';
     fs.copyFileSync(g.shader, tmp);
     if (sha256File(tmp) !== cur) { fs.unlinkSync(tmp); throw new EngineError('failed', 'the copy of shader.pak differs from the file'); }
+    if (fs.existsSync(orig))
+    {
+        const kept = keptName(orig);
+        fs.renameSync(orig, kept);
+        emit({ type: 'log', text: 'the earlier original is kept as ' + path.basename(kept) });
+    }
     fs.renameSync(tmp, orig);
     emit({ type: 'log', text: 'the game\'s shader.pak is kept as the original in ' + state });
+}
+// a dated name next to the file that no earlier one is lost to: <file>.<day>, then -2, -3 on the same day
+function keptName(file)
+{
+    const day = stamp().slice(0, 10);
+    let name = file + '.' + day;
+    for (let k = 2; fs.existsSync(name); k++) name = file + '.' + day + '-' + k;
+    return name;
 }
 
 // whether building shader.pak needs the player's yes to take the current file as the original (keepShaderOriginal's
@@ -526,6 +553,61 @@ async function adoptPaks(g, env, now, files)
     }
 }
 
+// ---- one engine at a time, and a look before the first write
+
+// a lock file in the state folder: a second Apply or Restore on the same game (a second window, or one started again
+// after the first was killed) stops here instead of writing next to the first; a lock left by a process that is gone
+// is taken over
+function lockState(state)
+{
+    const file = path.join(state, 'engine.lock');
+    for (let tries = 0; ; tries++)
+    {
+        try { fs.writeFileSync(file, String(process.pid), { flag: 'wx' }); return file; }
+        catch (e)
+        {
+            if (e.code !== 'EEXIST' || tries > 1) throw new EngineError('failed', 'the lock file could not be made: ' + file + ' (' + e.message + ')');
+            let pid = 0;
+            try { pid = Number(fs.readFileSync(file, 'utf8').trim()); } catch (x) { /* an empty lock: taken over */ }
+            let alive = false;
+            if (pid && pid !== process.pid) { try { process.kill(pid, 0); alive = true; } catch (x) { alive = x.code === 'EPERM'; } }
+            if (alive) throw new EngineError('busy', 'Another Apply or Restore is running on this game (process ' + pid + '). Wait for it to finish.');
+            try { fs.unlinkSync(file); } catch (x) { /* the next try says why */ }
+        }
+    }
+}
+const unlockState = (file) => { try { fs.unlinkSync(file); } catch (e) { /* nothing to remove */ } };
+
+// before the first write: the folders the run writes in take a file, the paks it may rewrite open for writing (not
+// read-only, not held by another program), and SnowRunner Shadows' preconditions hold; a run that would stop halfway
+// stops here instead, with nothing changed
+function preflight(g, needDll)
+{
+    const probe = (dir) =>
+    {
+        const f = path.join(dir, 'SnowRunnerNextGen.write-test');
+        try { fs.writeFileSync(f, 'x'); fs.unlinkSync(f); }
+        catch (e) { throw new EngineError('failed', 'The folder ' + dir + ' cannot be written (' + e.code + '): run the program as a user who can write the game folder.'); }
+    };
+    probe(g.paks);
+    if (g.bin) probe(g.bin);
+    for (const name of ['shader', 'shared', 'initial', 'boot', 'gfx'])
+    {
+        const file = g[name];
+        if (!fs.existsSync(file)) continue;
+        try { fs.closeSync(fs.openSync(file, 'r+')); }
+        catch (e) { throw new EngineError('failed', path.basename(file) + ' cannot be written (' + e.code + '): it is read-only or in use by another program.'); }
+    }
+    if (needDll && g.bin)
+    {
+        if (!fs.existsSync(config.dll)) throw new EngineError('failed', 'SnowRunner Shadows (hid.dll) is missing from the installer: ' + config.dll + ' (an antivirus may have removed it).');
+        const target = path.join(g.bin, 'hid.dll'), chain = path.join(g.bin, 'hid_chain.dll');
+        if (fs.existsSync(target) && fs.existsSync(chain) && !isOurs(fs.readFileSync(target))) throw new EngineError('failed', 'Sources\\Bin has another mod\'s hid.dll and a hid_chain.dll already: SnowRunner Shadows cannot go in beside them.');
+    }
+}
+
+const finished = (what) => ({ type: 'done', warnings: warned, text: warned ? what + ', with ' + (warned === 1 ? 'one note' : warned + ' notes') + ' above.' : what + '.' });
+
 async function apply(g, state, sel, adopt, leave)
 {
     if (gameRunning(g)) throw new EngineError('running', 'Close SnowRunner first: its files cannot be changed while it runs.');
@@ -547,6 +629,7 @@ async function apply(g, state, sel, adopt, leave)
     step('Reading what is installed');
     const now = await readStatus(g, state);
     if (now.orphaned.length) throw new EngineError('orphaned', orphanText(now.orphaned, false), { files: now.orphaned });
+    preflight(g, !!sel.shadows);
     const notes = lastNotes(state), last = notes.selection || {};
 
     // the files another mod changed that this selection writes: one question for all of them, before anything is written
@@ -703,8 +786,8 @@ async function apply(g, state, sel, adopt, leave)
 
     await leaveNote(g, state);
     g.touched = false;
-    fs.writeFileSync(path.join(state, 'nextgen.json'), JSON.stringify({ selection: sel, parts: PARTS, date: stamp() }, null, 2));
-    emit({ type: 'done', text: 'Installed. Start the game to see it.' });
+    writeJson(path.join(state, 'nextgen.json'), { selection: sel, parts: PARTS, date: stamp() });
+    emit(warned ? finished('Installed') : { type: 'done', warnings: 0, text: 'Installed. Start the game to see it.' });
 }
 
 async function restore(g, state, adopt, leave)
@@ -714,6 +797,7 @@ async function restore(g, state, adopt, leave)
     step('Reading what is installed');
     const now = await readStatus(g, state);
     if (now.orphaned.length) throw new EngineError('orphaned', orphanText(now.orphaned, true), { files: now.orphaned });
+    preflight(g, false);
     // files another mod changed since the last apply put Next Gen's changes in them: with the player's yes they are taken
     // as they are now, so restore takes Next Gen's changes out of them and keeps the other mod's
     const last = lastNotes(state).selection || {};
@@ -747,15 +831,15 @@ async function restore(g, state, adopt, leave)
     else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is.');
     await leaveNote(g, state);
     g.touched = false;
-    fs.writeFileSync(path.join(state, 'nextgen.json'), JSON.stringify({ selection: null, date: stamp() }, null, 2));
-    emit({ type: 'done', text: 'The game\'s own files are back.' });
+    writeJson(path.join(state, 'nextgen.json'), { selection: null, date: stamp() });
+    emit(finished('The game\'s own files are back'));
 }
 
 async function main()
 {
     const args = process.argv.slice(2), cmd = args[0];
     const opt = (name) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : null; };
-    let g = null, state = null;
+    let g = null, state = null, lock = null;
     try
     {
         const game = opt('game');
@@ -763,21 +847,25 @@ async function main()
         g = gameFiles(game);
         state = stateDir(game);
         if (cmd === 'status') emit(Object.assign({ type: 'status' }, await readStatus(g, state)));
-        else if (cmd === 'restore') await restore(g, state, args.includes('--adopt'), args.includes('--leave'));
+        else if (cmd === 'restore') { lock = lockState(state); await restore(g, state, args.includes('--adopt'), args.includes('--leave')); }
         else
         {
             const file = opt('selection');
             if (!file) throw new EngineError('usage', 'apply needs --selection <file.json>');
-            await apply(g, state, JSON.parse(fs.readFileSync(file, 'utf8')), args.includes('--adopt'), args.includes('--leave'));
+            const sel = JSON.parse(fs.readFileSync(file, 'utf8'));
+            lock = lockState(state);
+            await apply(g, state, sel, args.includes('--adopt'), args.includes('--leave'));
         }
     }
     catch (e)
     {
-        // a stop after the first write: the note still has to name the paks that hold Next Gen's changes now
+        // a stop after the first write: the note still has to name the paks that hold Next Gen's changes now, and the
+        // window hears that files were changed (apply has no rollback: a stop at shared.pak leaves shader.pak built)
         if (g && g.touched) { try { await leaveNote(g, state); } catch (e2) { /* the stop itself is what is reported */ } }
-        emit(Object.assign({ type: 'error', code: e.code || 'failed', text: e.message }, e.extra || {}));
+        emit(Object.assign({ type: 'error', code: e.code || 'failed', text: e.message, touched: !!(g && g.touched) }, e.extra || {}));
         process.exitCode = 1;
     }
+    finally { if (lock) unlockState(lock); }
 }
 
 main();

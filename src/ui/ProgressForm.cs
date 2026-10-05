@@ -21,7 +21,7 @@ namespace SnowRunnerNextGen
         readonly ProgressFoot foot;
         readonly Timer clock = new Timer();
         DateTime started;
-        bool running, adopted, left;
+        bool running, adopted, left, warned;
         EngineEvent lastError;
         public bool Succeeded;   // the engine said done
         public bool Running { get { return running; } }
@@ -74,6 +74,7 @@ namespace SnowRunnerNextGen
             running = true;
             lastError = null;
             Succeeded = false;
+            warned = false;
             started = DateTime.Now;
             foot.Close.Enabled = false;
             foot.Close.Text = "Working…";
@@ -94,8 +95,21 @@ namespace SnowRunnerNextGen
                 case "step": log.Add(ProgressLog.Kind.Step, e.Text); head.Say(e.Text, Theme.Text); break;
                 case "log": log.Add(ProgressLog.Kind.Log, e.Text); break;
                 case "warn": log.Add(ProgressLog.Kind.Warn, e.Text); break;
-                case "done": log.Add(ProgressLog.Kind.Done, e.Text); head.Say(e.Text, Theme.Good); Succeeded = true; break;
-                case "error": lastError = e; log.Add(ProgressLog.Kind.Error, e.Text); head.Say("Not finished: nothing was left half written", Theme.Bad); break;
+                case "done":
+                    // the engine counts its warnings: a run that left parts out or as they were ends amber, not green
+                    warned = e.Data != null && e.Data.ContainsKey("warnings") && Convert.ToInt32(e.Data["warnings"]) > 0;
+                    log.Add(ProgressLog.Kind.Done, e.Text);
+                    head.Say(e.Text, warned ? Theme.Warn : Theme.Good);
+                    Succeeded = true;
+                    break;
+                case "error":
+                    lastError = e;
+                    log.Add(ProgressLog.Kind.Error, e.Text);
+                    // the engine says whether files were written before the stop: Apply has no rollback, so a stop at a
+                    // later file leaves the earlier ones changed
+                    bool touched = e.Data != null && e.Data.ContainsKey("touched") && e.Data["touched"] is bool && (bool)e.Data["touched"];
+                    head.Say(touched ? "Stopped: some files were changed before the stop. Apply again, or Restore originals." : "Not finished: nothing was changed.", Theme.Bad);
+                    break;
             }
         }
 
@@ -103,9 +117,9 @@ namespace SnowRunnerNextGen
         {
             running = false;
             clock.Stop();
-            head.End(Succeeded);
+            head.End(Succeeded, warned);
             TimeSpan t = DateTime.Now - started;
-            foot.Say(string.Format("{0} in {1}:{2:00}", Succeeded ? "Done" : "Stopped", (int)t.TotalMinutes, t.Seconds));
+            foot.Say(string.Format("{0} in {1}:{2:00}", Succeeded ? (warned ? "Done, with notes" : "Done") : "Stopped", (int)t.TotalMinutes, t.Seconds));
             bool ask = !Succeeded && !adopted && !left && lastError != null && lastError.Code != null && lastError.Code.StartsWith("adopt-");
             if (ask)
             {
@@ -156,7 +170,8 @@ namespace SnowRunnerNextGen
         }
     }
 
-    // the title, what is happening now, and a bar that moves while the engine works (green when done, red when not)
+    // the title, what is happening now, and a bar that moves while the engine works (green when done, amber when done
+    // with warnings, red when not)
     class ProgressHead : Control
     {
         readonly Look look;
@@ -178,7 +193,7 @@ namespace SnowRunnerNextGen
 
         public void Say(string text, Color color) { state = text; stateColor = color; PerformLayout(); Invalidate(); }
         public void Begin() { moving = true; barColor = Theme.Accent; Invalidate(); }
-        public void End(bool ok) { moving = false; barColor = ok ? Theme.Good : Theme.Bad; Invalidate(); }
+        public void End(bool ok, bool warned) { moving = false; barColor = ok ? (warned ? Theme.Warn : Theme.Good) : Theme.Bad; Invalidate(); }
         public void Tick() { phase = (phase + 0.012f) % 1f; Invalidate(barRect); }
 
         protected override void OnLayout(LayoutEventArgs e)

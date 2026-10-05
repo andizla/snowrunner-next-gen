@@ -138,6 +138,8 @@ Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entrie
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'
 Check 'every part: the note in the game folder names the five paks' (Note) 'boot.pak gfx.pak initial.pak shader.pak shared.pak'
 Check 'ini: the ambient occlusion pass at half size' ((Get-Content -LiteralPath (Join-Path $bin 'SnowRunnerShadows.ini')) -contains 'AOHalf=1') 'True'
+Check 'ini: the dump key is off' ((Get-Content -LiteralPath (Join-Path $bin 'SnowRunnerShadows.ini')) -contains 'KeyDump=0') 'True'
+Check 'every part: done without a note' ('{0} {1}' -f $r[$r.Count - 1].warnings, $r[$r.Count - 1].text) '0 Installed. Start the game to see it.'
 Check 'Bin has hid.dll, its ini and the stock twins' ((Test-Path (Join-Path $bin 'hid.dll')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'True'
 
 'the same selection again'
@@ -160,6 +162,9 @@ Check 'changed: initial.pak is built again without the photo skies'' sky levels'
 $r = Apply ([ordered]@{ shader = $less; shadows = $null; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5' })
 Check 'ours out: done' (Last $r) 'done'
 Check 'ours out: no hid.dll, no ini' ((Test-Path (Join-Path $bin 'hid.dll')) -or (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini'))) 'False'
+# the modules that read the scene through the DLL got a warning: the done event counts it and its text says so
+$done = $r[$r.Count - 1]
+Check 'ours out: the done event carries the warning' ('{0} {1}' -f ($done.warnings -ge 1), ($done.text -match '^Installed, with .*note.* above\.$')) 'True True'
 $foreign = [byte[]](1..64)
 [System.IO.File]::WriteAllBytes((Join-Path $bin 'hid.dll'), $foreign)
 $foreignHash = Hash (Join-Path $bin 'hid.dll')
@@ -167,6 +172,24 @@ $r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; sl
 Check 'beside it: done' (Last $r) 'done'
 Check 'beside it: the other one is hid_chain.dll' ((Test-Path (Join-Path $bin 'hid_chain.dll')) -and ((Hash (Join-Path $bin 'hid_chain.dll')) -eq $foreignHash)) 'True'
 Check 'beside it: ours is hid.dll' ((Status).dll.state) 'ours'
+
+'a second engine on the same game, and a pak that cannot be written'
+$same = [ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; slopeBias = '1' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5' }
+$stateDir = (Get-ChildItem -LiteralPath (Join-Path $env:NGEN_STATE_ROOT 'games') -Directory | Select-Object -First 1).FullName
+$lock = Join-Path $stateDir 'engine.lock'
+Set-Content -LiteralPath $lock -Value $PID -Encoding ASCII   # this PowerShell stands in for an engine at work
+$r = Apply $same
+$e = $r[$r.Count - 1]
+Check 'another engine holds the lock: Apply stops' ('{0} {1} {2}' -f $e.type, $e.code, $e.touched) 'error busy False'
+Set-Content -LiteralPath $lock -Value '999999' -Encoding ASCII   # a lock left by a process that is gone
+$r = Apply $same
+Check 'a lock left behind: taken over, Apply runs and leaves none' ('{0} {1}' -f (Last $r), (Test-Path -LiteralPath $lock)) 'done False'
+Set-ItemProperty -LiteralPath $boot -Name IsReadOnly -Value $true
+$shaderBefore = Hash (Join-Path $paks 'shader.pak')
+$r = Apply ([ordered]@{ shader = @('gtao'); shadows = $null; scenery = $null; grass = $null; fill = '0.7'; grade = '1' })
+$e = $r[$r.Count - 1]
+Check 'read-only boot.pak: Apply stops before any change' ('{0} {1} {2} {3}' -f $e.type, ($e.text -match '^boot\.pak cannot be written'), $e.touched, ((Hash (Join-Path $paks 'shader.pak')) -eq $shaderBefore)) 'error True False True'
+Set-ItemProperty -LiteralPath $boot -Name IsReadOnly -Value $false
 
 'the fill light and the grass, one without the other (two parts of initial.pak)'
 $r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; slopeBias = '1' }; scenery = 'nature'; grass = '2'; fill = $null; grade = '0.5' })
@@ -239,7 +262,7 @@ $was = @{}; foreach ($pak in $shaderPak, $boot, $initial) { $was[$pak] = Hash $p
 Check 'originals lost: the status names the three paks' ((@((Status).orphaned) | Sort-Object) -join ' ') 'boot.pak initial.pak shader.pak'
 $r = Apply $small
 $e = $r[$r.Count - 1]
-Check 'originals lost: Apply stops' ('{0} {1} {2}' -f $e.type, $e.code, ((@($e.files) | Sort-Object) -join ',')) 'error orphaned boot.pak,initial.pak,shader.pak'
+Check 'originals lost: Apply stops' ('{0} {1} {2} {3}' -f $e.type, $e.code, ((@($e.files) | Sort-Object) -join ','), $e.touched) 'error orphaned boot.pak,initial.pak,shader.pak False'
 Check 'originals lost: it says why and what to do' (($e.text -match 'would make those changes a second time') -and ($e.text -match 'Have the store check the game''s files')) 'True'
 $r = Engine @('restore')
 $e = $r[$r.Count - 1]
