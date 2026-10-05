@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] unreleased
+## [1.0.0] 2026-10-05
 
 - One window with a card for each of 29 modules, 26 of them on by default: shadows and shadow edges, contact shadows, ambient occlusion and bounce light, reflections on paint, water and wet ground, fog, weather, smoke and particles, the night sky and its stars, tonemap, bloom and colour grade, scenery detail and grass reach, and the Next Gen logo.
 - Apply builds the game's files for exactly what is ticked, from the copies the program keeps of the game's own files, and installs them. Restore puts every file back as it was.
