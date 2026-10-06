@@ -41,7 +41,11 @@ The program keeps a copy of each file before its first change and builds from th
 
 ## Known
 
-The fog's sun shafts are experimental: with a low sun they also show over the truck and other things close to the camera. A fix is planned for 1.0.1.
+The fog's sun shafts are experimental: with a low sun they also show over the truck and other things close to the camera. A fix is planned for a later version.
+
+## If something goes wrong
+
+Every Apply and Restore is written to `install.log` in `%LOCALAPPDATA%\SnowRunnerNextGen`. After a stop or a note, Show the log in the result window opens that folder. Send the file along when you report a problem.
 
 ## Licence and credits
 

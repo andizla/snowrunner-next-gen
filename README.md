@@ -76,6 +76,10 @@ The program keeps a copy of each file before its first change and builds from th
 
 A game update or the store's file check replaces the game's files with the originals. Run the program again and click Apply.
 
+## If something goes wrong
+
+Every Apply and Restore is written to `install.log` in `%LOCALAPPDATA%\SnowRunnerNextGen`: what the program found and each step it took. After a stop or a note, Show the log in the result window opens that folder. Send the file along when you report a problem.
+
 ## What it changes
 
 In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather), `boot.pak` (photo grade, particles, night sky) and `gfx.pak` (the logo) under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in `Sources\Bin`. Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
