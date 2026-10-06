@@ -15,4 +15,7 @@ Apply and Restore ask first. If you take the file as it is now as the original, 
 changes over it, and Restore puts it back in that modded state, the other mod's changes included, not the game's own
 file. Or leave it out: the file and its modules stay as they are.
 
+When something goes wrong: every Apply and Restore is written to %LOCALAPPDATA%\SnowRunnerNextGen\install.log.
+Send that file along when you report a problem.
+
 Licence: GNU GPL version 3 (LICENSE). Third-party notices: THIRD_PARTY_NOTICES.md and licenses\.

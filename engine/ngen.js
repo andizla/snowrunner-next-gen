@@ -50,13 +50,65 @@ const ownDump = config.dump && config.sets ? { SR_DUMP_DIR: config.dump, SR_SETS
 const partsFile = path.join(__dirname, 'parts.json');
 const PARTS = fs.existsSync(partsFile) ? JSON.parse(fs.readFileSync(partsFile, 'utf8')) : {};
 
+// the package's list of the engine's files (the package build writes files.json: the version, and each file's path
+// and size): a copy an unzip program left incomplete is told apart from a whole one before anything runs. A dev build
+// has no list
+const listFile = path.join(__dirname, 'files.json');
+let PACKAGE = null;
+if (fs.existsSync(listFile)) { try { PACKAGE = JSON.parse(fs.readFileSync(listFile, 'utf8')); } catch (e) { PACKAGE = { files: { 'engine/files.json': -1 } }; } }
+
 class EngineError extends Error { constructor(code, text, extra) { super(text); this.code = code; this.extra = extra; } }
 
-const emit = (o) => process.stdout.write(JSON.stringify(o) + '\n');
+const stamp = () => { const d = new Date(), p = (v) => String(v).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+// where the state folders and the log are: %LOCALAPPDATA%\SnowRunnerNextGen (NGEN_STATE_ROOT in tests)
+const stateRoot = () => process.env.NGEN_STATE_ROOT || path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'SnowRunnerNextGen');
+// The log, install.log there: what each run was given and found, and every line it sent to the window, for the player
+// to send when something went wrong. A status adds three lines. Past 512 KB it starts again, and the full one stays as
+// install.old.log. A log that cannot be written never stops the work.
+let logReady = false;
+function logLine(text)
+{
+    try
+    {
+        const file = path.join(stateRoot(), 'install.log');
+        if (!logReady)
+        {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            if (fs.existsSync(file) && fs.statSync(file).size > 512 * 1024) fs.renameSync(file, path.join(path.dirname(file), 'install.old.log'));
+            logReady = true;
+        }
+        const at = stamp() + ':' + String(new Date().getSeconds()).padStart(2, '0');
+        fs.appendFileSync(file, String(text).split(/\r?\n/).map((l) => at + '  ' + l).join('\r\n') + '\r\n');
+    }
+    catch (e) { /* the log is an extra */ }
+}
+function logEvent(o)
+{
+    if (o.type === 'status') { logLine('status ' + JSON.stringify(Object.assign({}, o, { type: undefined }))); return; }
+    logLine((o.type + '   ').slice(0, 6) + (o.code ? '[' + o.code + '] ' : '') + o.text + (o.files ? ' (' + [].concat(o.files).join(', ') + ')' : '') +
+        (o.type === 'error' ? (o.touched ? ' (files were changed before the stop)' : ' (nothing was changed)') : ''));
+}
+const emit = (o) => { process.stdout.write(JSON.stringify(o) + '\n'); logEvent(o); };
 const step = (text) => emit({ type: 'step', text });
 let warned = 0;   // the warn lines so far: the done event carries the count, and its text says when there were any
 const warn = (text) => { warned++; emit({ type: 'warn', text }); };
-const stamp = () => { const d = new Date(), p = (v) => String(v).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+
+// every file of the package's list is there at its size, or the copy is incomplete: an unzip program that does not know
+// the zip's folder paths, or a virus scanner that took a file away
+function checkPackage()
+{
+    if (!PACKAGE) return;
+    const base = path.join(__dirname, '..'), bad = [];
+    for (const [name, size] of Object.entries(PACKAGE.files || {}))
+    {
+        let s = null;
+        try { s = fs.statSync(path.join(base, name)); } catch (e) { /* missing */ }
+        if (!s || !s.isFile() || s.size !== size) bad.push(name.replace(/\//g, '\\'));
+    }
+    if (!bad.length) return;
+    throw new EngineError('failed', 'This copy of SnowRunner Next Gen is incomplete: ' + bad.slice(0, 3).join(', ') + (bad.length > 3 ? ' and ' + (bad.length - 3) + ' more' : '') +
+        (bad.length === 1 ? ' is' : ' are') + ' missing or cut short. Unzip the download again (right click the zip, Extract All) and start the program from the new folder.');
+}
 
 function sha256File(file)
 {
@@ -65,32 +117,39 @@ function sha256File(file)
     return h.digest('hex');
 }
 
-// the game's files: the paks (preload\paks\client, or en_us\... in some store versions) and Sources\Bin when it
-// holds SnowRunner.exe (SnowRunner Shadows needs it)
+// the game's files: the paks (preload\paks\client, or en_us\... where a store version keeps the whole game in that
+// folder) and Sources\Bin beside preload when it holds SnowRunner.exe (SnowRunner Shadows needs it). home is the folder
+// that holds preload: the folder above an en_us and that en_us itself are one game
 function gameFiles(game)
 {
     const root = path.resolve(game);
     const paks = [path.join(root, 'preload', 'paks', 'client'), path.join(root, 'en_us', 'preload', 'paks', 'client')]
         .find((p) => fs.existsSync(path.join(p, 'shader.pak')));
     if (!paks) throw new EngineError('missing', 'No SnowRunner in ' + root + ': preload\\paks\\client\\shader.pak is missing.');
-    const bin = path.join(root, 'Sources', 'Bin');
+    const home = path.resolve(paks, '..', '..', '..');
+    const bin = [path.join(home, 'Sources', 'Bin'), path.join(root, 'Sources', 'Bin')].find((p) => fs.existsSync(path.join(p, 'SnowRunner.exe'))) || null;
     return {
-        root, paks, bin: fs.existsSync(path.join(bin, 'SnowRunner.exe')) ? bin : null,
+        root, home, paks, bin,
         shader: path.join(paks, 'shader.pak'), shared: path.join(paks, 'shared.pak'), initial: path.join(paks, 'initial.pak'), boot: path.join(paks, 'boot.pak'),
         gfx: path.join(paks, 'gfx.pak'),
     };
 }
 
-// the state folder of a game: its originals and the tools' notes
-function stateDir(game)
+// The state folder of a game: its originals and the tools' notes, named after the folder that holds preload. 1.0.0
+// named it after the folder it was given, so a game kept under en_us got one folder when the installer found it (the
+// folder above) and another when the player picked SnowRunner.exe (en_us). Whichever way the game is named now, the
+// state is the same one: the folder named after home when it keeps originals, else an earlier one that does.
+function stateDir(g)
 {
-    const full = path.resolve(game);
-    if (config.devGame && config.devState && full.toLowerCase() === path.resolve(config.devGame).toLowerCase()) return config.devState;
-    const root = process.env.NGEN_STATE_ROOT || path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'SnowRunnerNextGen');
-    const dir = path.join(root, 'games', crypto.createHash('sha256').update(full.toLowerCase()).digest('hex').slice(0, 12));
+    if (config.devGame && config.devState && g.root.toLowerCase() === path.resolve(config.devGame).toLowerCase()) return config.devState;
+    const named = (folder) => path.join(stateRoot(), 'games', crypto.createHash('sha256').update(folder.toLowerCase()).digest('hex').slice(0, 12));
+    const keeps = (dir) => { try { return fs.readdirSync(dir).some((f) => /\.orig$/i.test(f)); } catch (e) { return false; } };
+    const own = named(g.home);
+    const earlier = [g.root].concat(path.basename(g.home).toLowerCase() === 'en_us' ? [path.dirname(g.home)] : []).map(named).filter((d) => d !== own);
+    const dir = keeps(own) ? own : earlier.find(keeps) || own;
     fs.mkdirSync(dir, { recursive: true });
     const label = path.join(dir, 'game.txt');
-    if (!fs.existsSync(label)) fs.writeFileSync(label, full + '\r\n');
+    if (!fs.existsSync(label)) fs.writeFileSync(label, g.home + '\r\n');
     return dir;
 }
 
@@ -188,6 +247,8 @@ async function must(tool, args, env)
 async function answer(tool, args, env)
 {
     const r = await runTool(tool, args, env, false);
+    // (the lines of a tool run this way are not shown: the log gets them when it fails)
+    if (r.code !== 0) logLine([tool + ' ' + args.join(' ') + ': exit code ' + r.code].concat(r.out, r.err).filter((l) => l.trim()).join('\n'));
     if (r.code !== 0) throw new EngineError('failed', tool + ' ' + args[0] + ' failed: ' + reason(r));
     const lines = r.out.filter((l) => l.trim());
     return (lines[lines.length - 1] || '').trim();
@@ -200,7 +261,7 @@ async function answer(tool, args, env)
 function gameRunning(g)
 {
     const real = (p) => { try { return fs.realpathSync.native(p).toLowerCase(); } catch (e) { return path.resolve(p).toLowerCase(); } };
-    const ours = real(path.join(g.root, 'Sources', 'Bin', 'SnowRunner.exe'));
+    const ours = real(path.join(g.bin || path.join(g.home, 'Sources', 'Bin'), 'SnowRunner.exe'));
     try
     {
         const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
@@ -844,8 +905,12 @@ async function main()
     {
         const game = opt('game');
         if (!game || !['status', 'apply', 'restore'].includes(cmd)) throw new EngineError('usage', 'usage: node ngen.js status|apply|restore --game <folder> [--selection <file.json>] [--adopt | --leave]');
+        logLine('==== ' + [cmd].concat(args.filter((a) => a === '--adopt' || a === '--leave')).join(' ') + ' for ' + path.resolve(game) + (cmd === 'status' ? '' :
+            ': SnowRunner Next Gen ' + ((PACKAGE && PACKAGE.version) || 'dev build') + ' in ' + path.join(__dirname, '..') + ', Windows ' + os.release() + ' ' + os.arch() + ', Node.js ' + process.version));
+        checkPackage();
         g = gameFiles(game);
-        state = stateDir(game);
+        state = stateDir(g);
+        logLine('paks in ' + g.paks + '; SnowRunner.exe ' + (g.bin ? 'in ' + g.bin : 'not found in ' + path.join(g.home, 'Sources', 'Bin')) + '; state folder ' + state);
         if (cmd === 'status') emit(Object.assign({ type: 'status' }, await readStatus(g, state)));
         else if (cmd === 'restore') { lock = lockState(state); await restore(g, state, args.includes('--adopt'), args.includes('--leave')); }
         else
@@ -853,6 +918,7 @@ async function main()
             const file = opt('selection');
             if (!file) throw new EngineError('usage', 'apply needs --selection <file.json>');
             const sel = JSON.parse(fs.readFileSync(file, 'utf8'));
+            logLine('selection ' + JSON.stringify(sel));
             lock = lockState(state);
             await apply(g, state, sel, args.includes('--adopt'), args.includes('--leave'));
         }
@@ -862,6 +928,7 @@ async function main()
         // a stop after the first write: the note still has to name the paks that hold Next Gen's changes now, and the
         // window hears that files were changed (apply has no rollback: a stop at shared.pak leaves shader.pak built)
         if (g && g.touched) { try { await leaveNote(g, state); } catch (e2) { /* the stop itself is what is reported */ } }
+        if (!(e instanceof EngineError) && e.stack) logLine(e.stack);   // a stop the engine did not foresee: where it happened
         emit(Object.assign({ type: 'error', code: e.code || 'failed', text: e.message, touched: !!(g && g.touched) }, e.extra || {}));
         process.exitCode = 1;
     }

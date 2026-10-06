@@ -47,6 +47,12 @@ try {
   $parts = $partsText | ConvertFrom-Json
   $parts.grade = 'the grade code of a newer installer'
   $parts | ConvertTo-Json | Set-Content -LiteralPath $partsFile -Encoding ASCII
+  # a newer installer's list of its files (engine\files.json) fits its own parts.json: the size goes in there too
+  $listFile = Join-Path $copy 'engine\files.json'
+  $listText = [IO.File]::ReadAllText($listFile)
+  $list = $listText | ConvertFrom-Json
+  $list.files.'engine/parts.json' = (Get-Item -LiteralPath $partsFile).Length
+  $list | ConvertTo-Json | Set-Content -LiteralPath $listFile -Encoding ASCII
   try {
     $r = Run @('apply', '--selection', $selection)
     Expect 'grade code changed: done' ($r[$r.Count - 1].type -eq 'done')
@@ -55,7 +61,7 @@ try {
     $r = Run @('apply', '--selection', $selection)
     Expect 'same again: the new fingerprint was recorded (nothing made again)' ((Said $r '^the photo grade is already at 50 %') -and -not (Said $r '^Grading the colour'))
   }
-  finally { [IO.File]::WriteAllText($partsFile, $partsText) }
+  finally { [IO.File]::WriteAllText($partsFile, $partsText); [IO.File]::WriteAllText($listFile, $listText) }
   # the contact shadows without the shadow edges and the blocker search: the bundle reads a shadow filter set for the
   # names of the sun shadow receivers, which prepare.js makes as the rebuilt edges set for that
   $contact = Join-Path $work 'selection_contact.json'
@@ -83,3 +89,14 @@ if ($outside.Count) {
   throw "$($outside.Count) path(s) outside the package"
 }
 'ok   no dev path reached: everything came from the package copy, the game copy or TEMP'
+
+# a copy an unzip program left incomplete (one that does not know the zip's folder paths leaves a file by the folder's
+# name): the engine names what is missing and asks to unzip again, before it looks at the game
+'an incomplete copy of the package'
+$replacements = Join-Path $copy 'engine\replacements'
+[IO.Directory]::Delete($replacements, $true)
+[IO.File]::WriteAllBytes($replacements, [byte[]]::new(0))
+$said = @(& (Join-Path $copy 'engine\node.exe') (Join-Path $copy 'engine\ngen.js') status --game (Join-Path $root 'out\enginetest\game') | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+$e = $said[$said.Count - 1]
+if ($e.type -ne 'error' -or $e.text -notmatch '^This copy of SnowRunner Next Gen is incomplete: engine\\replacements\\' -or $e.text -notmatch 'Unzip the download again') { throw "an incomplete copy was not reported: $($e.type) $($e.text)" }
+'ok   an incomplete copy says so, names the files and asks to unzip again'

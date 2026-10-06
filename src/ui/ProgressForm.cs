@@ -54,6 +54,7 @@ namespace SnowRunnerNextGen
             foot.Close.Click += delegate { if (!running) Close(); };
             foot.Adopt.Click += delegate { if (running) return; adopted = true; foot.Adopt.Visible = foot.LeaveOut.Visible = false; foot.PerformLayout(); Start(); };
             foot.LeaveOut.Click += delegate { if (running) return; left = true; foot.Adopt.Visible = foot.LeaveOut.Visible = false; foot.PerformLayout(); Start(); };
+            foot.ShowLog.Click += delegate { Engine.ShowLog(); };
 
             int em = look.Body.Height;
             Rectangle work = Screen.FromPoint(Cursor.Position).WorkingArea;
@@ -79,6 +80,7 @@ namespace SnowRunnerNextGen
             foot.Close.Enabled = false;
             foot.Close.Text = "Working…";
             foot.Close.Fit();
+            foot.ShowLog.Visible = false;
             foot.PerformLayout();
             head.Begin();
             clock.Start();
@@ -138,6 +140,8 @@ namespace SnowRunnerNextGen
             }
             foot.Adopt.Visible = ask;
             foot.LeaveOut.Visible = ask;
+            // a run that stopped or left something out: the log is what to send with a report
+            foot.ShowLog.Visible = !ask && (!Succeeded || warned) && Engine.LogFile() != null;
             foot.Close.Text = ask ? "Cancel" : "Close";
             foot.Close.Fit();
             foot.Close.Enabled = true;
@@ -363,11 +367,12 @@ namespace SnowRunnerNextGen
         }
     }
 
-    // the time taken on the left; Take it as the original and Leave it out (when asked) and Close on the right
+    // the time taken on the left; on the right Take it as the original and Leave it out (when asked), or Show the log
+    // (after a stop or a run with notes), and Close
     class ProgressFoot : Control
     {
         readonly Look look;
-        public readonly FlatButton Adopt, LeaveOut, Close;
+        public readonly FlatButton Adopt, LeaveOut, ShowLog, Close;
         string note = "";
 
         public ProgressFoot(Look look)
@@ -380,9 +385,12 @@ namespace SnowRunnerNextGen
             Adopt.Visible = false;
             LeaveOut = new FlatButton(look, "Leave it out", ButtonStyle.Secondary);
             LeaveOut.Visible = false;
+            ShowLog = new FlatButton(look, "Show the log", ButtonStyle.Link);
+            ShowLog.Visible = false;
             Close = new FlatButton(look, "Close", ButtonStyle.Secondary);
             Controls.Add(Adopt);
             Controls.Add(LeaveOut);
+            Controls.Add(ShowLog);
             Controls.Add(Close);
             ResumeLayout(false);
             Height = Close.Height + 2 * look.U(12);
@@ -396,6 +404,7 @@ namespace SnowRunnerNextGen
             Close.Location = new Point(Width - padX - Close.Width, padY);
             LeaveOut.Location = new Point(Close.Left - gap - LeaveOut.Width, padY);
             Adopt.Location = new Point((LeaveOut.Visible ? LeaveOut.Left : Close.Left) - gap - Adopt.Width, padY);
+            ShowLog.Location = new Point(Close.Left - gap - ShowLog.Width, padY);   // never beside the two questions
             base.OnLayout(e);
         }
 
@@ -405,7 +414,7 @@ namespace SnowRunnerNextGen
             g.Clear(Theme.Bar);
             using (Pen line = new Pen(Theme.Border)) g.DrawLine(line, 0, 0, Width, 0);
             int padX = look.U(20);
-            Rectangle r = new Rectangle(padX, look.U(12), Math.Max(0, (Adopt.Visible ? Adopt.Left : Close.Left) - 2 * padX), Close.Height);
+            Rectangle r = new Rectangle(padX, look.U(12), Math.Max(0, (Adopt.Visible ? Adopt.Left : ShowLog.Visible ? ShowLog.Left : Close.Left) - 2 * padX), Close.Height);
             Look.Text(g, note, look.Body, r, Theme.Muted, Look.Middle);
         }
     }

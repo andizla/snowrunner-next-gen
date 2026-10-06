@@ -123,12 +123,55 @@ namespace SnowRunnerNextGen
             return File.Exists(installed) ? installed : null;
         }
 
-        // why the engine cannot run, or null
+        // why the engine cannot run, or null. A file missing next to the program is an unzip that went wrong (a program
+        // that does not know the zip's folder paths, or one file taken away by a virus scanner)
         public static string Missing()
         {
-            if (!File.Exists(Script)) return "The install engine is missing: engine\\ngen.js should be next to the program.";
-            if (Node() == null) return "Node.js is missing: engine\\node.exe should be next to the program.";
+            const string again = " Unzip the download again (right click the zip, Extract All) and start the program from the new folder.";
+            if (!File.Exists(Script)) return "The install engine is missing: engine\\ngen.js should be next to the program." + again;
+            if (Node() == null) return "Node.js is missing: engine\\node.exe should be next to the program." + again;
             return null;
+        }
+
+        // the engine's log (engine\ngen.js writes install.log beside its state folders), or null while there is none
+        public static string LogFile()
+        {
+            string file = LogPath();
+            return File.Exists(file) ? file : null;
+        }
+
+        static string LogPath()
+        {
+            string root = Environment.GetEnvironmentVariable("NGEN_STATE_ROOT");
+            if (string.IsNullOrEmpty(root))
+            {
+                string local = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+                root = Path.Combine(string.IsNullOrEmpty(local) ? Path.GetTempPath() : local, "SnowRunnerNextGen");
+            }
+            return Path.Combine(root, "install.log");
+        }
+
+        // the log's file shown in its folder, ready to be sent
+        public static void ShowLog()
+        {
+            string file = LogFile();
+            if (file == null) return;
+            try { Process.Start("explorer.exe", "/select,\"" + file + "\""); }
+            catch (Exception) { }   // no Explorer to show it in
+        }
+
+        // a line of the window's own in that log: what the engine could not write itself
+        static void Log(string text)
+        {
+            try
+            {
+                string file = LogPath(), at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+                Directory.CreateDirectory(Path.GetDirectoryName(file));
+                StringBuilder lines = new StringBuilder();
+                foreach (string l in text.Replace("\r", "").Split('\n')) lines.Append(at).Append("  ").Append(l).Append("\r\n");
+                File.AppendAllText(file, lines.ToString(), new UTF8Encoding(false));
+            }
+            catch (Exception) { }   // the log is an extra
         }
 
         // the selection for apply, as the engine's JSON, in a file of its own
@@ -182,6 +225,7 @@ namespace SnowRunnerNextGen
                     crash.Code = "failed";
                     string said;
                     lock (errors) said = errors.ToString().Trim();
+                    Log("the engine stopped without a word of its own, exit code " + code + (said.Length > 0 ? "\n" + said : ""));
                     crash.Text = "The engine stopped" + (said.Length > 0 ? ": " + LastLines(said, 3) : ".");
                     Post(owner, onEvent, crash);
                 }

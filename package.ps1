@@ -4,6 +4,7 @@
 #   SnowRunnerNextGen.exe, help\ (the pop-ups' pictures), LICENSE (GPL-3.0), THIRD_PARTY_NOTICES.md, licenses\
 #   engine\ node.exe (a copy of the local Node.js), ngen.js, prepare.js, hid.dll (the pinned SnowRunner Shadows),
 #           config.json ({}: the engine's own folders), parts.json (each part's code fingerprint),
+#           files.json (the version and the engine's files with their sizes: the engine checks its copy against it),
 #           tools\ (from engine\tools: the tools the engine runs and what they require),
 #           replacements\ (from engine\replacements: the compiled shaders and the texture sets)
 # None of the game's shaders ship: no extracted shaders (dump\), no index of them, no set of patched game shaders. The
@@ -150,10 +151,51 @@ Get-ChildItem -LiteralPath (Join-Path $root 'assets\licenses') -File | Where-Obj
 Copy-Item -LiteralPath (Join-Path $root 'assets\README.txt') -Destination $pkg
 foreach ($f in @((Join-Path $pkg 'LICENSE'), (Join-Path $pkg 'THIRD_PARTY_NOTICES.md'), (Join-Path $pkg 'README.txt')) + @(Get-ChildItem -LiteralPath (Join-Path $pkg 'licenses') -File | ForEach-Object { $_.FullName })) { SetLineEndings $f "`r`n" }
 
-# the zip is the release's download and is made only on request (-Zip). An older one goes either way, so that no zip
-# outlives the folder it was made from
+# the package's list of the engine's files, written last: the version (the changelog's first heading) and each file's
+# path and size. The engine checks the copy it runs from against it, so one an unzip program left incomplete says so.
+# config.json is the one file meant to be edited and stays out of the list
+$version = "$(Get-Content -LiteralPath (Join-Path $root 'CHANGELOG.md') | Where-Object { $_ -match '^## \[\d+\.\d+\.\d+\]' } | Select-Object -First 1)" -replace '^## \[(\d+\.\d+\.\d+)\].*$', '$1'
+if (-not $version) { throw 'CHANGELOG.md names no version' }
+$listed = [ordered]@{}
+foreach ($f in (Get-ChildItem -LiteralPath $engine -File -Recurse | Where-Object { $_.FullName -ne (Join-Path $engine 'config.json') } | Sort-Object FullName)) { $listed[$f.FullName.Substring($pkg.Length + 1).Replace('\', '/')] = $f.Length }
+[IO.File]::WriteAllText((Join-Path $engine 'files.json'), ((([ordered]@{ version = $version; files = $listed }) | ConvertTo-Json).Replace("`r`n", "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
+
+# The zip is the release's download and is made only on request (-Zip). An older one goes either way, so that no zip
+# outlives the folder it was made from. It is written entry by entry with forward slashes in its paths, as the zip
+# format asks: Compress-Archive writes backslashes, which archive programs on Linux unpack into one flat folder and
+# some on Windows into a folder that is a file. The folders come first, each marked as one.
+function WriteZip([string]$folder, [string]$file) {
+  Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+  $name = { param($item) $item.FullName.Substring($folder.Length + 1).Replace('\', '/') }
+  $stream = [IO.File]::Open($file, [IO.FileMode]::Create)
+  try {
+    $zip = New-Object IO.Compression.ZipArchive($stream, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+      foreach ($d in (Get-ChildItem -LiteralPath $folder -Directory -Recurse | Sort-Object FullName)) {
+        $entry = $zip.CreateEntry((& $name $d) + '/')
+        $entry.LastWriteTime = $d.LastWriteTime
+        $entry.ExternalAttributes = 0x10
+      }
+      foreach ($f in (Get-ChildItem -LiteralPath $folder -File -Recurse | Sort-Object FullName)) {
+        [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $f.FullName, (& $name $f), [IO.Compression.CompressionLevel]::Optimal)
+      }
+    } finally { $zip.Dispose() }
+  } finally { $stream.Dispose() }
+  # read back: every file of the folder under its path at its size, and no backslash in any name
+  $inZip = @{}
+  $back = [IO.Compression.ZipFile]::OpenRead($file)
+  try {
+    foreach ($e in $back.Entries) {
+      if ($e.FullName.Contains('\')) { throw "zip entry with a backslash: $($e.FullName)" }
+      if (-not $e.FullName.EndsWith('/')) { $inZip[$e.FullName] = $e.Length }
+    }
+  } finally { $back.Dispose() }
+  $files = @(Get-ChildItem -LiteralPath $folder -File -Recurse)
+  if ($inZip.Count -ne $files.Count) { throw "the zip holds $($inZip.Count) files, the folder $($files.Count)" }
+  foreach ($f in $files) { if ($inZip[(& $name $f)] -ne $f.Length) { throw "the zip's $(& $name $f) is not the folder's" } }
+}
 if (Test-Path -LiteralPath $zipFile) { Remove-Item -LiteralPath $zipFile }
-if ($Zip) { Compress-Archive -Path (Join-Path $pkg '*') -DestinationPath $zipFile -CompressionLevel Optimal }
+if ($Zip) { WriteZip $pkg $zipFile }
 $folderBytes = (Get-ChildItem -LiteralPath $pkg -File -Recurse | Measure-Object Length -Sum).Sum
 $textureCount = ($textures.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
 '{0}  {1:N1} MB in {2} files ({3} tools, {4} shaders, {5} texture files; node.exe {6})' -f $pkg, ($folderBytes / 1MB), @(Get-ChildItem -LiteralPath $pkg -File -Recurse).Count, $closure.Count, $helpers.Count, $textureCount, $nodeVersion
