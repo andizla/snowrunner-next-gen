@@ -144,6 +144,107 @@
 #ifndef SSR_OCCL_SPECK_LUM
 #define SSR_OCCL_SPECK_LUM 3.0
 #endif
+#ifndef SSR_V2
+#define SSR_V2 1              // 1 = the reflected ray as the engine's own lake reflection pass takes it (SpinTires/
+#endif                        // WaterCompute, shaders 0x44F6CB1D and 0x8E21C0FB): mirrored on the smooth water, never on
+                              // a wave normal the screen cannot resolve. At a flat angle one pixel covers decimetres to
+                              // metres of water; there the game's wave normal is a different one in every pixel, by more
+                              // than the view's own angle to the water, and a ray built on it ends on the far bank, in
+                              // the sky or in the water by chance: single dots and dashes instead of a picture. So the
+                              // ray is the level water's (the planar shaders' own premise), everywhere or from where the
+                              // waves get too small for the screen (SSR_V2_NEAR_WAVES). Where a test cut between the
+                              // scene's colour and the planar image there is a ramp (SSR_V2_BEHIND, the stepped march's
+                              // on-surface test), and a walk that runs out of steps goes on as the stepped march
+                              // (SSR_V2_ONWARD). The far field can be handed to the engine's image (SSR_V2_FAR). A hit
+                              // keeps the scene's own brightness (SSR_V2_OWN_LIGHT), and an empty planar sample is no
+                              // measure for it (SSR_V2_EMPTY).
+                              // 0 = the helper as shipped in 1.0.0, byte for byte
+#ifndef SSR_V2_NEAR_WAVES
+#define SSR_V2_NEAR_WAVES 1   // what carries the ripple where the screen resolves the waves (a pixel covers less than
+#endif                        // SSR_V2_WAVES_NEAR metres of water along the view: all of it; from SSR_V2_WAVES_FAR on:
+                              // none):
+                              // 1 = the ray, built on the wave normal as in 1.0.0: the same picture close to the camera;
+                              //     farther out the lookup takes the ripple over (SSR_V2_FAR_RIPPLE)
+                              // 0 = the lookup at the hit, shifted by the stock distortion of the planar coordinate (the
+                              //     engine's ripple: 0.2 x f(depth) x the view-projected wave normal, SSR_V2_RIPPLE): the
+                              //     ray is the level water's everywhere, the reflection a mirror image that wobbles
+#ifndef SSR_V2_WAVES_NEAR
+#define SSR_V2_WAVES_NEAR 0.006
+#endif
+#ifndef SSR_V2_WAVES_FAR
+#define SSR_V2_WAVES_FAR 0.08
+#endif
+#ifndef SSR_V2_RIPPLE
+#define SSR_V2_RIPPLE 1.0     // (SSR_V2_NEAR_WAVES 0) the lookup's shift, times the stock distortion. It grows with how
+#endif                        // far behind the water the reflected thing lies (path / (path + the water's distance)), as
+                              // a real ripple's does: a wheel standing in the water keeps its outline
+#ifndef SSR_V2_RIPPLE_NEAR
+#define SSR_V2_RIPPLE_NEAR 0.05   // the shift is taken in full where the screen shows about the hit's depth there
+#endif                            // (within this share of it), not at all from SSR_V2_RIPPLE_FAR on (the engine's own
+#ifndef SSR_V2_RIPPLE_FAR         // measures): what stands in front of the reflected thing, or the sky beside it, is not
+#define SSR_V2_RIPPLE_FAR 0.25    // what a ripple bends the view towards
+#endif
+#ifndef SSR_V2_BEHIND
+#define SSR_V2_BEHIND 0.05    // a ray that ends behind a surface by more than the room, where SSR_OCCL has faded out
+#endif                        // (beyond SSR_OCCL_FAR): its weight falls to nothing over this share of the surface's depth
+                              // instead of at once, with the surface's plain colour (1.0.0 cut to the planar image there)
+#ifndef SSR_V2_ONWARD
+#define SSR_V2_ONWARD 1       // (with SSR_OCCL and the depth pyramid's walk) 1 = a walk that runs out of steps is not lost:
+#endif                        // where the ray stands on a surface by then (a few steps short of ending there) it is a
+                              // hit; where it is still in front of everything, the stepped march goes on from there, its
+                              // first step SSR_START + SSR_V2_ONWARD_STEP of the way come. A ray that runs straight up
+                              // the screen beside a wall or a trunk takes two steps a pixel row there; 1.0.0 gave such
+                              // rays the planar image: a pale line beside an upright edge. 0 = as 1.0.0
+#ifndef SSR_V2_ONWARD_STEP
+#define SSR_V2_ONWARD_STEP 0.02
+#endif
+#ifndef SSR_V2_EMPTY
+#define SSR_V2_EMPTY 1        // 1 = a planar sample that is empty is no measure for a hit. The engine's pass writes an
+#endif                        // alpha of 1/8 or more where it draws; a texel it did not draw (no water there: along the
+                              // outline of whatever stands in the water) has none, and a sample that takes in such
+                              // texels is that much darker. 1.0.0 held a hit under 3 x that sample (a black one: under
+                              // nothing) and gave it that alpha: black or dim specks at waterlines. Now the sample is
+                              // scaled back up for the ceiling; where less than half of it is drawn, the image at the
+                              // pixel's own place (without the ripple's shift) is the measure, so a lamp stays under the
+                              // ceiling there too; and the hit keeps an alpha of at least PLANAR_ALPHA. 0 = as 1.0.0
+#ifndef SSR_V2_SKY
+#define SSR_V2_SKY 3000.0     // linear depth from which a pixel is sky (SnowRunner Shadows' own limit; the far plane is at
+#endif                        // 3500): the stepped march stops there instead of taking the sky's depth for a wall
+#ifndef SSR_V2_FAR
+#define SSR_V2_FAR 0          // 1 = the far field is the engine's image: from SSR_V2_FAR_NEAR metres of view depth of the
+#endif                        // water pixel the scene's colour gives way to the planar image (the engine's own reflection
+#ifndef SSR_V2_FAR_NEAR       // of the far bank, an average over eight frames from 30 m on), all of it from
+#define SSR_V2_FAR_NEAR 40.0  // SSR_V2_FAR_FAR on, and no march there. 0 = the scene's colour at every distance (the
+#endif                        // released setting: of a far tree line the helper finds more than that image holds)
+#ifndef SSR_V2_FAR_FAR
+#define SSR_V2_FAR_FAR 80.0
+#endif
+#ifndef SSR_V2_OWN_LIGHT
+#define SSR_V2_OWN_LIGHT 1    // 1 = a hit shows the scene's own brightness. The engine's image holds colour / m with m / 8 in
+#endif                        // its alpha (m = max(1, r, g, b)), and the lake shaders multiply the two again. 1.0.0 handed a
+                              // hit over with the planar sample's alpha, so the scene's colour came out m times too bright
+                              // wherever the image has a bright sky at that pixel (1.4 to 2.6 times within 30 m in a day
+                              // frame). Now the hit's share is divided by the multiplier it will meet, and the ceiling
+                              // measures the image's brightness there, not its colour alone. 0 = as 1.0.0
+#ifndef SSR_V2_FAR_RIPPLE
+#define SSR_V2_FAR_RIPPLE 1   // (SSR_V2_NEAR_WAVES 1) 1 = where the ray lets go of the wave normal the lookup at the hit
+#endif                        // takes the ripple over: shifted by the stock distortion of the planar coordinate times
+#ifndef SSR_V2_FAR_RIPPLE_GAIN // SSR_V2_FAR_RIPPLE_GAIN, as the game's own reflection is. The far water keeps moving and
+#define SSR_V2_FAR_RIPPLE_GAIN 0.6 // no line shows behind which it lies still. 0 = a still mirror out there
+#endif
+#ifndef SSR_V2_RIPPLE_FLOOR
+#define SSR_V2_RIPPLE_FLOOR 0.3   // (with SSR_V2_FAR_RIPPLE) the least share of that shift a hit takes, however close behind
+#endif                            // the water the reflected thing stands: a far shore's foot keeps a little of it
+#ifndef SSR_V2_SHORE
+#define SSR_V2_SHORE 1        // (with SSR_V2_OWN_LIGHT) 1 = a hit fades out with the engine's image at the water's outline.
+#endif                        // That image is drawn on the water alone, so a sample at the waterline is part empty and
+                              // the game's own reflection dims to nothing there: a soft edge, which 1.0.0's hits shared.
+                              // 0 = a hit at full strength up to the last water pixel (a hard waterline)
+#ifndef SSR_V2_EDGE
+#define SSR_V2_EDGE 1         // 1 = the fade towards the screen's left and right border is no wider than twice the way the
+#endif                        // ray came sideways: a ray that runs straight up the screen cannot leave through the side
+                              // and needs none (under level mirror rays the fixed fade showed as a frame down both
+                              // sides). 0 = SSR_EDGE on every side, as 1.0.0
 
 cbuffer CB_GLOBAL_CAMERA : register(b1)
 {
@@ -174,6 +275,35 @@ float3 Ceiling(float3 c, float3 planarRgb)
     const float over = max(lum - knee, 0.0);
     return c * ((lum - over + over / (1.0 + over / knee)) / max(lum, 1e-4));
 }
+#if SSR_V2
+// the scene's colour for a ray that ended at uv on a surface at depth z, with the ripple's shift where the lookup carries it
+// (see SSR_V2_RIPPLE_NEAR)
+float3 SceneAt(float2 uv, float z, float2 shift)
+{
+#if SSR_V2_NEAR_WAVES && !SSR_V2_FAR_RIPPLE
+    return g_txBBOpaque.SampleLevel(sScene, uv, 0).rgb;
+#else
+    const float zr = SceneDepth(uv + shift);
+    const float agree = 1.0 - saturate((abs(zr - z) / max(z, 1e-3) - SSR_V2_RIPPLE_NEAR) / (SSR_V2_RIPPLE_FAR - SSR_V2_RIPPLE_NEAR));
+    return g_txBBOpaque.SampleLevel(sScene, uv + shift * agree, 0).rgb;
+#endif
+}
+// the share of the ripple's shift a hit takes, l metres along the ray
+#if SSR_V2_NEAR_WAVES && SSR_V2_FAR_RIPPLE
+#define RIPPLE_SHARE(l) max((l) / ((l) + eyeDist), SSR_V2_RIPPLE_FLOOR)
+#else
+#define RIPPLE_SHARE(l) ((l) / ((l) + eyeDist))
+#endif
+#if SSR_V2_EDGE
+// the fade of a hit towards the screen's border, where the next ray over would leave the screen. Sideways only a ray that
+// runs sideways can: the fade there is no wider than twice the way the ray came across the screen
+float2 EdgeFade(float2 huv, float2 from)
+{
+    const float2 d = min(huv, 1.0 - huv);
+    return saturate(d / float2(min(SSR_EDGE, 2.0 * abs(huv.x - from.x) + 1e-4), SSR_EDGE));
+}
+#endif
+#endif
 #if SSR_OCCL
 // how far behind a surface at depth z a ray can stand and still be under that object rather than passing behind it
 float UnderDepth(float z) { return SSR_OCCL_THICK + SSR_OCCL_SLOPE * z; }
@@ -239,7 +369,11 @@ float HiZCell(float2 cellPos, int level, int2 size0)
 // while it stays nearer than the cell's nearest surface and steps down a level when it would cross one, until it stands
 // behind a surface at level 0; true then, with hit and tHit where it stands (SnowRunner Shadows' ssr_trace.hlsl Traverse,
 // adapted from AMD FidelityFX SSSR's FFX_SSSR_HierarchicalRaymarch, MIT licence)
+#if SSR_V2
+bool HiZMarch(float3 o, float3 d, int2 size0, int levels, out float3 hit, out float tHit, out bool spent)
+#else
 bool HiZMarch(float3 o, float3 d, int2 size0, int levels, out float3 hit, out float tHit)
+#endif
 {
     const float2 sizeF = float2(size0), invSize = 1.0 / sizeF;
     const float3 invD = float3(d.x != 0.0 ? 1.0 / d.x : 1e32, d.y != 0.0 ? 1.0 / d.y : 1e32, d.z != 0.0 ? 1.0 / d.z : 1e32);
@@ -280,6 +414,9 @@ bool HiZMarch(float3 o, float3 d, int2 size0, int levels, out float3 hit, out fl
     g_hizIters = float(i);
     g_hizFound = level < SSR_HIZ_MIP ? 1.0 : 0.0;
 #endif
+#if SSR_V2
+    spent = i >= SSR_HIZ_STEPS && level >= SSR_HIZ_MIP;                               // out of steps, in front of everything
+#endif
     return level < SSR_HIZ_MIP;
 }
 #endif
@@ -304,6 +441,10 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
     const float calm = PLANAR_CALM;
     // the planar reflection, sampled the way the stock shader does (implicit level, outside any branch)
     const float4 planar = g_txReflections.Sample(sScene, uvIn.xy);
+#if SSR_V2
+    const float4 cP = Clip(P);
+    const float2 screenUV = ScreenUV(cP);
+#endif
 #endif
 #ifdef SSR_LAB_NJITTER
     const float2 nxz = nIn.xy + SSR_LAB_NJITTER;                 // lab builds only: the wave normal nudged, as the next frame's
@@ -311,7 +452,66 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
     const float2 nxz = nIn.xy;
 #endif
     float3 N = float3(nxz.x, sqrt(saturate(1.0 - dot(nxz, nxz))), nxz.y);
+#if SSR_V2
+    const float eyeDist = length(P - g_vEyePos);
+    // metres of water under one pixel, along the line of sight: distance x the pixel's angle / the sine of the view's
+    // angle to the water; and how much of the waves the screen resolves there
+    uint footW, footH;
+    g_txZ.GetDimensions(footW, footH);
+    const float foot = eyeDist * eyeDist * 2.0 / (max((float)footH, 1.0) * length(g_vViewProjCol[1].xyz) * max(abs(P.y - g_vEyePos.y), 1e-3));
+    const float resolved = 1.0 - smoothstep(SSR_V2_WAVES_NEAR, SSR_V2_WAVES_FAR, foot);
+#if SSR_V2_NEAR_WAVES
+    N = normalize(lerp(N, float3(0.0, 1.0, 0.0), max(calm, 1.0 - resolved)));
+#if SSR_V2_FAR_RIPPLE
+    // where the ray let go of the wave normal the lookup takes the ripple over: the stock distortion of the planar
+    // coordinate, less the calm that coordinate got, upside down as a mirror shows it
+    const float2 ripple = (uvIn.xy - screenUV) * float2(SSR_V2_FAR_RIPPLE_GAIN, -SSR_V2_FAR_RIPPLE_GAIN) * ((1.0 - calm) * (1.0 - resolved));
+#else
+    const float2 ripple = 0.0;
+#endif
+#else
+    N = float3(0.0, 1.0, 0.0);
+    // the ripple, for the lookup at the hit: the stock distortion of the planar coordinate, less the calm that coordinate
+    // got, upside down as a mirror shows it
+    const float2 ripple = (uvIn.xy - screenUV) * float2(SSR_V2_RIPPLE, -SSR_V2_RIPPLE) * ((1.0 - calm) * resolved);
+#endif
+    // the ceiling's measure over a planar sample that is empty or partly empty
+#if SSR_V2_EMPTY
+    float4 measure = planar;
+#if SSR_V2_OWN_LIGHT && SSR_V2_SHORE
+    // the image at the pixel's own place, without the ripple's shift: the measure where the rippled coordinate left what
+    // the engine drew, and how much of it is drawn there says how close the water's outline is (see SSR_V2_SHORE)
+    const float4 own = g_txReflections.SampleLevel(sScene, screenUV, 0);
+    if (planar.a < 0.5 * PLANAR_ALPHA && own.a > measure.a) measure = own;
+    const float ownFill = saturate(own.a / PLANAR_ALPHA);
+#else
+    [branch] if (planar.a < 0.5 * PLANAR_ALPHA)                   // the rippled coordinate left what the engine drew:
+    {                                                             // the image at the pixel's own place is the measure
+        const float4 own = g_txReflections.SampleLevel(sScene, screenUV, 0);
+        if (own.a > measure.a) measure = own;
+    }
+#endif
+    const float planarFill = saturate(measure.a / PLANAR_ALPHA);
+#if SSR_V2_OWN_LIGHT
+    // (the image's brightness: its colour times the multiplier its alpha holds)
+    const float3 ceilRef = planarFill > 1e-3 ? measure.rgb / planarFill * max(measure.a / PLANAR_ALPHA, 1.0) : 1e4;
+#else
+    const float3 ceilRef = planarFill > 1e-3 ? measure.rgb / planarFill : 1e4;   // nothing drawn there either: no ceiling
+#endif
+#elif SSR_V2_OWN_LIGHT
+    const float3 ceilRef = planar.rgb * max(planar.a / PLANAR_ALPHA, 1.0);
+#else
+    const float3 ceilRef = planar.rgb;
+#endif
+    // how much of a hit the far field takes
+#if SSR_V2_FAR
+    const float farW = 1.0 - smoothstep(SSR_V2_FAR_NEAR, SSR_V2_FAR_FAR, cP.w);
+#else
+    const float farW = 1.0;
+#endif
+#else
     N = normalize(lerp(N, float3(0.0, 1.0, 0.0), calm));
+#endif
     const float3 V = normalize(P - g_vEyePos);
     const float3 R = normalize(reflect(V, N));
 
@@ -320,11 +520,18 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
 #if SSR_DEBUG
     float3 why = float3(0.0, 1.0, 1.0);                          // cyan: ran out of steps
 #endif
+#if SSR_V2
+    [branch] if (R.y > 0.0 && farW > 0.0)                        // a ray into the water has nothing to find, nor one the
+#else                                                             // far field does not take
     [branch] if (R.y > 0.0)                                       // a ray into the water has nothing to find
+#endif
     {
 #if SSR_OCCL
         float marchFrom = 0.0, marchTo = SSR_START;              // the stepped march's step before the first, and its first
         bool marchOn = true;                                      // false where the walk settled the pixel
+#if SSR_V2
+        float marchBase = 0.0;                                    // where the stepped march's growing steps count from
+#endif
         float passed = 1.0;                                       // the least OcclFade of the surfaces the ray went on behind
 #endif
 #if SSR_FOG
@@ -346,10 +553,17 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
             float3 hitPos = 0.0;
             float tHit = 2.0;
             bool found = false;
+#if SSR_V2
+            bool spent = false;
+#endif
             if (c0.w > 0.05 && c1.w > 0.05)
             {
                 const float3 s0 = float3(ScreenUV(c0), 1.0 / c0.w);
+#if SSR_V2
+                found = HiZMarch(s0, float3(ScreenUV(c1), 1.0 / c1.w) - s0, int2(hizW, hizH), (int)hizLevels, hitPos, tHit, spent);
+#else
                 found = HiZMarch(s0, float3(ScreenUV(c1), 1.0 / c1.w) - s0, int2(hizW, hizH), (int)hizLevels, hitPos, tHit);
+#endif
             }
 #if SSR_DEBUG
             why = float3(1.0, 1.0, 1.0);                          // white: left the view, or nothing within the walk
@@ -357,13 +571,40 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
 #if SSR_OCCL
             marchOn = false;
 #endif
+#if SSR_V2
+#if !(SSR_OCCL && SSR_V2_ONWARD)
+            spent = false;
+#endif
+            [branch] if ((found || spent) && tHit <= 1.0 && all(hitPos.xy >= 0.0) && all(hitPos.xy <= 1.0))
+#else
             [branch] if (found && tHit <= 1.0 && all(hitPos.xy >= 0.0) && all(hitPos.xy <= 1.0))
+#endif
             {
                 const float2 huv = hitPos.xy;
                 const float zs = SceneDepth(huv);                 // the surface the camera sees there (t80)
                 const float behind = 1.0 / max(hitPos.z, 1e-6) - zs; // how far behind it the ray stands
                 const float room = SSR_THICK + SSR_BIAS + SSR_BIAS_SLOPE * zs;
+#if SSR_V2 && SSR_V2_EDGE
+                const float2 edge = EdgeFade(huv, screenUV);
+#else
                 const float2 edge = saturate(min(huv, 1.0 - huv) / SSR_EDGE);
+#endif
+#if SSR_V2
+                // behind the surface by more than the room the weight falls over SSR_V2_BEHIND of the depth: no cut
+                // (close to the camera SSR_OCCL below decides what such a ray shows)
+                const float soft = saturate(1.0 - (behind - room) / (SSR_V2_BEHIND * max(zs, 1e-3)));
+                // a walk out of steps: where the ray stands on a surface it is a hit like any other; where it is still in
+                // front of what the screen shows, it goes on below
+                const bool onward = spent && behind < -room;
+#if SSR_HIZ_MIP > 0
+                hitWeight = zs > 0.0 && behind > -room ? edge.x * edge.y * soft : 0.0;
+#else
+                hitWeight = zs > 0.0 && !onward ? edge.x * edge.y * soft : 0.0;
+#endif
+                // how far along R the ray ended: the ripple's shift grows with it
+                const float hitL = SSR_START + len * tHit * c0.w / ((1.0 - tHit) * c1.w + tHit * c0.w);
+                hitColour = Ceiling(SceneAt(huv, zs, ripple * RIPPLE_SHARE(hitL)), ceilRef);
+#else
 #if SSR_HIZ_MIP > 0
                 // a walk that ends on cells of several pixels stops at the nearest of them: where the pixel it stands on
                 // is clearly farther (the ray passed beside a thin edge), no hit (it drew thin streaks)
@@ -372,6 +613,7 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                 hitWeight = zs > 0.0 && behind < room ? edge.x * edge.y : 0.0;   // further behind: it went under an object
 #endif
                 hitColour = Ceiling(g_txBBOpaque.SampleLevel(sScene, huv, 0).rgb, planar.rgb);
+#endif
 #if SSR_FOG
                 fogUV = huv;
                 fogL = SSR_START + len * tHit * c0.w / ((1.0 - tHit) * c1.w + tHit * c0.w);
@@ -383,6 +625,21 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                 if (zs > 0.0 && behind >= room)
                 {
                     const float fade = OcclFade(zs);
+#if SSR_V2
+#if SSR_OCCL_SPECK
+                    const bool speck = Speck(huv, zs);
+#else
+                    const bool speck = false;
+#endif
+                    if (fade <= 0.0 || (behind < UnderDepth(zs) && !speck))
+                    {
+                        // under the object: its colour here, darkened, for the underside the screen cannot show. With
+                        // distance (SSR_OCCL_NEAR to SSR_OCCL_FAR) that gives way to the surface's plain colour at the
+                        // soft weight above; a firefly far off gets none
+                        hitWeight = edge.x * edge.y * lerp(speck ? 0.0 : soft, 1.0, fade);
+                        hitColour *= lerp(1.0, UnderShade(behind - room), fade);
+                    }
+#else
 #if SSR_OCCL_SPECK
                     if (fade <= 0.0 || (behind < UnderDepth(zs) && !Speck(huv, zs)))
 #else
@@ -394,6 +651,7 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                         hitWeight = edge.x * edge.y * fade;
                         hitColour *= UnderShade(behind - room);
                     }
+#endif
                     else
                     {
                         // a surface well in front of the ray's path (grass, a branch near the camera): the stepped march
@@ -407,6 +665,16 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                         why = float3(0.0, 1.0, 1.0);                  // cyan unless the march below finds more
 #endif
                     }
+                }
+#endif
+#if SSR_V2 && SSR_OCCL && SSR_V2_ONWARD
+                if (onward)
+                {
+                    // the stepped march goes on from where the walk stopped, in small steps again
+                    marchBase = hitL;
+                    marchFrom = hitL;
+                    marchTo = hitL + SSR_START + SSR_V2_ONWARD_STEP * hitL;
+                    marchOn = true;
                 }
 #endif
             }
@@ -442,6 +710,9 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                 break;
             }
             const float z = SceneDepth(uv);
+#if SSR_V2
+            if (c.w >= SSR_V2_SKY) break;                         // as deep as the sky: nothing out there is a surface
+#endif
             const float bias = SSR_BIAS + SSR_BIAS_SLOPE * c.w;
             const float behind = c.w - z - bias;                  // > 0: the ray is behind what the camera sees there
             const float room = (t - prevT) + SSR_THICK;
@@ -455,7 +726,11 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                 passed = min(passed, fade);                       // camera), not in its way: step on behind it
                 prevZ = -1.0;
                 prevT = t;
+#if SSR_V2 && SSR_OCCL
+                t = marchBase + (t - marchBase) * SSR_GROWTH;
+#else
                 t *= SSR_GROWTH;
+#endif
                 continue;
             }
 #endif
@@ -477,10 +752,21 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                     }
                     const float4 ch = Clip(P + R * hi);
                     const float2 huv = ScreenUV(ch);
+#if SSR_V2 && SSR_V2_EDGE
+                    const float2 edge = EdgeFade(huv, screenUV);
+#else
                     const float2 edge = saturate(min(huv, 1.0 - huv) / SSR_EDGE);
+#endif
                     // only where the refined point lies on a surface (not on the sky beside a stepped-over edge)
+#if SSR_V2
+                    // off the surface by one room: in full; by two: nothing
+                    const float zh = SceneDepth(huv);
+                    hitWeight = edge.x * edge.y * saturate(2.0 - abs(ch.w - zh) / room);
+                    hitColour = Ceiling(SceneAt(huv, zh, ripple * RIPPLE_SHARE(hi)), ceilRef);
+#else
                     hitWeight = abs(ch.w - SceneDepth(huv)) < room ? edge.x * edge.y : 0.0;
                     hitColour = Ceiling(g_txBBOpaque.SampleLevel(sScene, huv, 0).rgb, planar.rgb);
+#endif
 #if SSR_FOG
                     fogUV = huv;
                     fogL = hi;
@@ -496,7 +782,11 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                     passed = min(passed, fade);                   // a firefly: the march goes on behind it
                     prevZ = -1.0;
                     prevT = t;
+#if SSR_V2 && SSR_OCCL
+                    t = marchBase + (t - marchBase) * SSR_GROWTH;
+#else
                     t *= SSR_GROWTH;
+#endif
                     continue;
                 }
 #endif
@@ -504,9 +794,20 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
                 {
                     // under the object: its colour here, darkened, for the underside the screen cannot show (none of it
                     // beyond SSR_OCCL_FAR: the planar image as before)
+#if SSR_V2 && SSR_V2_EDGE
+                    const float2 edge = EdgeFade(uv, screenUV);
+#else
                     const float2 edge = saturate(min(uv, 1.0 - uv) / SSR_EDGE);
+#endif
+#if SSR_V2
+                    // as for the walk: with distance the darkened underside gives way to the plain colour at a weight
+                    // that falls over SSR_V2_BEHIND of the depth
+                    hitWeight = edge.x * edge.y * lerp(saturate(1.0 - (behind - room) / (SSR_V2_BEHIND * max(z, 1e-3))), 1.0, fade);
+                    hitColour = Ceiling(SceneAt(uv, z, ripple * RIPPLE_SHARE(t)), ceilRef) * lerp(1.0, UnderShade(behind - room), fade);
+#else
                     hitWeight = edge.x * edge.y * fade;
                     hitColour = Ceiling(g_txBBOpaque.SampleLevel(sScene, uv, 0).rgb, planar.rgb) * UnderShade(behind - room);
+#endif
 #if SSR_FOG
                     fogUV = uv;
                     fogL = t;
@@ -522,7 +823,11 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
             }
             prevZ = z;
             prevT = t;
+#if SSR_V2 && SSR_OCCL
+            t = marchBase + (t - marchBase) * SSR_GROWTH;
+#else
             t *= SSR_GROWTH;
+#endif
         }
         }
 #if SSR_OCCL
@@ -539,12 +844,39 @@ float4 main(float4 uvIn : TEXCOORD0, float4 posIn : TEXCOORD1, float4 nIn : TEXC
     // screen has: let it fade (a steep ray away from the camera is fine)
     const float2 vh = normalize(V.xz + float2(1e-6, 0.0));
     const float away = saturate(dot(normalize(R.xz + float2(1e-6, 0.0)), vh) * 2.0 + 1.0) * saturate(length(R.xz) * 20.0 + 0.5);
+#if SSR_V2
+    const float used = saturate(hitWeight * away * SSR_STRENGTH * farW);
+#else
     const float used = saturate(hitWeight * away * SSR_STRENGTH);
+#endif
 #if SSR_DEBUG
     if (why.g > 0.5 && why.r < 0.5 && why.b < 0.5) why = hitWeight > 0.0 && used < 0.05 ? float3(1.0, 1.0, 0.0) : float3(0.0, max(used, 0.15), 0.0);
     return float4(why * SSR_DEBUG_GAIN, planar.a > 1e-4 ? planar.a : PLANAR_ALPHA);
 #else
+#if SSR_V2 && SSR_V2_EMPTY
+    const float hitA = max(planar.a, PLANAR_ALPHA);
+#else
     const float hitA = planar.a > 1e-4 ? planar.a : PLANAR_ALPHA;
+#endif
+#if SSR_V2 && SSR_V2_OWN_LIGHT
+    // the lake shader multiplies what leaves here by 8 x its alpha (1 / PLANAR_ALPHA): the blend is made of the planar
+    // image's brightness and the scene's, then divided by the multiplier it will meet. A pixel without a hit leaves as
+    // the sample came
+    // the hit dims with the engine's image at the water's outline, as the game's own reflection does there (it falls
+    // with the square of how much of the sample is drawn: colour and alpha both). Measured at the pixel's own place, so
+    // the fade follows the outline and not the ripple
+#if SSR_V2_SHORE && SSR_V2_EMPTY
+    const float shore = ownFill * ownFill;
+#elif SSR_V2_SHORE
+    const float shore = saturate(planar.a / PLANAR_ALPHA) * saturate(planar.a / PLANAR_ALPHA);
+#else
+    const float shore = 1.0;
+#endif
+    const float outA = lerp(planar.a, hitA, used);
+    const float3 blended = lerp(planar.rgb * (planar.a / PLANAR_ALPHA), hitColour * shore, used) / max(outA / PLANAR_ALPHA, 1e-6);
+    return float4(used > 0.0 ? blended : planar.rgb, outA);
+#else
     return float4(lerp(planar.rgb, hitColour, used), lerp(planar.a, hitA, used));
+#endif
 #endif
 }

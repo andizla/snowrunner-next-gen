@@ -48,7 +48,9 @@ const BUILDS = [
     ['water/blend.cso', 'water/blend.hlsl'],
     ['water/blend_glow.cso', 'water/blend.hlsl', ['MIX_GLOW=1']],
     ['water/ssr.cso', 'water/ssr.hlsl'],
-    ['water/ssr_t5.cso', 'water/ssr.hlsl', ['SSR_BB_REG=t5']],
+    // (the lakes and seas that reflect the cubemap alone: level water, so the ray is turned by the waves only where the
+    // screen resolves them; the rivers' build above keeps the stock direction)
+    ['water/ssr_t5.cso', 'water/ssr.hlsl', ['SSR_BB_REG=t5', 'SSR_WAVE_FOOT=1']],
     ['water/ssr_planar.cso', 'water/ssr_planar.hlsl', ['SSR_HIZ=1']],
     // whole passes, named by the hash of the game shader they replace
     ['ssao_builds/gtao_hq/0xEA2414F8.shader', 'ssao_0xEA2414F8.hlsl', ['AO_SLICES=4', 'AO_STEPS=8']],

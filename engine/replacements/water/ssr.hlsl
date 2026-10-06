@@ -59,6 +59,22 @@
                               // green = a hit, brighter the more of it is used; yellow = a hit faded out because the ray heads
                               // back towards the camera; white = the ray left the view, or found only sky beside an edge;
                               // blue = it went under an object; cyan = it ran out of steps; red = behind the camera
+#ifndef SSR_WAVE_FOOT
+#define SSR_WAVE_FOOT 0       // for the lake and sea build (SSR_BB_REG=t5; level water): 1 = the wave normal turns the
+#endif                        // reflected ray only where the screen resolves the waves. Those shaders build the direction
+                              // on the game's wave normal (g_txWaves: one level, read at a level the texture does not
+                              // have), which at a flat angle is a different one in every pixel: the march then ends on
+                              // the far bank, in the sky or in the water by chance, single dots instead of a picture.
+                              // The ray turns to the level water's mirror ray between SSR_WAVE_FOOT_NEAR and
+                              // SSR_WAVE_FOOT_FAR metres of water under a pixel along the view; the sky sample keeps the
+                              // stock direction. Not for the rivers: their normal map has its mip levels (the direction
+                              // is smooth far off) and a river is not level. 0 = the stock direction everywhere
+#ifndef SSR_WAVE_FOOT_NEAR
+#define SSR_WAVE_FOOT_NEAR 0.01
+#endif
+#ifndef SSR_WAVE_FOOT_FAR
+#define SSR_WAVE_FOOT_FAR 0.04
+#endif
 #ifndef SSR_DEBUG_GAIN
 #define SSR_DEBUG_GAIN 4.0    // their brightness, absolute (the blend's own debug build adds the reflection unscaled by Fresnel)
 #endif
@@ -95,6 +111,15 @@ float4 main(float4 dirIn : TEXCOORD0, float4 posIn : TEXCOORD1) : SV_Target0
     const float3 sky = g_txReflCubeGGX.Sample(sCube, R).rgb;
     R = normalize(R);
     const float3 P = posIn.xyz;
+#if SSR_WAVE_FOOT
+    // metres of water under one pixel, along the line of sight: distance x the pixel's angle / the sine of the view's
+    // angle to the water
+    uint footW, footH;
+    g_txZ.GetDimensions(footW, footH);
+    const float3 footTo = P - g_vEyePos;
+    const float foot = dot(footTo, footTo) * 2.0 / (max((float)footH, 1.0) * length(g_vViewProjCol[1].xyz) * max(abs(footTo.y), 1e-3));
+    R = normalize(lerp(R, reflect(normalize(footTo), float3(0.0, 1.0, 0.0)), smoothstep(SSR_WAVE_FOOT_NEAR, SSR_WAVE_FOOT_FAR, foot)));
+#endif
 
     float  hitWeight = 0.0;
     float3 hitColour = sky;

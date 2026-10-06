@@ -25,7 +25,9 @@
 //            lakes and seas without a planar reflection; water\ssr_t5.cso), and tools\patch_water_mix.js +
 //            water\blend.cso in all of them (the water's colour gives way to the reflection with Fresnel instead of
 //            the reflection being added on top); patched at build time on top of whatever the other modules made of
-//            each shader
+//            each shader; and tools\patch_refl_hits.js on the engine's own reflection pass (0x44F6CB1D, 0x8E21C0FB), whose
+//            image those 88 read: its hit rule without the target's resolution in it, so what stands in the water is
+//            mirrored at 3840 x 2160 as at 1920 x 1080 (REFL_HITS, see hitsRule)
 //   crestglow tools\patch_water_mix.js patchGlow + water\blend_glow.cso in place of the blend, in the river shaders that
 //            sample the sun shadow map (12 of the 20): sunlight through the thin backs of waves in the water's colour,
 //            looking into a low sun (implies water; in DEFAULT)
@@ -92,6 +94,7 @@ const ssr = require('./patch_water_ssr.js');
 const mix = require('./patch_water_mix.js');
 const clear = require('./patch_water_clear.js');
 const planar = require('./patch_water_planar.js');
+const hits = require('./patch_refl_hits.js');
 const smoke = require('./patch_smoke.js');
 const smokeps = require('./patch_smoke_ps.js');
 const gbuffer = require('./patch_gbuffer.js');
@@ -157,6 +160,13 @@ function fogVariant()
     if (!/^[\w-]+$/.test(v) || !fs.existsSync(S('fog_builds', v, '0x871EF8CC.shader'))) throw new Error('unknown fog variant ' + v);
     return v;
 }
+// the hit rule of the lakes' reflection image, with module water: REFL_HITS names the mode tools\patch_refl_hits.js
+// patches into the engine's own pass (default slope; off = every step within 1 m over the water counts, as in
+// Expeditions; slope:0.4 and the like = another share of an upright wall's rise) or stock, which leaves the pass alone
+const HITS_DEFAULT = 'slope';
+const hitsRule = () => { const v = process.env.REFL_HITS || HITS_DEFAULT; return v === 'stock' ? null : hits.parseMode(v); };
+// the rule when it is not the default one, for notes and summaries
+const hitsNote = (modules) => (modules.includes('water') && (process.env.REFL_HITS || HITS_DEFAULT) !== HITS_DEFAULT ? process.env.REFL_HITS : null);
 // where the puddle and bounce light helpers come from: HELPER_VARIANT_PUDDLES and HELPER_VARIANT_GI (or HELPER_VARIANT
 // for both) name a subfolder of replacements\puddles and replacements\gi (debug: colours for what each pixel's
 // reflection and bounce light did, see puddle_ssr.hlsl and gi_ambient.hlsl; one at a time reads best, both paint the
@@ -234,7 +244,7 @@ function build(orig, modules)
     const { main, hdr } = plan(modules);
     const water = modules.includes('water'), tint = modules.includes('rivertint'), river = water || tint;
     const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact');
-    let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, checked = 0;
+    let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, lakeHits = 0, lakePlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, checked = 0;
     const z = pak.parseZip(orig);
     // whether any module touches the main cache (the check of the untouched entries at the end asks the same)
     const mainRebuilt = !!(main.size || river || wet || bounce || refl || glow || shape || sssr || cont);
@@ -312,6 +322,30 @@ function build(orig, modules)
                 else console.log('note: water shader ' + i + ' left as it was: ' + r.reason);
             });
             if (helper.glow) console.log('crest glow: ' + glowHits + ' river shaders (those with the sun shadow map)');
+        }
+        // the lakes' reflection image (module water): the engine's own pass, whose result the planar water shaders read
+        // at t4, finds what stands in the water at every resolution (tools\patch_refl_hits.js). No other module
+        // touches its two shaders; both are patched or neither, and a game version with other shaders there keeps its
+        // own
+        const hitRule = water ? hitsRule() : null;
+        if (hitRule)
+        {
+            const found = [];
+            parsed.blobs.forEach((bl, i) =>
+            {
+                const own = inflated.subarray(bl.off, bl.off + bl.size), h = pak.hex8(pak.crc32(own));
+                if (hits.TARGETS.includes(h)) found.push([i, h, own]);
+            });
+            lakePlanned = hits.TARGETS.length;
+            try
+            {
+                if (found.length !== lakePlanned) throw new Error(found.length + ' of its ' + lakePlanned + ' shaders are in this game version\'s shader.pak');
+                if (found.some(([i]) => repl.has(i))) throw new Error('another module changed its shaders');
+                const done = found.map(([i, h, own]) => [i, hits.patchReflHits(h, Buffer.from(own), hitRule)]);
+                for (const [i, blob] of done) repl.set(i, blob);
+                lakeHits = done.length;
+            }
+            catch (e) { console.log('warning: the lakes\' reflection image keeps the game\'s own hit rule: ' + e.message); }
         }
         // wet ground, on top of whatever the other modules made of each shader: the headlights' highlight capped
         // (effect 0), then the puddle reflections (effect E); a shader a step fails on keeps what it had
@@ -490,16 +524,16 @@ function build(orig, modules)
         if (!changed && !pak.readEntry(orig, e).equals(pak.readEntry(out, e2))) throw new Error('entry changed: ' + e.name);
         if (pak.crc32(pak.readEntry(out, e2)) !== e2.crc) throw new Error('crc check failed: ' + e.name);
     }
-    return { out, mainHits, hdrHits, mainPlanned: main.size, hdrPlanned: hdr.size, waterHits, waterPlanned, glareHits, glarePlanned, puddleHits, decalHits, decalPlanned, giHits, giPlanned, reflHits, reflPlanned, smokeHits, smokePlanned, shapeHits, shapePlanned, sssrHits, sssrPlanned, sssrGlass, contactHits, contactPlanned, checked };
+    return { out, mainHits, hdrHits, mainPlanned: main.size, hdrPlanned: hdr.size, waterHits, waterPlanned, lakeHits, lakePlanned, glareHits, glarePlanned, puddleHits, decalHits, decalPlanned, giHits, giPlanned, reflHits, reflPlanned, smokeHits, smokePlanned, shapeHits, shapePlanned, sssrHits, sssrPlanned, sssrGlass, contactHits, contactPlanned, checked };
 }
 
 // what a build holds, one line
 function summary(modules, r, gtao)
 {
     const helpers = helperNote(modules);
-    const fog = modules.includes('fog') && fogVariant() !== FOG_DEFAULT ? fogVariant() : null;
-    return modules.join(', ') + (gtao ? ' (GTAO build ' + gtao + ')' : '') + (fog ? ' (fog build ' + fog + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : '') + ': main cache ' + r.mainHits + '/' + r.mainPlanned + ' shaders, side cache ' + r.hdrHits + '/' + r.hdrPlanned +
-        (r.waterPlanned ? ', water ' + r.waterHits + '/' + r.waterPlanned : '') + (r.glarePlanned ? ', wet ground ' + (modules.includes('glare') ? 'glare ' + r.glareHits + ' ' : '') + (modules.includes('puddles') ? 'puddles ' + r.puddleHits + ' ' : '') + 'of ' + r.glarePlanned : '') +
+    const fog = modules.includes('fog') && fogVariant() !== FOG_DEFAULT ? fogVariant() : null, rule = hitsNote(modules);
+    return modules.join(', ') + (gtao ? ' (GTAO build ' + gtao + ')' : '') + (fog ? ' (fog build ' + fog + ')' : '') + (rule ? ' (lake image rule ' + rule + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : '') + ': main cache ' + r.mainHits + '/' + r.mainPlanned + ' shaders, side cache ' + r.hdrHits + '/' + r.hdrPlanned +
+        (r.waterPlanned ? ', water ' + r.waterHits + '/' + r.waterPlanned : '') + (r.lakePlanned ? ', lake reflection image ' + r.lakeHits + '/' + r.lakePlanned : '') + (r.glarePlanned ? ', wet ground ' + (modules.includes('glare') ? 'glare ' + r.glareHits + ' ' : '') + (modules.includes('puddles') ? 'puddles ' + r.puddleHits + ' ' : '') + 'of ' + r.glarePlanned : '') +
         (r.decalPlanned ? ', water decals ' + r.decalHits + ' of ' + r.decalPlanned : '') +
         (r.giPlanned ? ', bounce light ' + r.giHits + ' of ' + r.giPlanned : '') + (r.reflPlanned ? ', object reflections ' + r.reflHits + ' of ' + r.reflPlanned : '') +
         (r.smokePlanned ? ', sun glow through smoke ' + r.smokeHits + ' of ' + r.smokePlanned : '') +
@@ -527,8 +561,8 @@ if (require.main === module)
         // before the first write, so a table that cannot be made stops the install with the game untouched
         const t = twins.buildTwins(orig, r.out);
         const gtao = modules.includes('gtao') ? gtaoBuild(modules) : null, helpers = helperNote(modules) || null;
-        const fog = modules.includes('fog') && fogVariant() !== FOG_DEFAULT ? fogVariant() : null;
-        pak.installBuild(r.out, { variant: 'fidelity: ' + modules.join(',') + (fog ? ' (fog build ' + fog + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : ''), modules, gtaoVariant: gtao, fogVariant: fog, helpers, patchedSha256: pak.sha256(r.out), date: pak.localStamp() });
+        const fog = modules.includes('fog') && fogVariant() !== FOG_DEFAULT ? fogVariant() : null, rule = hitsNote(modules);
+        pak.installBuild(r.out, { variant: 'fidelity: ' + modules.join(',') + (fog ? ' (fog build ' + fog + ')' : '') + (rule ? ' (lake image rule ' + rule + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : ''), modules, gtaoVariant: gtao, fogVariant: fog, hitsRule: rule, helpers, patchedSha256: pak.sha256(r.out), date: pak.localStamp() });
         // the table goes in last: the pak and its note stand without it, and the switches then have nothing to switch
         const bin = path.join(path.dirname(pak.PAK), '..', '..', '..', 'Sources', 'Bin');
         if (fs.existsSync(bin))
