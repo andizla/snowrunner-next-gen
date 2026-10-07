@@ -17,6 +17,8 @@ const PINS = path.join(R, 'shaders.sha256');
 // mips, the visibility bitmask, the bounce light from the scene feed's mips with one read per horizon
 const GI = ['AO_SLICES=3', 'AO_HALF_SNAP=1', 'AO_DEPTH_LOD=2', 'AO_VB=1', 'GI_LOD=1', 'GI_GATHER_TOP=1'];
 const FAR = ['AO_FAR=1', 'AO_FAR_SHARE=1'];
+// the strength raises a bounce light tap at most to 0.6 of the scene's ambient light: snow and ice do not glow
+const WHITE = ['GI_WHITE=1', 'GI_WHITE_LEVEL=0.6'];
 // the reflection reader marches only what the pass never saw, and of that only what lies in front
 const READER = ['OSSSR_MARCH_UNSEEN_ONLY=1', 'OSSSR_MARCH_FRONT_ONLY=1'];
 const O3 = ['-O3'];
@@ -28,8 +30,12 @@ const BUILDS = [
     ['gi/gi_ambient_decal.cso', 'gi/gi_ambient.hlsl', ['GI_DECAL=1']],
     ['gi/gi_only.cso', 'gi/gi_ambient.hlsl', ['STRENGTH=0']],
     ['gi/gi_only_decal.cso', 'gi/gi_ambient.hlsl', ['STRENGTH=0', 'GI_DECAL=1']],
-    ['gi/gtao_gi.cso', 'gi/gtao_gi.hlsl', GI],
-    ['gi/gtao_gi_far.cso', 'gi/gtao_gi.hlsl', [...FAR, ...GI]],
+    ['gi/gtao_gi.cso', 'gi/gtao_gi.hlsl', [...GI, ...WHITE]],
+    ['gi/gtao_gi_far.cso', 'gi/gtao_gi.hlsl', [...FAR, ...GI, ...WHITE]],
+    // the same pass without the bounce light's reads, for GTAO without the Bounce light module: it keeps the second
+    // output, so SnowRunner Shadows draws it at half size too
+    ['gi/gtao_ao.cso', 'gi/gtao_gi.hlsl', [...GI, 'GI_OFF=1']],
+    ['gi/gtao_ao_far.cso', 'gi/gtao_gi.hlsl', [...FAR, ...GI, 'GI_OFF=1']],
     ['puddles/puddle_ssr.cso', 'puddles/puddle_ssr.hlsl', ['PSSR_ADAPTIVE=1']],
     ['puddles/puddle_ssr_decal.cso', 'puddles/puddle_ssr.hlsl', ['PSSR_ADAPTIVE=1', 'PSSR_DECAL=1']],
     ['reflections/object_ssr.cso', 'reflections/object_ssr.hlsl'],

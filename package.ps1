@@ -75,6 +75,7 @@ foreach ($t in $closure) { Copy-Item -LiteralPath (Join-Path $toolDir $t) -Desti
 $repl = Join-Path $root 'engine\replacements'
 $helpers = @(
   'gi\gi_ambient.cso', 'gi\gi_ambient_decal.cso', 'gi\gi_only.cso', 'gi\gi_only_decal.cso', 'gi\gtao_gi.cso', 'gi\gtao_gi_far.cso',
+  'gi\gtao_ao.cso', 'gi\gtao_ao_far.cso',
   'puddles\puddle_ssr.cso', 'puddles\puddle_ssr_decal.cso', 'reflections\object_ssr.cso', 'smoke\smoke_glow.cso',
   'smoke\smoke_shade.cso', 'smoke\smoke_shade_off.cso',
   'sssr\gbuffer.cso', 'sssr\object_sssr.cso', 'sssr\object_sssr_glow.cso',

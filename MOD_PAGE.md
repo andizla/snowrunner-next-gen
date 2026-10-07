@@ -1,6 +1,6 @@
 # SnowRunner Next Gen
 
-Graphics modules for SnowRunner, installed from one window: sharper shadows with straight edges, ground truth ambient occlusion and bounce light, reflections on paint, glass, water and wet ground, volumetric fog with sun shafts, more of the game's weather, the night sky with real stars, and a photo colour grade. Tick the modules you want and click Apply. Restore puts the game's own files back.
+Graphics modules for SnowRunner, installed from one window: sharper shadows with straight edges, ground truth ambient occlusion and bounce light, reflections on paint, glass, water and wet ground, volumetric fog, more of the game's weather, the night sky with real stars, and a photo colour grade. Tick the modules you want and click Apply. Restore puts the game's own files back.
 
 It works without ReShade or any other loader. The shaders go into the game's own shader cache, and SnowRunner Shadows is one small DLL next to the game.
 
@@ -20,7 +20,7 @@ Light and shadow: SnowRunner Shadows with a larger shadow texture if you want on
 
 Reflections and water: paint, glass and chrome mirror the scene, headlights show in them at night, water and wet ground mirror banks, trees and trucks, deeper water keeps its own colour, and river waves light up against a low sun.
 
-Atmosphere and image: volumetric fog with a glow toward the sun and sun shafts, moving cloud shadows and more weather on every map, smoke that glows against the sun with a lit and a shaded side, sharper particles, the night sky from NASA's star map with brighter stars, a tonemap with more contrast, a bloom without haze, and the photo grade.
+Atmosphere and image: volumetric fog with a glow toward the sun, moving cloud shadows and more weather on every map, smoke that glows against the sun with a lit and a shaded side, sharper particles, the night sky from NASA's star map with brighter stars, a tonemap with more contrast, a bloom without haze, and the photo grade.
 
 Scenery, off by default: scenery detail that pops in less, and grass drawn farther out.
 
@@ -41,7 +41,7 @@ The program keeps a copy of each file before its first change and builds from th
 
 ## Known
 
-The fog's sun shafts are experimental: with a low sun they also show over the truck and other things close to the camera. A fix is planned for a later version.
+The fog's sun shafts are off by default and can be switched on on the Volumetric fog card. They are experimental: with a low sun they also show over the truck and other things close to the camera.
 
 ## If something goes wrong
 

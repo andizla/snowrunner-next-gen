@@ -13,13 +13,15 @@
 // The work is done by the project's own tools (engine\tools: fidelity_bundle.js builds shader.pak, pak_shader_patch.js
 // puts it back, lod_patch.js does shared.pak and the grass, the fill light and the stars in initial.pak, lut_grade.js
 // the colour LUTs, the particle textures and the night sky in boot.pak, gfx_logos.js the logos in gfx.pak); SnowRunner
-// Shadows (hid.dll and its ini in Sources\Bin) is copied in and out here. Every file is built from the game's
+// Shadows (hid.dll and its ini next to SnowRunner.exe) is copied in and out here. Every file is built from the game's
 // original, kept in a state folder outside the game (one per game folder).
 // usage: node ngen.js status  --game <folder>
 //        node ngen.js apply   --game <folder> --selection <file.json> [--adopt | --leave]
 //        node ngen.js restore --game <folder> [--adopt | --leave]
 // selection: { "shader": [fidelity_bundle.js module names], "shadows": null | { "factor": "1", "slopeBias": "1", "aoHalf": "1" },
-//              "scenery": null | "nature" | "all", "grass": null | "3" | "2", "fill": null | "0.7" | "0.55" | "0.85",
+//              "scenery": null | "nature" | "all", and with it "sceneryHide": null | "plants" | "all" (nothing of those hidden
+//              by distance) and "sceneryShadows": null | "plants" | "all" (each of those casts its shadow at any distance),
+//              "grass": null | "3" | "2", "fill": null | "0.7" | "0.55" | "0.85",
 //              "grade": null | "1" | "0.5", "particles": null | "1", "sky": null | "1", "stars": null | "3" | "2",
 //              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen),
 //              "logos": null | "1" }
@@ -117,19 +119,38 @@ function sha256File(file)
     return h.digest('hex');
 }
 
-// the game's files: the paks (preload\paks\client, or en_us\... where a store version keeps the whole game in that
-// folder) and Sources\Bin beside preload when it holds SnowRunner.exe (SnowRunner Shadows needs it). home is the folder
-// that holds preload: the folder above an en_us and that en_us itself are one game
+// Where a game folder keeps its paks, in the order they are tried: Steam (preload\paks\client), Epic Games (the whole
+// game one folder down, in en_us), and the Xbox app's version (Microsoft Store, Game Pass: the game in <title>\Content,
+// its paks under paks, SnowRunner.exe next to that folder), seen from Content and from the title's folder. Last, the
+// pak folder itself.
+const PAK_FOLDERS = [['preload', 'paks', 'client'], ['en_us', 'preload', 'paks', 'client'], ['paks', 'client'], ['Content', 'paks', 'client'],
+    ['paks'], ['Content', 'paks'], []];
+const hasExe = (dir) => fs.existsSync(path.join(dir, 'SnowRunner.exe'));
+
+// the folder that stands for the install, whichever folder of it the engine was given: the one that holds preload
+// (the folder above an en_us and that en_us itself are one game); for another layout the nearest folder above the paks
+// that has SnowRunner.exe, in it or in its Sources\Bin; without an exe anywhere near, the folder above the paks
+function homeOf(paks)
+{
+    const up = (n) => path.resolve(paks, ...Array(n).fill('..'));
+    const names = [paks, up(1), up(2)].map((p) => path.basename(p).toLowerCase());
+    if (names[0] === 'client' && names[1] === 'paks' && names[2] === 'preload') return up(3);
+    for (let n = 1; n <= 3; n++) if (hasExe(up(n)) || hasExe(path.join(up(n), 'Sources', 'Bin'))) return up(n);
+    return up(names[0] === 'client' && names[1] === 'paks' ? 2 : 1);
+}
+
+// the game's files: the paks, and the folder with SnowRunner.exe (bin: Sources\Bin beside preload, or the game's own
+// folder), which SnowRunner Shadows needs. flat = the exe lies in the game's folder itself, as the Xbox app keeps it
 function gameFiles(game)
 {
     const root = path.resolve(game);
-    const paks = [path.join(root, 'preload', 'paks', 'client'), path.join(root, 'en_us', 'preload', 'paks', 'client')]
-        .find((p) => fs.existsSync(path.join(p, 'shader.pak')));
-    if (!paks) throw new EngineError('missing', 'No SnowRunner in ' + root + ': preload\\paks\\client\\shader.pak is missing.');
-    const home = path.resolve(paks, '..', '..', '..');
-    const bin = [path.join(home, 'Sources', 'Bin'), path.join(root, 'Sources', 'Bin')].find((p) => fs.existsSync(path.join(p, 'SnowRunner.exe'))) || null;
+    const paks = PAK_FOLDERS.map((parts) => path.join(root, ...parts)).find((p) => fs.existsSync(path.join(p, 'shader.pak')));
+    if (!paks)
+        throw new EngineError('missing', 'No SnowRunner in ' + root + ': shader.pak was not found (looked in preload\\paks\\client, en_us\\preload\\paks\\client, paks\\client and Content\\paks\\client).');
+    const home = homeOf(paks);
+    const bin = [path.join(home, 'Sources', 'Bin'), home, path.join(root, 'Sources', 'Bin'), root].find(hasExe) || null;
     return {
-        root, home, paks, bin,
+        root, home, paks, bin, flat: !!bin && path.basename(bin).toLowerCase() !== 'bin',
         shader: path.join(paks, 'shader.pak'), shared: path.join(paks, 'shared.pak'), initial: path.join(paks, 'initial.pak'), boot: path.join(paks, 'boot.pak'),
         gfx: path.join(paks, 'gfx.pak'),
     };
@@ -146,16 +167,75 @@ function stateDir(g)
     const keeps = (dir) => { try { return fs.readdirSync(dir).some((f) => /\.orig$/i.test(f)); } catch (e) { return false; } };
     const own = named(g.home);
     const earlier = [g.root].concat(path.basename(g.home).toLowerCase() === 'en_us' ? [path.dirname(g.home)] : []).map(named).filter((d) => d !== own);
-    const dir = keeps(own) ? own : earlier.find(keeps) || own;
+    let dir = keeps(own) ? own : earlier.find(keeps) || null;
+    if (!dir)
+    {
+        // the game folder was moved or renamed: the state it had takes the new name; when that fails it is used where it is
+        const moved = movedState(g, own, keeps);
+        if (moved)
+        {
+            dir = moved;
+            try
+            {
+                if (fs.existsSync(own)) { try { fs.unlinkSync(path.join(own, 'game.txt')); } catch (e) { /* no label there */ } fs.rmdirSync(own); }
+                fs.renameSync(moved, own);
+                fs.writeFileSync(path.join(own, 'game.txt'), g.home + '\r\n');
+                dir = own;
+            }
+            catch (e) { /* left under its old name */ }
+            logLine('this game folder was moved: its state folder ' + path.basename(moved) + (dir === own ? ' is now ' + path.basename(own) : ' is used under its old name'));
+        }
+    }
+    dir = dir || own;
     fs.mkdirSync(dir, { recursive: true });
     const label = path.join(dir, 'game.txt');
     if (!fs.existsSync(label)) fs.writeFileSync(label, g.home + '\r\n');
     return dir;
 }
 
+// A game folder that was moved or renamed (a Steam library put on another drive) has another name among the state
+// folders, so its state would be empty while its paks still hold Next Gen's changes. The state it had is the folder
+// whose notes describe the paks as the note in the game folder does (each pak's directory hash; shader.pak by the
+// file's own hash), whose kept originals cover every pak that note names, and whose own game folder is gone (a game
+// that still stands there is another install, a copy of this one say, and keeps its state).
+const PAK_NOTES = { 'shared.pak': 'shared.pak.lod.json', 'initial.pak': 'initial.pak.grass.json', 'boot.pak': 'boot.pak.grade.json', 'gfx.pak': 'gfx.pak.logos.json' };
+function movedState(g, own, keeps)
+{
+    const json = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return null; } };
+    const note = json(path.join(g.paks, NOTE_NAME)), files = note && typeof note.files === 'object' && note.files ? note.files : {};
+    if (!Object.keys(files).length) return null;
+    const games = path.join(stateRoot(), 'games');
+    let dirs = [];
+    try { dirs = fs.readdirSync(games).map((d) => path.join(games, d)).filter((d) => d !== own && keeps(d)); } catch (e) { return null; }
+    let shaderHash = null;
+    for (const dir of dirs)
+    {
+        let was = '';
+        try { was = fs.readFileSync(path.join(dir, 'game.txt'), 'utf8').trim(); } catch (e) { /* no label: judged by its notes alone */ }
+        if (was) { try { gameFiles(was); continue; } catch (e) { /* no game there any more */ } }
+        // a tool's note names the build it wrote last, and under "pending" one it was writing when it was stopped
+        const names = (kept, key, hash) => !!kept && (kept[key] === hash || (!!kept.pending && kept.pending[key] === hash));
+        const same = Object.keys(files).every((name) =>
+        {
+            if (!fs.existsSync(path.join(dir, name + '.orig'))) return false;
+            if (name === 'shader.pak')
+            {
+                const kept = json(path.join(dir, 'shader.pak.look.json'));
+                if (!kept) return false;
+                if (shaderHash === null) shaderHash = sha256File(g.shader);
+                return names(kept, 'patchedSha256', shaderHash);
+            }
+            return !!PAK_NOTES[name] && names(json(path.join(dir, PAK_NOTES[name])), 'cdSha256', files[name]);
+        });
+        if (same) return dir;
+    }
+    return null;
+}
+
 // every pak a tool may write is named here: a tool left to its own default would reach for the Steam install
 const toolEnv = (g, state) => Object.assign({}, process.env,
-    { SR_SHADER_PAK: g.shader, SR_SHARED_PAK: g.shared, SR_INITIAL_PAK: g.initial, SR_BOOT_PAK: g.boot, SR_GFX_PAK: g.gfx, SR_STATE_DIR: state, LOD_GRASS: 'leave' },
+    { SR_SHADER_PAK: g.shader, SR_SHARED_PAK: g.shared, SR_INITIAL_PAK: g.initial, SR_BOOT_PAK: g.boot, SR_GFX_PAK: g.gfx, SR_STATE_DIR: state, LOD_GRASS: 'leave',
+        SR_BIN_DIR: g.bin || '' },   // where SnowRunner.exe is: the shader build puts SnowRunner Shadows' stock twins table there
     ownDump || { SR_DUMP_DIR: path.join(state, 'dump'), SR_SETS_DIR: path.join(state, 'sets') });
 
 // the notes of the last apply: { selection, parts, date }
@@ -262,20 +342,22 @@ function gameRunning(g)
 {
     const real = (p) => { try { return fs.realpathSync.native(p).toLowerCase(); } catch (e) { return path.resolve(p).toLowerCase(); } };
     const ours = real(path.join(g.bin || path.join(g.home, 'Sources', 'Bin'), 'SnowRunner.exe'));
+    // Windows' own two programs by their full paths: nothing of that name on PATH or next to the engine is run instead
+    const system = (...parts) => path.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', ...parts);
     try
     {
-        const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
+        const out = execFileSync(system('WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command',
             'Get-Process SnowRunner -ErrorAction SilentlyContinue | ForEach-Object { "" + $_.Id + "|" + $_.Path }'], { encoding: 'utf8', windowsHide: true });
         return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).some((l) => { const p = l.slice(l.indexOf('|') + 1).trim(); return !p || real(p) === ours; });
     }
     catch (e)
     {
-        try { return /SnowRunner\.exe/i.test(execFileSync('tasklist', ['/FI', 'IMAGENAME eq SnowRunner.exe', '/NH'], { encoding: 'utf8', windowsHide: true })); }
+        try { return /SnowRunner\.exe/i.test(execFileSync(system('tasklist.exe'), ['/FI', 'IMAGENAME eq SnowRunner.exe', '/NH'], { encoding: 'utf8', windowsHide: true })); }
         catch (e2) { return true; }
     }
 }
 
-// ---- SnowRunner Shadows: hid.dll in Sources\Bin (another mod's hid.dll is kept as hid_chain.dll, which ours loads)
+// ---- SnowRunner Shadows: hid.dll next to SnowRunner.exe (another mod's hid.dll is kept as hid_chain.dll, which ours loads)
 
 const isOurs = (data) => data.indexOf('SnowRunner Shadows', 0, 'latin1') >= 0;
 
@@ -315,30 +397,45 @@ function dllStatus(g)
     return { state: 'ours', current, factor: ini.Factor || '2', slopeBias: ini.SlopeBias || '1', aoHalf: ini.AOHalf || '1' };
 }
 
-function installDll(g, want)
+const NO_EXE = 'SnowRunner.exe was not found in this game folder (looked in Sources\\Bin and next to the paks\' folder): SnowRunner Shadows was left out.';
+const TWO_HIDS = 'The folder with SnowRunner.exe has another mod\'s hid.dll and a hid_chain.dll already: SnowRunner Shadows cannot go in beside them.';
+
+function installDll(g, state, want)
 {
-    if (!g.bin) { warn('No Sources\\Bin with SnowRunner.exe in this game folder: SnowRunner Shadows was left out.'); return; }
+    if (!g.bin) { warn(NO_EXE); return; }
     if (!fs.existsSync(config.dll)) throw new EngineError('failed', 'SnowRunner Shadows (hid.dll) is missing from the installer: ' + config.dll);
     const target = path.join(g.bin, 'hid.dll'), chain = path.join(g.bin, 'hid_chain.dll');
     const source = fs.readFileSync(config.dll);
-    for (const old of ['ShadowScale.addon64', 'ShadowScale.ini'])   // the older ReShade add-on would scale a second time
+    // the older ReShade add-on would scale a second time: its files move out of the game, into the state folder
+    for (const old of ['ShadowScale.addon64', 'ShadowScale.ini'])
     {
         const f = path.join(g.bin, old);
-        if (fs.existsSync(f)) { fs.unlinkSync(f); emit({ type: 'log', text: 'removed ' + old + ' (the older add-on route)' }); }
+        if (!fs.existsSync(f)) continue;
+        const kept = path.join(state, 'removed');
+        fs.mkdirSync(kept, { recursive: true });
+        fs.copyFileSync(f, path.join(kept, old));
+        fs.unlinkSync(f);
+        emit({ type: 'log', text: 'moved ' + old + ' (the older add-on route) out of the game, into ' + kept });
     }
-    if (fs.existsSync(target) && !isOurs(fs.readFileSync(target)))
-    {
-        if (fs.existsSync(chain)) throw new EngineError('failed', 'Sources\\Bin has another mod\'s hid.dll and a hid_chain.dll already: SnowRunner Shadows cannot go in beside them.');
-        fs.renameSync(target, chain);
-        emit({ type: 'log', text: 'the other mod\'s hid.dll is kept as hid_chain.dll and still loaded' });
-    }
-    if (!fs.existsSync(target) || !fs.readFileSync(target).equals(source))
+    const foreign = fs.existsSync(target) && !isOurs(fs.readFileSync(target));
+    if (foreign && fs.existsSync(chain)) throw new EngineError('failed', TWO_HIDS);
+    if (foreign || !fs.existsSync(target) || !fs.readFileSync(target).equals(source))
     {
         step('Installing SnowRunner Shadows (hid.dll)');
+        // ours is written and read back first; only then the other mod's hid.dll moves aside, and it moves back should
+        // ours not take its place
         const tmp = target + '.tmp';
         fs.writeFileSync(tmp, source);
         if (!fs.readFileSync(tmp).equals(source)) { fs.unlinkSync(tmp); throw new EngineError('failed', 'hid.dll did not read back as written'); }
-        fs.renameSync(tmp, target);
+        if (foreign) fs.renameSync(target, chain);
+        try { fs.renameSync(tmp, target); }
+        catch (e)
+        {
+            if (foreign) { try { fs.renameSync(chain, target); } catch (e2) { /* it stays as hid_chain.dll */ } }
+            try { fs.unlinkSync(tmp); } catch (e2) { /* left beside it */ }
+            throw new EngineError('failed', 'hid.dll could not be put in place (' + (e.code || e.message) + ').');
+        }
+        if (foreign) emit({ type: 'log', text: 'the other mod\'s hid.dll is kept as hid_chain.dll and still loaded' });
     }
     const ini = path.join(g.bin, 'SnowRunnerShadows.ini'), before = readIni(ini);
     const set = { Factor: want.factor, SlopeBias: want.slopeBias, AOHalf: want.aoHalf };
@@ -354,14 +451,20 @@ function installDll(g, want)
 function removeDll(g)
 {
     if (!g.bin) return;
-    const target = path.join(g.bin, 'hid.dll'), chain = path.join(g.bin, 'hid_chain.dll');
-    if (!fs.existsSync(target)) return;
-    if (!isOurs(fs.readFileSync(target))) { warn('The hid.dll in Sources\\Bin belongs to another mod: left as it is.'); return; }
+    const target = path.join(g.bin, 'hid.dll'), chain = path.join(g.bin, 'hid_chain.dll'), ini = path.join(g.bin, 'SnowRunnerShadows.ini');
+    // the other mod's hid.dll, kept as hid_chain.dll while ours loaded it, takes its own name again
+    const back = () => { if (fs.existsSync(chain) && !fs.existsSync(target)) { fs.renameSync(chain, target); emit({ type: 'log', text: 'the other mod\'s hid.dll is back as hid.dll' }); } };
+    if (!fs.existsSync(target))   // ours is gone already (taken out by hand, or by a virus scanner): what it left goes too
+    {
+        if (fs.existsSync(ini)) fs.unlinkSync(ini);
+        back();
+        return;
+    }
+    if (!isOurs(fs.readFileSync(target))) { warn('The hid.dll next to SnowRunner.exe belongs to another mod: left as it is.'); return; }
     step('Taking SnowRunner Shadows out');
     fs.unlinkSync(target);
-    const ini = path.join(g.bin, 'SnowRunnerShadows.ini');
     if (fs.existsSync(ini)) fs.unlinkSync(ini);
-    if (fs.existsSync(chain)) { fs.renameSync(chain, target); emit({ type: 'log', text: 'the other mod\'s hid.dll is back as hid.dll' }); }
+    back();
 }
 
 // the stock twins table the bundle writes for SnowRunner Shadows' F8 switch (about 200 MB): only while shader.pak is ours
@@ -375,7 +478,17 @@ function removeStock(g)
 
 async function readStatus(g, state)
 {
-    return Object.assign({ game: g.root, running: gameRunning(g) }, await readPaks(g, state), { dll: dllStatus(g), orphaned: orphaned(g, state), stateDir: state });
+    const paks = await readPaks(g, state);
+    return Object.assign({ game: g.root, running: gameRunning(g) }, paks, { dll: dllStatus(g), orphaned: orphaned(g, state), outdated: outdated(state, paks), stateDir: state });
+}
+// the installed parts that this installer carries in another build (a newer installer over an older install): Apply
+// builds them again even when the selection is the same, and the window says so
+function outdated(state, s)
+{
+    const notes = lastNotes(state);
+    const holds = { shader: s.shader.state === 'ours', scenery: s.scenery === 'nature' || s.scenery === 'all', initial: s.initialPak === 'ours',
+        grade: s.grade.state === 'ours', particles: s.particles.state === 'ours', sky: s.sky.state === 'ours', logos: s.logos.state === 'ours' };
+    return Object.keys(holds).filter((part) => holds[part] && !sameCode(notes, part));
 }
 // what the paks hold, as the tools answer it
 async function readPaks(g, state)
@@ -390,10 +503,12 @@ async function readPaks(g, state)
         shader = { state: known ? 'stock' : fs.existsSync(path.join(state, 'shader.pak.orig')) ? 'changed' : 'unknown', modules: [] };
     }
     else shader = { state: 'ours', modules: said.split(',').filter(Boolean) };
-    const scenery = fs.existsSync(g.shared) ? await answer('lod_patch.js', ['status'], env) : 'missing';   // nature, all, vanilla, changed
+    // scenery: nature, all, vanilla, changed; its two extras: off, plants or all (off for anything but this installer's build)
+    const lod = fs.existsSync(g.shared) ? JSON.parse(await answer('lod_patch.js', ['status-json'], env)) : { state: 'missing', hide: 'off', shadows: 'off' };
+    const scenery = lod.state, sceneryHide = lod.hide, sceneryShadows = lod.shadows;
     const { grass, fill, stars, weather, initialPak } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
     const sky = await readSky(g, env), logos = await readLogos(g, env);
-    return { shader, scenery, grass, fill, stars, weather, initialPak, grade, particles, sky, logos };
+    return { shader, scenery, sceneryHide, sceneryShadows, grass, fill, stars, weather, initialPak, grade, particles, sky, logos };
 }
 // initial.pak: the grass, the fill light, the stars and the weather, four parts of one build, each { state, factor }
 // (the weather: { state, parts }, a comma list); initialPak is the file's own state (ours also when it holds none of
@@ -508,6 +623,9 @@ function orphanText(files, restoring)
 }
 
 // ---- apply and restore
+
+// one of the scenery set's two extras as the selection names it (null, "plants", "all") in lod_patch.js's words
+const extra = (v) => (v === 'plants' || v === 'all' ? v : 'off');
 
 // the untouched shader.pak kept as the original, before the first build (and after a game update, when asked): the copy
 // is made and checked first, then an earlier original moves aside under a dated name no other is lost to, and the copy
@@ -644,11 +762,15 @@ const unlockState = (file) => { try { fs.unlinkSync(file); } catch (e) { /* noth
 // stops here instead, with nothing changed
 function preflight(g, needDll)
 {
+    // Windows refuses the change: the Xbox app's version, and a game under Program Files on some machines, let only an
+    // administrator change the game's files
+    const asAdmin = (e) => (e.code === 'EPERM' || e.code === 'EACCES'
+        ? ' Windows lets only an administrator change these files: close this program, right click SnowRunnerNextGen.exe and choose Run as administrator.' : '');
     const probe = (dir) =>
     {
         const f = path.join(dir, 'SnowRunnerNextGen.write-test');
         try { fs.writeFileSync(f, 'x'); fs.unlinkSync(f); }
-        catch (e) { throw new EngineError('failed', 'The folder ' + dir + ' cannot be written (' + e.code + '): run the program as a user who can write the game folder.'); }
+        catch (e) { throw new EngineError('failed', 'The folder ' + dir + ' cannot be written (' + e.code + ').' + (asAdmin(e) || ' Run the program as a user who can write the game folder.')); }
     };
     probe(g.paks);
     if (g.bin) probe(g.bin);
@@ -656,14 +778,20 @@ function preflight(g, needDll)
     {
         const file = g[name];
         if (!fs.existsSync(file)) continue;
+        let readOnly = false;
+        try { readOnly = !(fs.statSync(file).mode & 0o200); } catch (e) { /* the open below says why */ }
         try { fs.closeSync(fs.openSync(file, 'r+')); }
-        catch (e) { throw new EngineError('failed', path.basename(file) + ' cannot be written (' + e.code + '): it is read-only or in use by another program.'); }
+        catch (e)
+        {
+            throw new EngineError('failed', path.basename(file) + ' cannot be written (' + e.code + ')' +
+                (readOnly ? ': it is read-only.' : e.code === 'EBUSY' ? ': it is in use by another program.' : '.' + (asAdmin(e) || ' It is read-only or in use by another program.')));
+        }
     }
     if (needDll && g.bin)
     {
         if (!fs.existsSync(config.dll)) throw new EngineError('failed', 'SnowRunner Shadows (hid.dll) is missing from the installer: ' + config.dll + ' (an antivirus may have removed it).');
         const target = path.join(g.bin, 'hid.dll'), chain = path.join(g.bin, 'hid_chain.dll');
-        if (fs.existsSync(target) && fs.existsSync(chain) && !isOurs(fs.readFileSync(target))) throw new EngineError('failed', 'Sources\\Bin has another mod\'s hid.dll and a hid_chain.dll already: SnowRunner Shadows cannot go in beside them.');
+        if (fs.existsSync(target) && fs.existsSync(chain) && !isOurs(fs.readFileSync(target))) throw new EngineError('failed', TWO_HIDS);
     }
 }
 
@@ -687,6 +815,8 @@ async function apply(g, state, sel, adopt, leave)
     if (sel.weather && (!weather || !/^[a-z,]+$/.test(String(sel.weather)))) throw new EngineError('usage', 'weather parts ' + sel.weather);
     if (!sel.shadows && shader.some((m) => NEED_DLL.includes(m)))
         warn('Bounce light and the reflections read the scene from SnowRunner Shadows: without it they change nothing.');
+    if (sel.shadows && g.flat)
+        warn('This game folder keeps SnowRunner.exe in the game\'s own folder, as the Xbox app\'s version does (Microsoft Store, Game Pass). SnowRunner Shadows was made on the Steam version and is not tested there: if the game does not start or looks wrong, untick SnowRunner Shadows and Apply again.');
     step('Reading what is installed');
     const now = await readStatus(g, state);
     if (now.orphaned.length) throw new EngineError('orphaned', orphanText(now.orphaned, false), { files: now.orphaned });
@@ -719,7 +849,8 @@ async function apply(g, state, sel, adopt, leave)
     {
         keepShaderOriginal(g, state, now, adopt);
         const gone = ownDump ? [] : await prepare(state, shader);
-        const build = shader.filter((m) => !gone.includes(m));
+        // the sun shafts are a build of the fog: without the fog they go too
+        const build = shader.filter((m) => !gone.includes(m) && !(m === 'fogsun' && gone.includes('fog')));
         if (build.length)
         {
             step('Building shader.pak with ' + build.length + ' modules (about a minute)');
@@ -729,7 +860,7 @@ async function apply(g, state, sel, adopt, leave)
     }
 
     // SnowRunner Shadows
-    if (sel.shadows) installDll(g, { factor: String(sel.shadows.factor || '1'), slopeBias: String(sel.shadows.slopeBias == null ? '1' : sel.shadows.slopeBias),
+    if (sel.shadows) installDll(g, state, { factor: String(sel.shadows.factor || '1'), slopeBias: String(sel.shadows.slopeBias == null ? '1' : sel.shadows.slopeBias),
         aoHalf: String(sel.shadows.aoHalf == null ? '1' : sel.shadows.aoHalf) });
     else removeDll(g);
 
@@ -739,7 +870,8 @@ async function apply(g, state, sel, adopt, leave)
     {
         if (now.scenery === 'nature' || now.scenery === 'all') { step('Putting the original shared.pak back (2 GB)'); await must('lod_patch.js', ['restore'], env); }
     }
-    else if (now.scenery === sel.scenery && sameCode(notes, 'scenery')) emit({ type: 'log', text: 'shared.pak already has the ' + sel.scenery + ' set' });
+    else if (now.scenery === sel.scenery && now.sceneryHide === extra(sel.sceneryHide) && now.sceneryShadows === extra(sel.sceneryShadows) && sameCode(notes, 'scenery'))
+        emit({ type: 'log', text: 'shared.pak already has the ' + sel.scenery + ' set' });
     else if (now.scenery === 'changed' && leave) warn('shared.pak is not the original Next Gen knows (another mod or a game update): left as it is, so scenery detail was left out.');
     else
     {
@@ -748,8 +880,11 @@ async function apply(g, state, sel, adopt, leave)
             step('Keeping shared.pak as it is now as the original (2 GB)');
             await must('lod_patch.js', ['backup'], env);
         }
-        step('Writing shared.pak: ' + (sel.scenery === 'all' ? 'every mesh' : 'rocks, trees and bushes') + ' in full detail farther out (2 GB, a minute or two)');
-        await must('lod_patch.js', ['install', sel.scenery], env);
+        const hide = extra(sel.sceneryHide), shadows = extra(sel.sceneryShadows), which = (v) => (v === 'all' ? 'nothing' : 'no plant');
+        step('Writing shared.pak: ' + (sel.scenery === 'all' ? 'every mesh' : 'rocks, trees and bushes') + ' in full detail farther out' +
+            (hide !== 'off' ? ', ' + which(hide) + ' hidden by distance' : '') + (shadows !== 'off' ? ', ' + (shadows === 'all' ? 'everything' : 'every plant') + ' with its shadow' : '') +
+            ' (2 GB, a minute or two)');
+        await must('lod_patch.js', ['install', sel.scenery].concat(hide !== 'off' ? ['hide=' + hide] : [], shadows !== 'off' ? ['shadows=' + shadows] : []), env);
     }
 
     // grass reach (initial.pak)
@@ -910,7 +1045,7 @@ async function main()
         checkPackage();
         g = gameFiles(game);
         state = stateDir(g);
-        logLine('paks in ' + g.paks + '; SnowRunner.exe ' + (g.bin ? 'in ' + g.bin : 'not found in ' + path.join(g.home, 'Sources', 'Bin')) + '; state folder ' + state);
+        logLine('paks in ' + g.paks + '; SnowRunner.exe ' + (g.bin ? 'in ' + g.bin : 'not found in ' + path.join(g.home, 'Sources', 'Bin') + ' or in ' + g.home) + '; state folder ' + state);
         if (cmd === 'status') emit(Object.assign({ type: 'status' }, await readStatus(g, state)));
         else if (cmd === 'restore') { lock = lockState(state); await restore(g, state, args.includes('--adopt'), args.includes('--leave')); }
         else

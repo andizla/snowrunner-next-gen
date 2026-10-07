@@ -70,7 +70,8 @@ namespace SnowRunnerNextGen
             noteTimer.Interval = 6000;
             noteTimer.Tick += delegate { noteTimer.Stop(); ShowCount(); };
 
-            header.Folder = gameFolder != null && GameFinder.IsGame(gameFolder) ? GameFinder.OnDisk(gameFolder) : FindGame();
+            // the folder on the command line, else the one picked last, else the first install found
+            header.Folder = gameFolder != null && GameFinder.IsGame(gameFolder) ? GameFinder.OnDisk(gameFolder) : Engine.RememberedGame() ?? FindGame();
             ShowCount();
             ResumeLayout(false);
         }
@@ -179,8 +180,9 @@ namespace SnowRunnerNextGen
             int on = 0;
             foreach (Card card in list.Cards) if (card.On) on++;
             string text = on + " of " + list.Cards.Count + " selected";
+            // (a newer installer over an older install builds its parts again: the same ticks are not "as installed" then)
             if (installed != null && !Problem(installed))
-                text += SameAsInstalled() ? "  ·  as installed" : "  ·  Apply to change the game";
+                text += !SameAsInstalled() ? "  ·  Apply to change the game" : installed.Outdated.Count > 0 ? "  ·  Apply to update the game to this version" : "  ·  as installed";
             bar.Say(text, Theme.Muted);
             bool can = header.Folder != null && Engine.Missing() == null;
             bar.Apply.Enabled = can;
@@ -244,9 +246,13 @@ namespace SnowRunnerNextGen
                         if (s.Shader == "ours" || s.Shader == "stock") card.On = s.Modules.Contains("gtao");
                         if (s.Dll == "ours") Pick(card, 0, s.AoHalf == "0" ? "full" : "half");   // the DLL's own default: half
                         break;
+                    case "fog":
+                        if (s.Shader == "ours" || s.Shader == "stock") card.On = s.Modules.Contains("fog");
+                        if (card.On) Pick(card, 0, s.Modules.Contains("fogsun") ? "fogsun" : "");
+                        break;
                     case "scenery":
                         card.On = s.Scenery == "nature" || s.Scenery == "all";
-                        if (card.On) Pick(card, 0, s.Scenery);
+                        if (card.On) { Pick(card, 0, s.Scenery); Pick(card, 1, s.SceneryHide == "off" ? "" : s.SceneryHide); Pick(card, 2, s.SceneryShadows == "off" ? "" : s.SceneryShadows); }
                         break;
                     case "grass":
                         card.On = s.Grass == "ours";
@@ -310,7 +316,8 @@ namespace SnowRunnerNextGen
         Dictionary<string, object> Selection()
         {
             List<object> shader = new List<object>();
-            object shadows = null, scenery = null, grass = null, fill = null, grade = null, particles = null, stars = null, sky = null, logos = null, weather = null;
+            object shadows = null, scenery = null, sceneryHide = null, sceneryShadows = null, grass = null, fill = null, grade = null, particles = null, stars = null, sky = null, logos = null,
+                weather = null;
             foreach (Card card in list.Cards)
             {
                 if (!card.On) continue;
@@ -329,7 +336,15 @@ namespace SnowRunnerNextGen
                         shader.Add(Key(card, 0));
                         if (Key(card, 0) == "revec" && Key(card, 1) == "seam") shader.Add("seam");   // the seam dither needs revec
                         break;
-                    case "scenery": scenery = Key(card, 0); break;
+                    case "fog":                                        // with the sun shafts picked, their build of the fog as well
+                        shader.Add("fog");
+                        if (Key(card, 0).Length > 0) shader.Add(Key(card, 0));
+                        break;
+                    case "scenery":                                    // the set, and its two extras when picked
+                        scenery = Key(card, 0);
+                        if (Key(card, 1).Length > 0) sceneryHide = Key(card, 1);
+                        if (Key(card, 2).Length > 0) sceneryShadows = Key(card, 2);
+                        break;
                     case "grass": grass = Key(card, 0); break;
                     case "fill": fill = Key(card, 0); break;
                     case "grade": grade = Key(card, 0); break;
@@ -353,6 +368,8 @@ namespace SnowRunnerNextGen
             selection["shader"] = shader;
             selection["shadows"] = shadows;
             selection["scenery"] = scenery;
+            selection["sceneryHide"] = sceneryHide;
+            selection["sceneryShadows"] = sceneryShadows;
             selection["grass"] = grass;
             selection["fill"] = fill;
             selection["grade"] = grade;
@@ -372,11 +389,12 @@ namespace SnowRunnerNextGen
             foreach (object m in (List<object>)sel["shader"]) shader.Add((string)m);
             Dictionary<string, object> dll = sel["shadows"] as Dictionary<string, object>;
             string mine = Signature(shader, dll == null ? null : (string)dll["factor"], dll == null ? null : (string)dll["slopeBias"], dll == null ? null : (string)dll["aoHalf"],
-                (string)sel["scenery"], (string)sel["grass"], (string)sel["fill"], (string)sel["grade"], (string)sel["particles"], (string)sel["stars"], (string)sel["sky"], (string)sel["logos"],
-                (string)sel["weather"]);
+                Scenery((string)sel["scenery"], (string)sel["sceneryHide"], (string)sel["sceneryShadows"]), (string)sel["grass"], (string)sel["fill"], (string)sel["grade"],
+                (string)sel["particles"], (string)sel["stars"], (string)sel["sky"], (string)sel["logos"], (string)sel["weather"]);
             GameStatus s = installed;
             string theirs = Signature(s.Shader == "ours" ? s.Modules : new List<string>(), s.Dll == "ours" ? s.Factor : null, s.Dll == "ours" ? s.SlopeBias : null, s.Dll == "ours" ? s.AoHalf : null,
-                s.Scenery == "nature" || s.Scenery == "all" ? s.Scenery : null, s.Grass == "ours" ? s.GrassFactor : null, s.Fill == "ours" ? s.FillFactor : null,
+                s.Scenery == "nature" || s.Scenery == "all" ? Scenery(s.Scenery, s.SceneryHide == "off" ? null : s.SceneryHide, s.SceneryShadows == "off" ? null : s.SceneryShadows) : null,
+                s.Grass == "ours" ? s.GrassFactor : null, s.Fill == "ours" ? s.FillFactor : null,
                 s.Grade == "ours" ? s.GradeStrength : null, s.Particles == "ours" ? "1" : null, s.Stars == "ours" ? s.StarsFactor : null, s.Sky == "ours" ? "1" : null, s.Logos == "ours" ? "1" : null,
                 s.Weather == "ours" ? s.WeatherParts : null);
             return mine == theirs;
@@ -392,6 +410,12 @@ namespace SnowRunnerNextGen
             return string.Join(",", sorted.ToArray()) + "|" + (factor == null ? "-" : Number(factor) + "/" + slopeBias + "/" + (aoHalf ?? "1")) + "|" + (scenery ?? "-") + "|" + (grass == null ? "-" : Number(grass))
                 + "|" + (fill == null ? "-" : Number(fill)) + "|" + (grade == null ? "-" : Number(grade)) + "|" + (particles ?? "-") + "|" + (stars == null ? "-" : Number(stars))
                 + "|" + (sky ?? "-") + "|" + (logos ?? "-") + "|" + string.Join(",", parts.ToArray());
+        }
+
+        // the scenery set with its two extras as one word for the signature
+        static string Scenery(string set, string hide, string shadows)
+        {
+            return set == null ? null : set + (hide == null ? "" : "+hide " + hide) + (shadows == null ? "" : "+shadows " + shadows);
         }
 
         static string Number(string s)
@@ -419,6 +443,8 @@ namespace SnowRunnerNextGen
             if (s.Dll == "ours") parts.Add("Shadows " + Number(s.Factor) + "x" + (s.DllCurrent ? "" : " (another build)"));
             if (s.Scenery == "nature") parts.Add("nature detail");
             else if (s.Scenery == "all") parts.Add("all meshes");
+            if ((s.Scenery == "nature" || s.Scenery == "all") && s.SceneryHide != "off") parts.Add(s.SceneryHide == "all" ? "everything shown far away" : "plants shown far away");
+            if ((s.Scenery == "nature" || s.Scenery == "all") && s.SceneryShadows != "off") parts.Add(s.SceneryShadows == "all" ? "small shadows on everything" : "small shadows on plants");
             if (s.Grass == "ours") parts.Add("grass " + Number(s.GrassFactor) + "x");
             double fillFactor, gradeStrength;
             if (s.Fill == "ours" && double.TryParse(s.FillFactor, NumberStyles.Float, CultureInfo.InvariantCulture, out fillFactor))
@@ -440,7 +466,8 @@ namespace SnowRunnerNextGen
             if (s.Logos == "changed") changed.Add("gfx.pak");
             if (changed.Count > 0)
                 notes.Add(Look.JoinAnd(changed) + (changed.Count == 1 ? " has" : " have") + " changes from another mod or a game update: Apply asks before it builds on " + (changed.Count == 1 ? "it" : "them"));
-            if (s.Dll == "foreign") notes.Add("another mod's hid.dll is in Bin");
+            if (s.Dll == "foreign") notes.Add("another mod's hid.dll is next to SnowRunner.exe");
+            if (s.Outdated.Count > 0) notes.Add("this installer has a newer build of what is installed: Apply updates the game");
             string text = parts.Count == 0 ? "Installed: nothing yet, the game's own files" : "Installed: " + string.Join("  ·  ", parts.ToArray());
             return notes.Count == 0 ? text : text + ". Note: " + string.Join("; ", notes.ToArray());
         }
@@ -484,15 +511,16 @@ namespace SnowRunnerNextGen
         {
             using (OpenFileDialog d = new OpenFileDialog())
             {
-                d.Title = "Find SnowRunner: pick SnowRunner.exe (in Sources\\Bin) or shader.pak (in preload\\paks\\client)";
+                d.Title = "Find SnowRunner: pick SnowRunner.exe or shader.pak in the game folder";
                 d.Filter = "SnowRunner.exe or shader.pak|SnowRunner.exe;shader.pak";
                 d.CheckFileExists = true;
                 if (header.Folder != null) d.InitialDirectory = header.Folder;
                 if (d.ShowDialog(FindForm()) != DialogResult.OK) return;
                 string folder = GameFinder.FolderOfPick(d.FileName);
-                if (folder != null) { header.Folder = folder; RefreshStatus(); return; }
+                if (folder != null) { header.Folder = folder; Engine.RememberGame(folder); RefreshStatus(); return; }
                 MessageBox.Show(FindForm(), "No SnowRunner around this file:" + Environment.NewLine + d.FileName + Environment.NewLine + Environment.NewLine +
-                    "Pick SnowRunner.exe in the game's Sources\\Bin folder, or shader.pak in its preload\\paks\\client folder.",
+                    "Pick SnowRunner.exe (Steam and Epic Games keep it in the game's Sources\\Bin folder, the Xbox app in the game's Content folder) " +
+                    "or shader.pak (in preload\\paks\\client, or under paks).",
                     Header.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }

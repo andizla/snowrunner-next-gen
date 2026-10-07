@@ -41,8 +41,11 @@
 // and its linear depth (what the pass reads at t80, g_txZ) are copied into two textures of this DLL. Every pixel shader
 // that declares t120 gets them bound at t120 (colour) and t121 (depth) when it is set, again when the game resets those
 // slots. Nothing else is bound or changed, and a shader that reads the feed before the first copy sees nothing bound.
-// FeedMips=1 (default): the colour copy carries a full mip chain, generated right after each copy, so a shader may sample a
-// blurred previous frame (rougher reflections); 0 = one level.
+// FeedMips=1 (default): the colour copy carries a full mip chain, made right after each copy, so a shader may sample a
+// blurred previous frame (rougher reflections, the bounce light's far taps); 0 = one level. The levels are made by a
+// compute pass of this DLL per level (src\ao\feed_mips.hlsl): the runtime's GenerateMips left them empty under a ReShade
+// add-on that changes texture formats, and whatever read them then found nothing. 2 = GenerateMips as before, which is
+// also what 1 falls back on when the format cannot be written by a compute shader.
 // Hooks for it: PSSetShader and PSSetShaderResources on the contexts, CreatePixelShader on the device (it looks at each
 // pixel shader's resource table and declarations once and tags the shader). With Factor=1 or the ReShade add-on in
 // charge of the scaling, the feed still runs.
@@ -156,6 +159,7 @@
 #include "g_csAOUpsample.h"
 #include "g_csAOBlur.h"
 #include "g_csDepthDecimate.h"
+#include "g_csFeedMips.h"
 #include "g_csSSSSetup.h"
 #include "g_csSSS.h"
 #include "g_vsContact.h"
@@ -217,11 +221,13 @@ static bool g_gpuProfileShaders = false; // ini GpuProfileShaders: the passes sp
 static UINT g_cpuProfile = 0;       // ini CpuProfile: seconds between CPU profile lines (the CPU time in this DLL's context hooks), 0 = off
 static UINT g_cpuThreads = 0;       // ini CpuThreads: seconds between thread load lines (each game thread's CPU time per frame), 0 = off
 static UINT g_memLog = 0;           // ini MemLog: seconds between lines of the game's large reserved regions and what they hold, 0 = off
-static bool g_feedMips = true;      // ini FeedMips: the colour copy with a full mip chain (a blurred previous frame for rougher reflections)
+static UINT g_feedMips = 1;         // ini FeedMips: the colour copy with a full mip chain (a blurred previous frame for rougher reflections):
+                                    // 1 this DLL's compute pass per level, 2 the runtime's GenerateMips, 0 one level
 static bool g_ssr = true;           // ini SSR: the reflection pass (render target 7 of the lit pass, t123/t124)
 static bool g_ssrHalf = true;       // ini SSRHalf: one ray per 2 x 2 block (0: one per pixel)
 static bool g_ssrMirror = false;    // ini SSRMirror (debug): every pixel a mirror with its normal from the depth buffer
 static bool g_ssrProbe = true;      // ini SSRProbe: the order of a few frames' passes, once, to SnowRunnerShadows.probe.log
+static bool g_ssrTiming = false;    // ini SSRTiming: the reflection pass's GPU time and ray counts, a log line every 10 s (0 = not timed)
 static UINT g_depthProbe = 0;       // ini DepthProbe (dev): 1 = with the probe's first recording, N >= 2 = N s after the AO pass first ran (see DPArm)
 static bool g_ssrLobe = false;      // ini SSRLobe: rays drawn from the GGX lobe (0: the mirror direction, roughness only blurs the hit)
 static float g_ssrRoughMax = 0.85f, g_ssrThickness = 0.3f, g_ssrTemporal = 0.9f, g_ssrCone = 0.5f; // ini SSRRoughMax etc. (0.85: the paint reaches ~0.8; the composite's gate ends at 0.81)
@@ -1239,6 +1245,14 @@ static std::mutex g_feedLock;
 static FeedTexture g_feedTex[2] = {};
 static std::atomic<ID3D11ShaderResourceView *> g_feedView[2];
 static std::vector<IUnknown *> g_feedRetired;
+// the colour copy's own mip chain (FeedMips=1), under g_feedLock: for each level below the first a view of the level
+// above it alone, and the level as a compute shader's output; none = the runtime's GenerateMips makes the levels
+static std::vector<ID3D11ShaderResourceView *> g_feedMipAbove;
+static std::vector<ID3D11UnorderedAccessView *> g_feedMipLevel;
+static ID3D11ComputeShader *g_feedMipCS = nullptr;
+static ID3D11SamplerState *g_feedMipSampler = nullptr;
+static void FeedMipsBuild(ID3D11DeviceContext *ctx);
+static void FeedBind(ID3D11DeviceContext *ctx, const ContextOrig *o, uint32_t flags);
 static std::atomic<uint64_t> g_feedCaptures{ 0 }, g_feedBinds{ 0 }, g_feedReaders{ 0 };
 // the render targets the lighting pass wrote together: its g_txFactor target (render target 2) -> its colour target
 // (render target 0) and that view's format, and its render target 1 and that view's format (only the dump saves it: in
@@ -1307,6 +1321,49 @@ static void RememberLitPass(ID3D11RenderTargetView *colourRtv, ID3D11RenderTarge
     g_litPasses.push_back(p);
 }
 
+// under g_feedLock: for a colour copy of `levels` levels, a view of each level but the last alone and each level but the
+// first as a compute shader's output (in the copy's view format, else in the texture's own), and once the pass's shader
+// and sampler; on a failure nothing is kept
+static HRESULT FeedMipViews(ID3D11Device *dev, ID3D11Texture2D *tex, DXGI_FORMAT view, UINT levels, std::vector<ID3D11ShaderResourceView *> &above,
+    std::vector<ID3D11UnorderedAccessView *> &level)
+{
+    HRESULT hr = S_OK;
+    if (!g_feedMipCS) hr = dev->CreateComputeShader(g_csFeedMips, sizeof g_csFeedMips, nullptr, &g_feedMipCS);
+    if (SUCCEEDED(hr) && !g_feedMipSampler)
+    {
+        D3D11_SAMPLER_DESC sd = {};
+        sd.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT; sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP; sd.MaxLOD = D3D11_FLOAT32_MAX;
+        sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+        hr = dev->CreateSamplerState(&sd, &g_feedMipSampler);
+    }
+    for (UINT k = 1; k < levels && SUCCEEDED(hr); k++)
+    {
+        ID3D11ShaderResourceView *s = nullptr;
+        ID3D11UnorderedAccessView *u = nullptr;
+        for (const DXGI_FORMAT as : { view, DXGI_FORMAT_UNKNOWN })
+        {
+            D3D11_SHADER_RESOURCE_VIEW_DESC sv = {};
+            sv.Format = as; sv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; sv.Texture2D.MostDetailedMip = k - 1; sv.Texture2D.MipLevels = 1;
+            D3D11_UNORDERED_ACCESS_VIEW_DESC uv = {};
+            uv.Format = as; uv.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D; uv.Texture2D.MipSlice = k;
+            hr = dev->CreateShaderResourceView(tex, &sv, &s);
+            if (SUCCEEDED(hr)) hr = dev->CreateUnorderedAccessView(tex, &uv, &u);
+            if (SUCCEEDED(hr)) break;
+            if (s) { s->Release(); s = nullptr; }
+            if (u) { u->Release(); u = nullptr; }
+        }
+        if (SUCCEEDED(hr)) { above.push_back(s); level.push_back(u); }
+    }
+    if (FAILED(hr))
+    {
+        for (auto *v : above) v->Release();
+        for (auto *v : level) v->Release();
+        above.clear();
+        level.clear();
+    }
+    return hr;
+}
+
 // under g_feedLock: feed texture i, (re)made to take src (its size; its format, or the view format when src is
 // multisampled and has to be resolved), viewed as `view`
 static bool FeedTarget(int i, ID3D11Texture2D *src, DXGI_FORMAT view)
@@ -1319,39 +1376,66 @@ static bool FeedTarget(int i, ID3D11Texture2D *src, DXGI_FORMAT view)
     ID3D11Device *dev = nullptr;
     src->GetDevice(&dev);
     if (!dev) return false;
-    // the colour copy gets a full mip chain (ini FeedMips) when the format can generate one: a shader may then sample a
-    // blurred previous frame for rougher reflections; the depth copy stays one level
+    // the colour copy gets a full mip chain (ini FeedMips): a shader may then sample a blurred previous frame for rougher
+    // reflections; the depth copy stays one level. The levels are this DLL's own (a compute pass per level,
+    // FeedMipsBuild) when the format can be a compute shader's output and be filtered, else the runtime's
+    // (GenerateMips) when the format can generate them, else there is one level
     UINT support = 0;
     if (i == 0 && g_feedMips) dev->CheckFormatSupport(fmt, &support);
-    const bool mips = i == 0 && g_feedMips && (support & D3D11_FORMAT_SUPPORT_MIP_AUTOGEN) && (support & D3D11_FORMAT_SUPPORT_RENDER_TARGET);
-    UINT levels = 1;
-    if (mips) for (UINT s = d.Width > d.Height ? d.Width : d.Height; s > 1; s >>= 1) levels++;
-    D3D11_TEXTURE2D_DESC n = {};
-    n.Width = d.Width; n.Height = d.Height; n.MipLevels = levels; n.ArraySize = 1; n.Format = fmt; n.SampleDesc.Count = 1;
-    n.Usage = D3D11_USAGE_DEFAULT; n.BindFlags = D3D11_BIND_SHADER_RESOURCE | (mips ? D3D11_BIND_RENDER_TARGET : 0);
-    n.MiscFlags = mips ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0;
+    const bool runtime = i == 0 && g_feedMips && (support & D3D11_FORMAT_SUPPORT_MIP_AUTOGEN) && (support & D3D11_FORMAT_SUPPORT_RENDER_TARGET);
+    bool own = i == 0 && g_feedMips == 1 && (support & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW) && (support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE);
     ID3D11Texture2D *tex = nullptr;
     ID3D11ShaderResourceView *srv = nullptr;
-    HRESULT hr = dev->CreateTexture2D(&n, nullptr, &tex);
-    if (SUCCEEDED(hr))
+    std::vector<ID3D11ShaderResourceView *> above;
+    std::vector<ID3D11UnorderedAccessView *> level;
+    UINT levels = 1;
+    HRESULT hr = S_OK;
+    for (;;)
     {
-        D3D11_SHADER_RESOURCE_VIEW_DESC v = {};
-        v.Format = view; v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; v.Texture2D.MipLevels = levels;
-        hr = dev->CreateShaderResourceView(tex, &v, &srv);
+        const bool mips = own || runtime;
+        levels = 1;
+        if (mips) for (UINT s = d.Width > d.Height ? d.Width : d.Height; s > 1; s >>= 1) levels++;
+        D3D11_TEXTURE2D_DESC n = {};
+        n.Width = d.Width; n.Height = d.Height; n.MipLevels = levels; n.ArraySize = 1; n.Format = fmt; n.SampleDesc.Count = 1;
+        n.Usage = D3D11_USAGE_DEFAULT; n.BindFlags = D3D11_BIND_SHADER_RESOURCE | (own ? D3D11_BIND_UNORDERED_ACCESS : mips ? D3D11_BIND_RENDER_TARGET : 0);
+        n.MiscFlags = mips && !own ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0;
+        hr = dev->CreateTexture2D(&n, nullptr, &tex);
+        if (SUCCEEDED(hr))
+        {
+            D3D11_SHADER_RESOURCE_VIEW_DESC v = {};
+            v.Format = view; v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; v.Texture2D.MipLevels = levels;
+            hr = dev->CreateShaderResourceView(tex, &v, &srv);
+        }
+        if (SUCCEEDED(hr) && own) hr = FeedMipViews(dev, tex, view, levels, above, level);
+        if (SUCCEEDED(hr) || !own) break;
+        // this DLL's own levels could not be set up: once more with the runtime's, or with one level
+        Log("scene feed: the colour copy's levels cannot be made by this DLL (0x%08lX): %s", (unsigned long)hr, runtime ? "the runtime's GenerateMips makes them" : "one level");
+        if (srv) { srv->Release(); srv = nullptr; }
+        if (tex) { tex->Release(); tex = nullptr; }
+        own = false;
     }
     dev->Release();
     if (FAILED(hr))
     {
+        if (srv) srv->Release();
         if (tex) tex->Release();
         Log("scene feed: %s texture %u x %u (format %u, view %u) could not be made (0x%08lX)", i ? "depth" : "colour", d.Width, d.Height, (unsigned)fmt, (unsigned)view, (unsigned long)hr);
         return false;
     }
     if (f.tex) { g_feedRetired.push_back(f.tex); g_feedRetired.push_back(f.srv); }
     while (g_feedRetired.size() > 12) { g_feedRetired.front()->Release(); g_feedRetired.erase(g_feedRetired.begin()); }
+    if (i == 0)
+    {
+        // the replaced copy's level views were used by FeedMipsBuild alone (a command list that recorded them holds them)
+        for (auto *v : g_feedMipAbove) v->Release();
+        for (auto *v : g_feedMipLevel) v->Release();
+        g_feedMipAbove = std::move(above);
+        g_feedMipLevel = std::move(level);
+    }
     f = { tex, srv, d.Width, d.Height, fmt, view, levels };
     g_feedView[i].store(srv, std::memory_order_release);
-    Log("scene feed: %s texture %u x %u, format %u, view %u, %u mip level(s)%s", i ? "depth" : "colour", d.Width, d.Height, (unsigned)fmt, (unsigned)view, levels,
-        d.SampleDesc.Count > 1 ? " (the scene is multisampled: resolved into it)" : "");
+    Log("scene feed: %s texture %u x %u, format %u, view %u, %u mip level(s)%s%s", i ? "depth" : "colour", d.Width, d.Height, (unsigned)fmt, (unsigned)view, levels,
+        levels < 2 ? "" : own ? ", made by this DLL" : ", made by the runtime's GenerateMips", d.SampleDesc.Count > 1 ? " (the scene is multisampled: resolved into it)" : "");
     return true;
 }
 
@@ -1365,7 +1449,7 @@ static void FeedCapture(ID3D11DeviceContext *ctx, ContextState *s)
     // GPU timers: the AO pass timed from its shader on pauses for the copy and the reflection pass (timed on their own)
     const bool resumeAO = s->gpuPass != nullptr;
     if (resumeAO) GpuEnd(ctx, s->gpuPass);
-    bool copied = false;
+    bool copied = false, ownLevels = false;
     ID3D11Resource *factor = nullptr, *z = nullptr;
     s->aoFactor->GetResource(&factor);
     s->aoZ->GetResource(&z);
@@ -1395,7 +1479,9 @@ static void FeedCapture(ID3D11DeviceContext *ctx, ContextState *s)
             if (cd.SampleDesc.Count > 1) ctx->ResolveSubresource(g_feedTex[0].tex, 0, colour, 0, colourView);
             else if (g_feedTex[0].mips > 1) ctx->CopySubresourceRegion(g_feedTex[0].tex, 0, 0, 0, 0, colour, 0, nullptr); // into level 0 (the mip counts differ)
             else ctx->CopyResource(g_feedTex[0].tex, colour);
-            if (g_feedTex[0].mips > 1) ctx->GenerateMips(g_feedTex[0].srv);
+            ownLevels = g_feedTex[0].mips > 1 && !g_feedMipLevel.empty();
+            if (ownLevels) FeedMipsBuild(ctx);
+            else if (g_feedTex[0].mips > 1) ctx->GenerateMips(g_feedTex[0].srv);
             if (zd.SampleDesc.Count > 1) ctx->ResolveSubresource(g_feedTex[1].tex, 0, depth, 0, zv.Format); else ctx->CopyResource(g_feedTex[1].tex, depth);
             if (timer) GpuEnd(ctx, timer);
             ProfResume(ctx, s);
@@ -1410,6 +1496,9 @@ static void FeedCapture(ID3D11DeviceContext *ctx, ContextState *s)
         if (colour) colour->Release();
         if (depth) depth->Release();
     }
+    // a level bound as a compute shader's output took the copy off this context's resource slots (a texture is not read
+    // and written at once): back at t120 for the shader set now, when it reads the feed
+    if (ownLevels && (s->psFlags & kFeedReads)) FeedBind(ctx, CtxOrig(ctx), s->psFlags);
     if (copied && SSRPassWanted()) { ProfOurs(ctx, s, kProfSSR); SSRRun(ctx, s, factor); ProfResume(ctx, s); } // the reflections, from this frame's copies (before a dump records them)
     if (contact) { ProfOurs(ctx, s, kProfContact); ContactRun(ctx, s, factor); ProfResume(ctx, s); }             // contact shadows (after the copies: the reflections see the scene without them)
     if (resumeAO) s->gpuPass = GpuBegin(ctx, kGpuAO);
@@ -1706,6 +1795,30 @@ static void RestoreCS(ID3D11DeviceContext *ctx, CSState &st)
     for (auto *s : st.sam) if (s) s->Release();
 }
 
+// under g_feedLock: the colour copy's levels below the first, each from the one above it (src\ao\feed_mips.hlsl), on the
+// context that just copied the first; the compute state saved and put back. A level leaves the output before it is read.
+static void FeedMipsBuild(ID3D11DeviceContext *ctx)
+{
+    const FeedTexture &f = g_feedTex[0];
+    CSState saved;
+    SaveCS(ctx, saved);
+    ID3D11ShaderResourceView *noSrv = nullptr;
+    ID3D11UnorderedAccessView *noUav = nullptr;
+    ctx->CSSetShader(g_feedMipCS, nullptr, 0);
+    ctx->CSSetSamplers(0, 1, &g_feedMipSampler);
+    for (UINT k = 1; k < f.mips && k <= g_feedMipLevel.size(); k++)
+    {
+        const UINT w = f.w >> k ? f.w >> k : 1, h = f.h >> k ? f.h >> k : 1;
+        ctx->CSSetUnorderedAccessViews(0, 1, &noUav, nullptr);
+        ctx->CSSetShaderResources(0, 1, &g_feedMipAbove[k - 1]);
+        ctx->CSSetUnorderedAccessViews(0, 1, &g_feedMipLevel[k - 1], nullptr);
+        ctx->Dispatch((w + 7) / 8, (h + 7) / 8, 1);
+    }
+    ctx->CSSetUnorderedAccessViews(0, 1, &noUav, nullptr);
+    ctx->CSSetShaderResources(0, 1, &noSrv);
+    RestoreCS(ctx, saved);
+}
+
 // ---- the AO pass at half size (ini AOHalf=1, KeyAOHalf = F5 flips it; see the top): the AO pass with a
 // bounce-light output draws into two half-size targets of this DLL, its viewports halved while it is set up; when the
 // apply pass is set, compute passes (src\ao\ao_upsample.hlsl) blur that result 3 x 3 on its own grid (AOHalfBlur=1) and
@@ -1723,9 +1836,21 @@ struct AOHalfResources
     ID3D11ComputeShader *csUp = nullptr, *csBlur = nullptr;
     ID3D11Buffer *cb = nullptr;
 };
-static AOHalfResources g_aoHalfRes;                 // under g_feedLock; a set made for another size is kept, never released
-static std::vector<AOHalfResources> g_aoHalfOld;    // (a command list recorded before the size changed may still use it)
+static AOHalfResources g_aoHalfRes;                 // under g_feedLock; a set made for another size is put aside: it comes back
+static std::vector<AOHalfResources> g_aoHalfOld;    // when its size does, and only the last four put aside are kept
 static std::atomic<uint64_t> g_aoHalfPasses{ 0 }, g_aoHalfUpsamples{ 0 };
+
+// under g_feedLock: a set put aside long ago, let go (a command list recorded with it holds what it uses)
+static void AOHalfRelease(AOHalfResources &r)
+{
+    if (g_aoHalfFullTex == r.tex[4]) g_aoHalfFullTex = nullptr;
+    for (auto *x : r.tex) if (x) x->Release();
+    for (auto *x : r.rtv) if (x) x->Release();
+    for (auto *x : r.srv) if (x) x->Release();
+    for (auto *x : r.uav) if (x) x->Release();
+    for (IUnknown *x : { (IUnknown *)r.csUp, (IUnknown *)r.csBlur, (IUnknown *)r.cb }) if (x) x->Release();
+    r = AOHalfResources();
+}
 
 // under g_feedLock: the set for an AO pass target of w x h; false when it cannot be made (then never tried again at that size)
 static bool AOHalfSetup(ID3D11Device *dev, UINT w, UINT h)
@@ -1733,6 +1858,15 @@ static bool AOHalfSetup(ID3D11Device *dev, UINT w, UINT h)
     AOHalfResources &r = g_aoHalfRes;
     if (r.w == w && r.h == h) return !r.broken;
     if (r.w) g_aoHalfOld.push_back(r);
+    for (size_t k = 0; k < g_aoHalfOld.size(); k++)
+        if (g_aoHalfOld[k].w == w && g_aoHalfOld[k].h == h)
+        {
+            r = g_aoHalfOld[k];
+            g_aoHalfOld.erase(g_aoHalfOld.begin() + k);
+            g_aoHalfFullTex = r.broken ? nullptr : r.tex[4];
+            return !r.broken;
+        }
+    while (g_aoHalfOld.size() > 4) { AOHalfRelease(g_aoHalfOld.front()); g_aoHalfOld.erase(g_aoHalfOld.begin()); }
     r = AOHalfResources();
     r.w = w; r.h = h; r.hw = (w + 1) / 2; r.hh = (h + 1) / 2;
     struct Spec { UINT w, h; DXGI_FORMAT f; bool target; } spec[5] = {
@@ -1889,9 +2023,17 @@ struct ZMipsResources
     ID3D11ComputeShader *cs = nullptr;
     ID3D11Buffer *cb = nullptr;
 };
-static ZMipsResources g_zMipsRes;                   // under g_feedLock; a set made for another size is kept, never released
-static std::vector<ZMipsResources> g_zMipsOld;      // (a command list recorded before the size changed may still use it)
+static ZMipsResources g_zMipsRes;                   // under g_feedLock; a set made for another size is put aside: it comes back
+static std::vector<ZMipsResources> g_zMipsOld;      // when its size does, and only the last four put aside are kept
 static std::atomic<uint64_t> g_zMipsBuilds{ 0 };
+
+// under g_feedLock: a set put aside long ago, let go (a command list recorded with it holds what it uses)
+static void ZMipsRelease(ZMipsResources &r)
+{
+    for (auto *x : r.uav) if (x) x->Release();
+    for (IUnknown *x : { (IUnknown *)r.srv, (IUnknown *)r.tex, (IUnknown *)r.cs, (IUnknown *)r.cb }) if (x) x->Release();
+    r = ZMipsResources();
+}
 
 // under g_feedLock: the set for a depth of w x h; false when it cannot be made (then never tried again at that size)
 static bool ZMipsSetup(ID3D11Device *dev, UINT w, UINT h)
@@ -1899,6 +2041,14 @@ static bool ZMipsSetup(ID3D11Device *dev, UINT w, UINT h)
     ZMipsResources &r = g_zMipsRes;
     if (r.w == w && r.h == h) return !r.broken;
     if (r.w) g_zMipsOld.push_back(r);
+    for (size_t k = 0; k < g_zMipsOld.size(); k++)
+        if (g_zMipsOld[k].w == w && g_zMipsOld[k].h == h)
+        {
+            r = g_zMipsOld[k];
+            g_zMipsOld.erase(g_zMipsOld.begin() + k);
+            return !r.broken;
+        }
+    while (g_zMipsOld.size() > 4) { ZMipsRelease(g_zMipsOld.front()); g_zMipsOld.erase(g_zMipsOld.begin()); }
     r = ZMipsResources();
     r.w = w; r.h = h;
     const UINT w1 = w / 2 ? w / 2 : 1, h1 = h / 2 ? h / 2 : 1;
@@ -2734,9 +2884,10 @@ static void SSRConstantsWrite(ID3D11DeviceContext *ctx, const SSRResources &r, U
     ctx->Unmap(r.cb, 0);
 }
 
-// The pass's GPU time: timestamp queries around its dispatches (on the pass's own context), read on the immediate context
-// once the command lists have run; the average goes to the log every 10 s and at exit. Queries that never answer (no
-// timestamps from deferred contexts on some driver) switch the timing off. Under g_ssrLock.
+// The pass's GPU time (ini SSRTiming=1, off by default): timestamp queries around its dispatches (on the pass's own
+// context), read on the immediate context once the command lists have run; the average goes to the log every 10 s and
+// at exit. Queries that never answer (no timestamps from deferred contexts on some driver) switch the timing off.
+// Under g_ssrLock.
 struct SSRTimer { ID3D11Query *disjoint, *begin, *end; ID3D11Buffer *stats; ULONGLONG issued; bool pending; }; // stats: a staging copy of the trace's counters
 static const int kSSRTimers = 8;
 static SSRTimer g_ssrTimers[kSSRTimers] = {};
@@ -2835,7 +2986,7 @@ static void SSRRun(ID3D11DeviceContext *ctx, ContextState *s, ID3D11Resource *fa
         if (camera) camera->Release();
         return;
     }
-    ID3D11ShaderResourceView *colour = nullptr, *depth = nullptr, *normal = nullptr, *rt7 = nullptr;
+    ID3D11ShaderResourceView *colour = nullptr, *depth = nullptr, *rt7 = nullptr;
     ID3D11Texture2D *depthTex = nullptr;
     ID3D11RenderTargetView *rt7Rtv = nullptr;
     UINT w = 0, h = 0;
@@ -2871,7 +3022,7 @@ static void SSRRun(ID3D11DeviceContext *ctx, ContextState *s, ID3D11Resource *fa
             ctx->CSSetConstantBuffers(0, 2, cbs);
             ID3D11SamplerState *samplers[2] = { r.linear, r.point };
             ctx->CSSetSamplers(0, 2, samplers);
-            SSRTimer *timer = SSRTimerStart(dev, ctx);
+            SSRTimer *timer = g_ssrTiming ? SSRTimerStart(dev, ctx) : nullptr;
             // the depth pyramid (the pass profile times each stage on its own)
             ProfOurs(ctx, s, kProfSSRHiZ);
             ctx->CSSetShader(r.csHiz0, nullptr, 0);
@@ -2892,7 +3043,7 @@ static void SSRRun(ID3D11DeviceContext *ctx, ContextState *s, ID3D11Resource *fa
             ctx->ClearUnorderedAccessViewUint(r.statsUav, zeros);
             ID3D11UnorderedAccessView *traceOut[2] = { r.hit.uav, r.statsUav };
             ctx->CSSetUnorderedAccessViews(0, 2, traceOut, nullptr);
-            ID3D11ShaderResourceView *traceIn[5] = { colour, depth, normal, rt7, r.hizAll };
+            ID3D11ShaderResourceView *traceIn[5] = { colour, depth, nullptr, rt7, r.hizAll };   // (t2 is not read)
             ctx->CSSetShaderResources(0, 5, traceIn);
             ctx->CSSetShader(r.csTrace, nullptr, 0);
             ctx->Dispatch((r.tw + 7) / 8, (r.th + 7) / 8, 1);
@@ -2901,7 +3052,7 @@ static void SSRRun(ID3D11DeviceContext *ctx, ContextState *s, ID3D11Resource *fa
             ProfOurs(ctx, s, kProfSSRResolve);
             ID3D11UnorderedAccessView *resolveOut[2] = { r.out[r.cur].uav, nullptr };
             ctx->CSSetUnorderedAccessViews(0, 2, resolveOut, nullptr);
-            ID3D11ShaderResourceView *resolveIn[7] = { r.hit.srv, depth, normal, rt7, r.out[r.cur ^ 1].srv, r.prev.srv, r.motion.srv };
+            ID3D11ShaderResourceView *resolveIn[7] = { r.hit.srv, depth, nullptr, rt7, r.out[r.cur ^ 1].srv, r.prev.srv, r.motion.srv };
             ctx->CSSetShaderResources(0, 7, resolveIn);
             ctx->CSSetShader(r.csResolve, nullptr, 0);
             ctx->Dispatch((w + 7) / 8, (h + 7) / 8, 1);
@@ -2930,7 +3081,7 @@ static void SSRRun(ID3D11DeviceContext *ctx, ContextState *s, ID3D11Resource *fa
         if (said++ == 0) Log("reflections: the pass is wanted but lacks %s", !colour || !depth ? "the feed's copies" : "render target 7");
     }
     if (ProbeOn()) ProbeEvent(ctx, s, "AO pass: feed copied, reflection pass %s", ran ? "ran" : "not run");
-    for (IUnknown *u : { (IUnknown *)camera, (IUnknown *)colour, (IUnknown *)depth, (IUnknown *)depthTex, (IUnknown *)normal, (IUnknown *)rt7, (IUnknown *)rt7Rtv, (IUnknown *)dev })
+    for (IUnknown *u : { (IUnknown *)camera, (IUnknown *)colour, (IUnknown *)depth, (IUnknown *)depthTex, (IUnknown *)rt7, (IUnknown *)rt7Rtv, (IUnknown *)dev })
         if (u) u->Release();
 }
 
@@ -4498,7 +4649,8 @@ static void STDMETHODCALLTYPE Hook_RSSetViewports(ID3D11DeviceContext *self, UIN
     s->viewports.assign(vps, vps + (vps ? n : 0));
     if (s->aoHalf) { AOHalfViewports(self, o, s); return; } // the AO pass drawn at half size
     if (g_trace && s->atlas)
-        Trace("VP ctx %p n %u: %g %g %g %g", (void *)self, n, n ? vps[0].TopLeftX : 0.f, n ? vps[0].TopLeftY : 0.f, n ? vps[0].Width : 0.f, n ? vps[0].Height : 0.f);
+        Trace("VP ctx %p n %u: %g %g %g %g", (void *)self, n, n && vps ? vps[0].TopLeftX : 0.f, n && vps ? vps[0].TopLeftY : 0.f, n && vps ? vps[0].Width : 0.f,
+            n && vps ? vps[0].Height : 0.f);
     if (s->atlas && !s->viewports.empty())
     {
         std::vector<D3D11_VIEWPORT> v = s->viewports;
@@ -4519,7 +4671,8 @@ static void STDMETHODCALLTYPE Hook_RSSetScissorRects(ID3D11DeviceContext *self, 
     ContextState *s = State(self);
     s->scissors.assign(rects, rects + (rects ? n : 0));
     if (g_trace && s->atlas)
-        Trace("SC ctx %p n %u: %ld %ld %ld %ld", (void *)self, n, n ? rects[0].left : 0L, n ? rects[0].top : 0L, n ? rects[0].right : 0L, n ? rects[0].bottom : 0L);
+        Trace("SC ctx %p n %u: %ld %ld %ld %ld", (void *)self, n, n && rects ? rects[0].left : 0L, n && rects ? rects[0].top : 0L, n && rects ? rects[0].right : 0L,
+            n && rects ? rects[0].bottom : 0L);
     if (s->atlas && !s->scissors.empty())
     {
         std::vector<D3D11_RECT> r = s->scissors;
@@ -4640,7 +4793,7 @@ static void STDMETHODCALLTYPE Hook_ExecuteCommandList(ID3D11DeviceContext *self,
     cpu.Orig([&] { CtxOrig(self)->execute(self, list, restore); });
     if (scope.outer && !restore) { ResetState(self); g_resets++; } // the immediate context's state is cleared afterwards
     if (scope.outer && g_gpuProfile) { if (restore) ProfKept(self); else ProfStart(self, State(self), ProfDesc{}); } // (its work until the next targets: no targets)
-    if (scope.outer && g_ssr && g_ssrRuns.load(std::memory_order_relaxed)) SSRPollTimers(self);
+    if (scope.outer && g_ssr && g_ssrTiming && g_ssrRuns.load(std::memory_order_relaxed)) SSRPollTimers(self);
     if (dumping) DumpExecuted(self, dumpList);
 }
 
@@ -5728,7 +5881,8 @@ static void ReadSettings()
     g_slopeBias = GetPrivateProfileIntW(L"Shadows", L"SlopeBias", 1, ini.c_str()) != 0;
     g_feed = GetPrivateProfileIntW(L"Shadows", L"Feed", 1, ini.c_str()) != 0;
     g_gi = g_feed && GetPrivateProfileIntW(L"Shadows", L"GI", 1, ini.c_str()) != 0;
-    g_feedMips = GetPrivateProfileIntW(L"Shadows", L"FeedMips", 1, ini.c_str()) != 0;
+    const UINT feedMips = GetPrivateProfileIntW(L"Shadows", L"FeedMips", 1, ini.c_str());
+    g_feedMips = feedMips > 2 ? 1 : feedMips;
     const UINT frameLog = GetPrivateProfileIntW(L"Shadows", L"FrameLog", 0, ini.c_str());
     g_frameLog = frameLog > 600 ? 600 : frameLog;
     const UINT gpuTimers = GetPrivateProfileIntW(L"Shadows", L"GpuTimers", 0, ini.c_str());
@@ -5749,6 +5903,7 @@ static void ReadSettings()
     const UINT depthProbe = GetPrivateProfileIntW(L"Shadows", L"DepthProbe", 0, ini.c_str());
     g_depthProbe = depthProbe > 3600 ? 3600 : depthProbe;
     g_ssrProbe = GetPrivateProfileIntW(L"Shadows", L"SSRProbe", 1, ini.c_str()) != 0;
+    g_ssrTiming = GetPrivateProfileIntW(L"Shadows", L"SSRTiming", 0, ini.c_str()) != 0;
     g_ssrLobe = GetPrivateProfileIntW(L"Shadows", L"SSRLobe", 0, ini.c_str()) != 0;
     const UINT steps = GetPrivateProfileIntW(L"Shadows", L"SSRSteps", 80, ini.c_str());
     g_ssrSteps = steps < 8 ? 8 : steps > 512 ? 512 : steps;
@@ -5818,7 +5973,7 @@ static void ReadSettings()
     }
 }
 
-BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID)
+BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
     {
@@ -5899,6 +6054,11 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID)
     }
     else if (reason == DLL_PROCESS_DETACH)
     {
+        // When the process is ending (reserved is set), every other thread was ended wherever it was. One ended while it
+        // wrote a log line holds the log's lock for good, and waiting for it here would keep the game in the task list
+        // without a window: the totals are then left out. The same goes for the profile's and the trace's locks below.
+        const bool exiting = reserved != nullptr;
+        if (exiting) { if (!g_logLock.try_lock()) return TRUE; g_logLock.unlock(); }
         Log("shadow texture binds %llu, viewport restores %llu, state resets %llu, rasterizer states seen with it %d (with slope bias %d)",
             (unsigned long long)g_atlasBinds.load(), (unsigned long long)g_restores.load(), (unsigned long long)g_resets.load(),
             (int)g_rsScaled.size(), g_rsCopies.load());
@@ -5938,9 +6098,12 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID)
         }
         if (g_gpuProfile)
         {
-            std::lock_guard<std::mutex> lock(g_profLock);
-            ProfList(true);
-            Log("pass profile: passes untimed because every timer was busy %llu, timings without an answer %llu", (unsigned long long)g_profFull, (unsigned long long)g_profDropped);
+            std::unique_lock<std::mutex> lock(g_profLock, std::defer_lock);
+            if (exiting ? lock.try_lock() : (lock.lock(), true))
+            {
+                ProfList(true);
+                Log("pass profile: passes untimed because every timer was busy %llu, timings without an answer %llu", (unsigned long long)g_profFull, (unsigned long long)g_profDropped);
+            }
         }
         if (g_trace)
         {
@@ -5949,10 +6112,10 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID)
                 (unsigned long long)g_drawsBound.load(), (unsigned long long)g_indirect.load(), (unsigned long long)g_viewportMismatch.load(),
                 (unsigned long long)g_scissorMismatch.load(), (unsigned long long)g_untracked.load(), (unsigned long long)g_copiesSeen.load(),
                 (unsigned long long)g_clearsSeen.load(), g_listIds.load(), g_bursts);
-            std::lock_guard<std::mutex> lock(g_traceLock);
-            if (g_traceFile) { fclose(g_traceFile); g_traceFile = nullptr; }
+            std::unique_lock<std::mutex> lock(g_traceLock, std::defer_lock);
+            if ((exiting ? lock.try_lock() : (lock.lock(), true)) && g_traceFile) { fclose(g_traceFile); g_traceFile = nullptr; }
         }
-        std::lock_guard<std::mutex> lock(g_logLock);
+        std::lock_guard<std::mutex> lock(g_logLock); // (free when the process is ending: tried above, and no thread is left to take it)
         if (g_log) { fclose(g_log); g_log = nullptr; }
     }
     return TRUE;

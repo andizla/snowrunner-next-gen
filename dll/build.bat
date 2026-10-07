@@ -19,6 +19,8 @@ fxc /nologo /T cs_5_0 /E main /O3 /Vn g_csAOUpsample /Fh out\obj\g_csAOUpsample.
 fxc /nologo /T cs_5_0 /E main /O3 /D AO_BLUR_PASS=1 /Vn g_csAOBlur /Fh out\obj\g_csAOBlur.h src\ao\ao_upsample.hlsl >nul || goto fail
 rem the AO pass's depth mips (ini ZMips): levels 1..4 of its depth, decimated, at t126
 fxc /nologo /T cs_5_0 /E main /O3 /Vn g_csDepthDecimate /Fh out\obj\g_csDepthDecimate.h src\ao\depth_decimate.hlsl >nul || goto fail
+rem the scene feed's mip chain (ini FeedMips): each level from the one above it
+fxc /nologo /T cs_5_0 /E main /O3 /Vn g_csFeedMips /Fh out\obj\g_csFeedMips.h src\ao\feed_mips.hlsl >nul || goto fail
 rem contact shadows (ini Contact): Bend Studio's screen-space shadows (src\sss, a modified copy of their Apache-2.0 code)
 rem and the setup that lists their dispatches on the GPU; the cover variant (no early out) is for out\sss_lab.exe
 fxc /nologo /T cs_5_0 /E main /O3 /Vn g_csSSSSetup /Fh out\obj\g_csSSSSetup.h src\sss\sss_setup.hlsl >nul || goto fail

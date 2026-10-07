@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Finds shader.pak of every SnowRunner install it can: Steam (all library folders), Epic Games, Microsoft Store.
-// Every source is tried on its own, a failure in one never hides the others. (From the SnowRunner GTAO installer,
-// with the game-folder helpers added.)
+// Finds shader.pak of every SnowRunner install it can: Steam (all library folders), Epic Games, the Xbox app
+// (Microsoft Store, Game Pass). Every source is tried on its own, a failure in one never hides the others. (From the
+// SnowRunner GTAO installer, with the game-folder helpers added.)
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
@@ -13,7 +14,11 @@ namespace SnowRunnerNextGen
     static class GameFinder
     {
         const string SteamAppId = "1465360";
-        static readonly string[] PakTails = { @"preload\paks\client\shader.pak", @"en_us\preload\paks\client\shader.pak" };
+        // where a game folder keeps shader.pak (engine\ngen.js PAK_FOLDERS): Steam; Epic Games, the whole game one folder
+        // down in en_us; the Xbox app's version, the game in <title>\Content with its paks under paks, seen from Content
+        // and from the title's folder
+        static readonly string[] PakTails = { @"preload\paks\client\shader.pak", @"en_us\preload\paks\client\shader.pak",
+            @"paks\client\shader.pak", @"Content\paks\client\shader.pak", @"paks\shader.pak", @"Content\paks\shader.pak" };
 
         public static List<string> FindPaks()
         {
@@ -52,10 +57,11 @@ namespace SnowRunnerNextGen
             catch (Exception) { return path; }
         }
 
-        // the game folder of a shader.pak
+        // the game folder of a shader.pak: the folder that holds preload (the one above en_us where the game is kept
+        // there), or the folder that holds paks; for a pak anywhere else its own folder
         public static string FolderOf(string pak)
         {
-            string[] tails = { @"\en_us\preload\paks\client\shader.pak", @"\preload\paks\client\shader.pak" };
+            string[] tails = { @"\en_us\preload\paks\client\shader.pak", @"\preload\paks\client\shader.pak", @"\paks\client\shader.pak", @"\paks\shader.pak" };
             foreach (string tail in tails)
                 if (pak.EndsWith(tail, StringComparison.OrdinalIgnoreCase)) return pak.Substring(0, pak.Length - tail.Length);
             return Path.GetDirectoryName(pak);
@@ -64,22 +70,26 @@ namespace SnowRunnerNextGen
         public static bool IsGame(string folder)
         {
             foreach (string tail in PakTails) if (File.Exists(Path.Combine(folder, tail))) return true;
-            return false;
+            return File.Exists(Path.Combine(folder, "shader.pak"));
         }
 
-        // the game folder of a file the user picked (SnowRunner.exe in Sources\Bin, or shader.pak); null when it is neither
+        // the game folder of a file the user picked (SnowRunner.exe or shader.pak); null when no game is around it.
+        // SnowRunner.exe lies in Sources\Bin, two folders down (Steam, Epic Games), or in the game's own folder (the
+        // Xbox app's version)
         public static string FolderOfPick(string file)
         {
             string full = Path.GetFullPath(file);
             string name = Path.GetFileName(full);
-            string folder = null;
-            if (string.Equals(name, "shader.pak", StringComparison.OrdinalIgnoreCase)) folder = FolderOf(full);
-            else if (string.Equals(name, "SnowRunner.exe", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(name, "shader.pak", StringComparison.OrdinalIgnoreCase))
             {
-                DirectoryInfo bin = new DirectoryInfo(Path.GetDirectoryName(full));
-                if (bin.Parent != null && bin.Parent.Parent != null) folder = bin.Parent.Parent.FullName;
+                string folder = FolderOf(full);
+                return IsGame(folder) ? folder : null;
             }
-            return folder != null && IsGame(folder) ? folder : null;
+            if (!string.Equals(name, "SnowRunner.exe", StringComparison.OrdinalIgnoreCase)) return null;
+            DirectoryInfo bin = new DirectoryInfo(Path.GetDirectoryName(full));
+            DirectoryInfo[] tries = { bin.Parent != null ? bin.Parent.Parent : null, bin, bin.Parent };
+            foreach (DirectoryInfo d in tries) if (d != null && IsGame(d.FullName)) return d.FullName;
+            return null;
         }
 
         static void Try(Action source)
@@ -136,8 +146,54 @@ namespace SnowRunnerNextGen
             foreach (DriveInfo d in DriveInfo.GetDrives())
             {
                 if (d.DriveType != DriveType.Fixed || !d.IsReady) continue;
-                roots.Add(Path.Combine(d.RootDirectory.FullName, @"XboxGames\SnowRunner\Content"));
+                XboxTitles(d.RootDirectory.FullName, roots);
             }
+        }
+
+        // The Xbox app (Microsoft Store, Game Pass) keeps a game in <library>\<title>\Content. A drive it installs to
+        // carries the file .GamingRoot with the library folder's name on that drive; XboxGames is the app's own choice.
+        // Every title there with SnowRunner in its name is tried ("SnowRunner", "SnowRunner - Windows10").
+        public static void XboxTitles(string drive, List<string> roots)
+        {
+            List<string> libraries = GamingRoot(Path.Combine(drive, ".GamingRoot"));
+            if (!libraries.Exists(delegate(string x) { return string.Equals(x, "XboxGames", StringComparison.OrdinalIgnoreCase); })) libraries.Add("XboxGames");
+            foreach (string name in libraries)
+            {
+                try
+                {
+                    string library = Path.Combine(drive, name);
+                    if (!Directory.Exists(library)) continue;
+                    foreach (string title in Directory.GetDirectories(library))
+                        if (Path.GetFileName(title).IndexOf("SnowRunner", StringComparison.OrdinalIgnoreCase) >= 0) roots.Add(Path.Combine(title, "Content"));
+                }
+                catch (Exception) { }   // a library that cannot be listed
+            }
+        }
+
+        // the library folders a .GamingRoot file names: "RGBX", a count, then that many names in UTF-16, each ended by
+        // a zero, relative to the drive. A file that reads otherwise names none.
+        public static List<string> GamingRoot(string file)
+        {
+            List<string> names = new List<string>();
+            try
+            {
+                if (!File.Exists(file) || new FileInfo(file).Length > 4096) return names;
+                byte[] b = File.ReadAllBytes(file);
+                if (b.Length < 8 || b[0] != 'R' || b[1] != 'G' || b[2] != 'B' || b[3] != 'X') return names;
+                int count = BitConverter.ToInt32(b, 4), at = 8;
+                for (int i = 0; i < count && at + 1 < b.Length; i++)
+                {
+                    int end = at;
+                    while (end + 1 < b.Length && (b[end] != 0 || b[end + 1] != 0)) end += 2;
+                    string name = Encoding.Unicode.GetString(b, at, end - at).Trim('\\', '/', ' ');
+                    at = end + 2;
+                    if (name.Length == 0 || Path.IsPathRooted(name) || name.IndexOfAny(Path.GetInvalidPathChars()) >= 0) continue;
+                    if (Array.IndexOf(name.Split('\\', '/'), "..") >= 0) continue;
+                    names.Add(name);
+                }
+            }
+            catch (Exception) { names.Clear(); }
+            return names;
         }
     }
 }

@@ -70,10 +70,10 @@
                               // stock direction. Not for the rivers: their normal map has its mip levels (the direction
                               // is smooth far off) and a river is not level. 0 = the stock direction everywhere
 #ifndef SSR_WAVE_FOOT_NEAR
-#define SSR_WAVE_FOOT_NEAR 0.01
-#endif
-#ifndef SSR_WAVE_FOOT_FAR
-#define SSR_WAVE_FOOT_FAR 0.04
+#define SSR_WAVE_FOOT_NEAR 0.2    // the same stretch as the planar helper's (SSR_V2_WAVES_NEAR and _FAR in ssr_planar.hlsl):
+#endif                            // at 2160 rows from a camera 3 m over the water about 40 to 130 m. 1.0.1 had 0.01 and
+#ifndef SSR_WAVE_FOOT_FAR         // 0.04, about 9 to 19 m: past that the water looked still, which showed as a line
+#define SSR_WAVE_FOOT_FAR 2.0
 #endif
 #ifndef SSR_DEBUG_GAIN
 #define SSR_DEBUG_GAIN 4.0    // their brightness, absolute (the blend's own debug build adds the reflection unscaled by Fresnel)

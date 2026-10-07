@@ -1747,6 +1747,24 @@ int main(int argc, char **argv)
                     Check(noFeed || puddlesOff ? true : lvl[0] == want, line);
                     lv->Release();
                 }
+                // and every level holds the picture, however the levels are made (FeedMips=1: a compute pass of the DLL per
+                // level, 2: the runtime's GenerateMips): the frame is one colour, so the smallest level is that colour too
+                const char *kLast = "Texture2D<float4> g_txPrevScene : register(t120); float4 main(float4 p : SV_Position) : SV_Target"
+                                    " { uint w, h, levels; g_txPrevScene.GetDimensions(0, w, h, levels);"
+                                    " return float4(g_txPrevScene.Load(int3(0, 0, levels - 1)).rgb, g_txPrevScene.Load(int3(0, 0, min(levels - 1, 1))).g); }";
+                ID3D11PixelShader *last = ps(kLast);
+                if (last)
+                {
+                    begin(r.ctx);
+                    r.ctx->OMSetRenderTargets(1, &out.rtv, nullptr);
+                    r.ctx->PSSetShader(last, nullptr, 0);
+                    r.ctx->Draw(3, 0);
+                    const std::vector<float> c = pixel();
+                    snprintf(line, sizeof line, "scene feed: the colour copy's smallest level holds %.3g %.3g %.3g and its second level's green is %.3g (the frame's 0.125 0.625 0.375)",
+                        c[0], c[1], c[2], c[3]);
+                    Check(noFeed || puddlesOff ? true : is(c, 0.125f, 0.625f, 0.375f, 0.625f), line);
+                    last->Release();
+                }
             }
         }
         // Fog for the water's reflections: the volumetric fog's composite (a pixel shader naming g_txFogColor and g_txZMS)

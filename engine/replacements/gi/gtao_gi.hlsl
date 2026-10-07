@@ -152,6 +152,21 @@
 #ifndef GI_UNDO_AO
 #define GI_UNDO_AO 1           // 1 = stored undone by the apply pass's darkening (with the cap); 0 = the bare bounce (tests)
 #endif
+#ifndef GI_OFF
+#define GI_OFF 0               // 1 = the pass without the bounce light: no tap reads the lit image, and output 1 is zero. The output
+#endif                         // stays declared: SnowRunner Shadows takes the pass by it and draws it at half size. For an
+                               // install with GTAO and without the Bounce light module
+#ifndef GI_WHITE
+#define GI_WHITE 0             // 1 = GI_STRENGTH holds back on bright surfaces: it raises a tap's light at most to what a white
+#endif                         // surface gives off under the sky's ambient light (GI_WHITE_LEVEL x the brightest of the three
+                               // ambient colours the materials read, CB_GLOBAL_SCENE c50..c52, bound while the AO pass
+                               // draws), and a tap brighter than that counts as it is. Without it the strength multiplies
+                               // every tap: snow is near white already, so a crease in it gathers more light than the snow
+                               // around it gives off, the lit image feeds that back, and tracks in shaded snow glow blue.
+                               // 0 = the strength on every tap (byte-identical blob)
+#ifndef GI_WHITE_LEVEL
+#define GI_WHITE_LEVEL 1.0     // with GI_WHITE: the ceiling of the raised light, in multiples of that ambient light
+#endif
 #ifndef GI_PROBE
 #define GI_PROBE 0             // diagnostics only (the pass run again on a frame SnowRunner Shadows dumped in game):
 #endif                         // output 1 = intermediate values instead of the bounce light: 1 (1 - open, hidden, brightest,
@@ -177,6 +192,13 @@ cbuffer CB_GLOBAL_CAMERA : register(b1)             // the game's camera, bound 
     float4 g_vEyePos;
     float4 g_vViewDir;
     float4 g_tmViewProj[4];                          // clip[i] = dot(float4(P, 1), g_tmViewProj[i]): row 0 = x, row 1 = y
+};
+#endif
+#if GI_WHITE
+cbuffer CB_GLOBAL_SCENE : register(b2)              // the game's scene constants, bound while its AO pass draws
+{
+    float4 g_vSceneHead[50];
+    float4 g_cAmbientPosY, g_cAmbientMidY, g_cAmbientNegY;   // c50..c52: g_ambientLight, rgb
 };
 #endif
 SamplerState      _SAMPLERS[16] : register(s0);   // the engine's sampler array: 0 = depth, 1 = dither (wrap), 2 = factor
@@ -224,7 +246,9 @@ float TapDepth(inout float2 uvTap, float dPx, float2 px)
 }
 
 // the light a step found: the lit image there, clipped, never negative or NaN
-#if GI_LOD
+#if GI_OFF
+#define TAP_LIGHT(uv, dPx) float3(0.0, 0.0, 0.0)
+#elif GI_LOD
 // the light a tap found, from the level of the feed's mip chain whose texels are at most a quarter of the tap's distance
 // (dPx, in pixels) wide: the light of the area around the tap, never the pixel's own
 float3 SceneLight(float2 uv, float dPx)
@@ -236,6 +260,20 @@ float3 SceneLight(float2 uv, float dPx)
 #else
 float3 SceneLight(float2 uv) { return min(max(g_txScene.SampleLevel(_SAMPLERS[2], uv, 0).rgb, 0.0), GI_SAMPLE_MAX); }
 #define TAP_LIGHT(uv, dPx) SceneLight(uv)
+#endif
+
+// GI_STRENGTH on one tap's light. With GI_WHITE the tap is raised at most to white (the light of a white surface under
+// the sky's ambient light), and a tap brighter than that keeps its own light; the stored sum is then not scaled again
+#if GI_WHITE
+float3 Raised(float3 L, float white)
+{
+    return L * clamp(white / max(dot(L, float3(0.2126, 0.7152, 0.0722)), 1e-6), min(1.0, GI_STRENGTH), GI_STRENGTH);
+}
+#define TAP_RAISED(L) Raised(L, white)
+#define GI_SUM_STRENGTH 1.0
+#else
+#define TAP_RAISED(L) (L)
+#define GI_SUM_STRENGTH GI_STRENGTH
 #endif
 
 // View space: x right, y up, z forward. uv (0,0) is the top left corner.
@@ -444,6 +482,10 @@ PSOut main(float2 uv : TEXCOORD0, uint frontFace : SV_IsFrontFace)
     float3 bounce = 0.0;      // the light of the steps that raised a horizon, each weighted by the arc it hid
     float hidden = 0.0;       // the sum of those weights
     float brightest = 0.0;
+#if GI_WHITE
+    const float3 lumaOf = float3(0.2126, 0.7152, 0.0722);
+    float white = GI_WHITE_LEVEL * max(dot(g_cAmbientPosY.rgb, lumaOf), max(dot(g_cAmbientMidY.rgb, lumaOf), dot(g_cAmbientNegY.rgb, lumaOf)));
+#endif
 #if AO_FAR && AO_FAR_SHARE
     for (int slice = 0; slice < (active ? AO_SLICES : 0); slice++)   // a pixel with nothing to search skips it
 #else
@@ -507,7 +549,7 @@ PSOut main(float2 uv : TEXCOORD0, uint frontFace : SV_IsFrontFace)
             {
                 float3 L = TAP_LIGHT(uv0, s * radiusPx);
                 float share = countbits(bits0 & ~mask) * mSector;
-                sliceBounce += share * L;
+                sliceBounce += share * TAP_RAISED(L);
                 sliceHidden += share;
                 brightest = max(brightest, max(L.r, max(L.g, L.b)));
                 mask |= bits0;
@@ -527,7 +569,7 @@ PSOut main(float2 uv : TEXCOORD0, uint frontFace : SV_IsFrontFace)
             {
                 float3 L = TAP_LIGHT(uv1, s * radiusPx);
                 float share = countbits(bits1 & ~mask) * mSector;
-                sliceBounce += share * L;
+                sliceBounce += share * TAP_RAISED(L);
                 sliceHidden += share;
                 brightest = max(brightest, max(L.r, max(L.g, L.b)));
                 mask |= bits1;
@@ -546,14 +588,14 @@ PSOut main(float2 uv : TEXCOORD0, uint frontFace : SV_IsFrontFace)
 #if GI_WEIGHT_COS
                 float share = c0 - horizon0;   // how far this tap raised the horizon's cosine: its light's weight
                 float3 L = TAP_LIGHT(uv0, s * radiusPx);
-                sliceBounce += share * L;
+                sliceBounce += share * TAP_RAISED(L);
                 sliceHidden += share;
                 brightest = max(brightest, max(L.r, max(L.g, L.b)));
 #else
                 float a = Arc(n + clamp(acos(clamp(c0, -1.0, 1.0)) - n, -HALF_PI, HALF_PI), n, sinN, cosN);
                 float3 L = TAP_LIGHT(uv0, s * radiusPx);
                 float share = max(arcOpen0 - a, 0.0);
-                sliceBounce += share * L;
+                sliceBounce += share * TAP_RAISED(L);
                 sliceHidden += share;
                 brightest = max(brightest, max(L.r, max(L.g, L.b)));
                 arcOpen0 = min(arcOpen0, a);
@@ -575,14 +617,14 @@ PSOut main(float2 uv : TEXCOORD0, uint frontFace : SV_IsFrontFace)
 #if GI_WEIGHT_COS
                 float share = c1 - horizon1;   // how far this tap raised the horizon's cosine: its light's weight
                 float3 L = TAP_LIGHT(uv1, s * radiusPx);
-                sliceBounce += share * L;
+                sliceBounce += share * TAP_RAISED(L);
                 sliceHidden += share;
                 brightest = max(brightest, max(L.r, max(L.g, L.b)));
 #else
                 float a = Arc(n + clamp(-acos(clamp(c1, -1.0, 1.0)) - n, -HALF_PI, HALF_PI), n, sinN, cosN);
                 float3 L = TAP_LIGHT(uv1, s * radiusPx);
                 float share = max(arcOpen1 - a, 0.0);
-                sliceBounce += share * L;
+                sliceBounce += share * TAP_RAISED(L);
                 sliceHidden += share;
                 brightest = max(brightest, max(L.r, max(L.g, L.b)));
                 arcOpen1 = min(arcOpen1, a);
@@ -634,14 +676,14 @@ PSOut main(float2 uv : TEXCOORD0, uint frontFace : SV_IsFrontFace)
         [branch] if (hid0 > 1e-5)
         {
             float3 L = TAP_LIGHT(topUv0, topS0 * radiusPx);
-            sliceBounce += hid0 * L;
+            sliceBounce += hid0 * TAP_RAISED(L);
             sliceHidden += hid0;
             brightest = max(brightest, max(L.r, max(L.g, L.b)));
         }
         [branch] if (hid1 > 1e-5)
         {
             float3 L = TAP_LIGHT(topUv1, topS1 * radiusPx);
-            sliceBounce += hid1 * L;
+            sliceBounce += hid1 * TAP_RAISED(L);
             sliceHidden += hid1;
             brightest = max(brightest, max(L.r, max(L.g, L.b)));
         }
@@ -730,7 +772,7 @@ PSOut main(float2 uv : TEXCOORD0, uint frontFace : SV_IsFrontFace)
     // itself is at most the hidden share x that light)
 #if GI_UNDO_AO
     float darkening = 1.0 - saturate((1.0 - visibility) * factorRaw * g_vSSAOColor.w);
-    float3 stored = bounce * GI_STRENGTH / max(darkening, 0.05);
+    float3 stored = bounce * GI_SUM_STRENGTH / max(darkening, 0.05);
     float peak = max(stored.r, max(stored.g, stored.b));
     stored *= min(1.0, GI_CAP * brightest / max(peak, 1e-6));
 #if GI_PROBE == 3
@@ -738,7 +780,7 @@ PSOut main(float2 uv : TEXCOORD0, uint frontFace : SV_IsFrontFace)
     return o;
 #endif
 #else
-    float3 stored = bounce * GI_STRENGTH;
+    float3 stored = bounce * GI_SUM_STRENGTH;
 #endif
     o.gi = float4(stored, 1.0);
     return o;

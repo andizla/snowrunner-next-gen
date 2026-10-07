@@ -32,7 +32,7 @@ Reflections and water
 
 Atmosphere and image
 
-- Volumetric fog: no banding, a glow toward the sun, and sun shafts through trees and dust. The shafts are experimental: they also show over the truck and other things close to the camera.
+- Volumetric fog: no banding and a glow toward the sun. Sun shafts through trees and dust are a switch on the card, off by default: they are experimental and also show over the truck and other things close to the camera.
 - Weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out, fireflies at night and pollen by day.
 - Smoke glow: smoke glows when the sun is behind it.
 - Smoke shape and softer edges: puffs get a lit and a shaded side and fade softly where they meet the ground.
@@ -45,7 +45,7 @@ Atmosphere and image
 
 Scenery, both off by default
 
-- Scenery detail: scenery keeps its full detail farther out.
+- Scenery detail: scenery keeps its full detail farther out. Two more rows on the card, off by default: plants or everything shown at any distance, and shadows for small things that have none.
 - Grass reach: grass drawn farther out.
 
 Interface
@@ -82,7 +82,7 @@ Every Apply and Restore is written to `install.log` in `%LOCALAPPDATA%\SnowRunne
 
 ## What it changes
 
-In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather), `boot.pak` (photo grade, particles, night sky) and `gfx.pak` (the logo) under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in `Sources\Bin`. Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
+In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather), `boot.pak` (photo grade, particles, night sky) and `gfx.pak` (the logo) under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in the folder with `SnowRunner.exe` (`Sources\Bin` on Steam). Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
 
 The kept originals live in `%LOCALAPPDATA%\SnowRunnerNextGen`. Every new file is written next to the old one, read back and checked before it takes the old one's place. The program refuses to write while the game runs.
 

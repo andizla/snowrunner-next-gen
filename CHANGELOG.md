@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.2] 2026-10-08
+
+- Bounce light: snow and ice no longer glow blue in tracks, ruts and along drifts. The bounce light counted every surface four times as bright as it is, which suits dark mud and was far too much for snow. A surface is now raised at most to 0.6 of the scene's ambient light, and one brighter than that counts as it is.
+- Volumetric fog: the sun shafts are off by default and have their own switch on the card, Sun shafts. They stay experimental: they also show over the truck and other things close to the camera. An install made with 1.0.0 or 1.0.1 has them, and Apply takes them out unless the switch is on.
+- Water reflections follow the waves farther out. At 3840 x 2160, from a camera 3 m over the water, the reflection lets go of the waves between about 40 and 130 m. In 1.0.1 that was 7 to 27 m.
+- GTAO without the Bounce light card is drawn at half size too, as it already was with the card. In a test scene the frame took 10.24 ms, down from 12.56 ms.
+- SnowRunner Shadows makes the smaller levels of its scene copy itself. With a ReShade add-on that changes the game's texture formats those levels stayed empty, and the bounce light lost most of its reach.
+- SnowRunner Shadows: after a change of resolution the half-size and depth textures of the old size are released (about 57 MB at 3840 x 2160 stayed each time). The last four sizes are kept and used again when one comes back.
+- SnowRunner Shadows: closing the game cannot wait on one of the DLL's locks any more. That could have left the game in the task list without a window. It was not seen in testing.
+- SnowRunner Shadows: the reflection pass no longer times itself and writes a line to `SnowRunnerShadows.log` every 10 seconds. `SSRTiming=1` in `SnowRunnerShadows.ini` brings that back.
+- Scenery detail has two new rows, both off by default. Shown far away: plants, or everything, no longer vanish at a set distance. Small shadows: plants, or everything, that cast no shadow or lose it a few metres away get one. Both are tested on the game's files and have not been looked at in the game yet.
+- Scenery detail: restoring `shared.pak` no longer ends in "does not match the backup" for an install whose note is an older one without the original's hash.
+- Xbox app (Game Pass) version: the installer knows its folder layout, with `SnowRunner.exe` next to the paks. It asks to be run as administrator when Windows refuses a pak there, and it notes that SnowRunner Shadows is untested on that version. This is built from a player's description and tested on a stand-in folder only, not on a real install.
+- A game folder that was moved or renamed after an install: the installer finds the originals it kept for it.
+- Another mod's `hid.dll`: Apply writes SnowRunner Shadows before it renames the other mod's file, and Restore gives a `hid_chain.dll` its own name back also when our `hid.dll` is already gone.
+- The window remembers a game folder you picked.
+- After an update the status lists the parts an older version built, and the bar says "Apply to update the game to this version".
+
 ## [1.0.1] 2026-10-07
 
 - Water reflections: the dotted pattern on far water at flat angles is gone. Far from the camera the reflected ray no longer follows waves that are too small for the screen. The reflection there keeps a ripple, as the game's own reflection has, and the change from near to far is spread over a stretch of water.

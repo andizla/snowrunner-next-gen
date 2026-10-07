@@ -66,7 +66,8 @@ function setsFor(mods)
     if (shadow) need.push('shadow_filter/' + shadow);
     else if (mods.includes('contact')) need.push('shadow_filter/hq_revec');
     if (mods.includes('ambient')) need.push('ambient/' + (shadow ? 'sky_on_' + shadow : 'sky'));
-    if (mods.includes('fog')) need.push('fog_builds/jitter_phase', 'fog_builds/jitter_phase_sun');
+    if (mods.includes('fog')) need.push('fog_builds/jitter_phase');
+    if (mods.includes('fog') && mods.includes('fogsun')) need.push('fog_builds/jitter_phase_sun');   // made from jitter_phase
     if (mods.includes('bloom')) need.push('bloom_builds/softknee');
     if (mods.includes('tonemap')) need.push('tonemap_builds/fidelity');
     return need;

@@ -16,7 +16,10 @@
 //   ambient  ambient\sky_on_<shadow set in use>       main cache: ~4570 material shaders (sky tinted ambient, built on
 //            (ambient\sky with no shadow change)      top of the shadow set in use, so a shader can carry both)
 //   fog      fog_builds\jitter_phase                  main cache: 0x871EF8CC (slice jitter + forward scattering)
-//   tonemap  tonemap_builds\fidelity                  common_pc_sm50_hdr.sdc: 0x221304E2 (the Next Gen filmic curve, bloom x0.6)
+//   fogsun   fog_builds\jitter_phase_sun              the same shader with the sun's light where the shadow map lets it
+//            through (tools\patch_fog_sun.js): sun shafts through trees and dust. A build of the fog, which it needs.
+//            Experimental (the shafts also show over the truck and other things close to the camera) and not in DEFAULT
+//   tonemap tonemap_builds\fidelity                  common_pc_sm50_hdr.sdc: 0x221304E2 (the Next Gen filmic curve, bloom x0.6)
 //   bloom    bloom_builds\softknee                    common_pc_sm50_hdr.sdc: 0x52879E18 (soft knee, no haze)
 //   water    tools\patch_water_ssr.js + water\ssr.cso main cache: the 20 river and mud water shaders and the 176 lake
 //            (the 88 with the planar reflection through tools\patch_water_planar.js + water\ssr_planar.cso: the SSR at
@@ -112,14 +115,16 @@ const R = (...p) => path.join(W, 'replacements', ...p);
 // builds them from the player's shader.pak (same folder names), else replacements\; our own helpers always come from R()
 const SETS = process.env.SR_SETS_DIR || path.join(W, 'replacements');
 const S = (...p) => path.join(SETS, ...p);
-const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokeshade', 'sssr', 'headglow', 'contact'];
-// what install and build take without a list: every module but these three, which stay selectable by name
+const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokeshade', 'sssr', 'headglow', 'contact'];
+// what install and build take without a list: every module but these four, which stay selectable by name
 //   reflections  the per-material march alone: sssr took its place (the DLL's reflection pass, with that march only
 //                where the pass has nothing), and normalize refuses the two together
 //   glare        the lower cap on the headlights' highlight on wet ground: off since the reflections were reworked
 //   crisp        revec took its place (with it the shadow resolution default is 1x, SnowRunner Shadows' ini Factor=1)
+//   fogsun       the fog's sun shafts: off by default after 1.0.1 (they show over the truck and other things close
+//                to the camera; up to 1.0.1 the fog module alone brought them)
 // The fill light and the photo grade, defaults too, live in initial.pak and boot.pak (the installer's cards)
-const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp');
+const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun');
 
 // known names in ALL's order, "shadows" (older notes and commands) as crisp + blocker, gtao with gi (the bounce light is
 // measured by the GTAO pass); throws on an unknown name
@@ -138,6 +143,7 @@ function normalize(list)
     if (want.has('revec') && want.has('crisp')) throw new Error('modules revec and crisp are alternatives (both replace the sun shadow filter): pick one');
     if (want.has('seam') && !want.has('revec')) throw new Error('module seam (the cascade seam dither) is built on revec: add revec');
     if (want.has('headglow') && !want.has('sssr')) throw new Error('module headglow (the headlights in reflections) is a build of the reflection pass\'s reader: add sssr');
+    if (want.has('fogsun') && !want.has('fog')) throw new Error('module fogsun (the sun shafts) is a build of the fog: add fog');
     return ALL.filter((m) => want.has(m));
 }
 // the GTAO build to install: GTAO_VARIANT names a folder in replacements\ssao_builds (default gtao_hq, the released one;
@@ -148,15 +154,16 @@ function gtaoVariant()
     if (!/^[\w-]+$/.test(v) || !fs.existsSync(R('ssao_builds', v, '0xEA2414F8.shader'))) throw new Error('unknown GTAO variant ' + v);
     return v;
 }
-// the GTAO build as notes and summaries name it: the variant, with the far reach when aofar is in
+// the GTAO build as notes and summaries name it: the variant, with the far reach when aofar is in (the names of the
+// GTAO HQ builds, kept from when they were the pass: see plan() for the blob each selection gets)
 const gtaoBuild = (modules) => (modules.includes('aofar') ? 'gtao_hq_far' : gtaoVariant());
-// the fog build to install: FOG_VARIANT names a folder in replacements\fog_builds (default jitter_phase_sun: the
-// sun's light where the shadow map lets it through, tools\patch_fog_sun.js; jitter_phase = the fog without it;
-// jitter_phase_sun_debug paints the fog pass green where the shadow map is bound)
-const FOG_DEFAULT = 'jitter_phase_sun';
-function fogVariant()
+// the fog build to install: jitter_phase, and with module fogsun jitter_phase_sun (the sun's light where the shadow map
+// lets it through, tools\patch_fog_sun.js). FOG_VARIANT names another folder in replacements\fog_builds
+// (jitter_phase_sun_debug paints the fog pass green where the shadow map is bound)
+const fogDefault = (modules) => (modules.includes('fogsun') ? 'jitter_phase_sun' : 'jitter_phase');
+function fogVariant(modules)
 {
-    const v = process.env.FOG_VARIANT || FOG_DEFAULT;
+    const v = process.env.FOG_VARIANT || fogDefault(modules);
     if (!/^[\w-]+$/.test(v) || !fs.existsSync(S('fog_builds', v, '0x871EF8CC.shader'))) throw new Error('unknown fog variant ' + v);
     return v;
 }
@@ -225,13 +232,18 @@ function plan(modules)
     const shadows = shadowSet(modules);
     if (shadows) add(main, setFrom(S('shadow_filter', shadows)));
     if (modules.includes('ambient')) add(main, setFrom(S('ambient', shadows ? 'sky_on_' + shadows : 'sky')));
-    if (modules.includes('fog')) add(main, setFrom(S('fog_builds', fogVariant())));
+    if (modules.includes('fog')) add(main, setFrom(S('fog_builds', fogVariant(modules))));
     if (modules.includes('gtao'))
     {
-        // with the bounce light, the GTAO pass that also measures it (GTAO HQ inside); aofar: the builds with the far reach
+        // with the bounce light, the GTAO pass that also measures it; aofar: the builds with the far reach. Without the
+        // bounce light, the same pass built without its reads of the lit image (gtao_ao: GI_OFF=1): it keeps the
+        // bounce-light output, which SnowRunner Shadows takes the pass by, so the DLL draws it at half size as well
+        // (the GTAO HQ builds of ssao_builds have one output and are drawn at full size: 3.0 ms against 1.1 ms at
+        // 3840 x 2160, measured 2026-10-07). GTAO_VARIANT still names one of those builds, for the pass without aofar
         const far = modules.includes('aofar');
         const g = modules.includes('gi') ? fs.readFileSync(R('gi', far ? 'gtao_gi_far.cso' : 'gtao_gi.cso'))
-            : fs.readFileSync(R('ssao_builds', far ? 'gtao_hq_far' : gtaoVariant(), '0xEA2414F8.shader'));
+            : process.env.GTAO_VARIANT && !far ? fs.readFileSync(R('ssao_builds', gtaoVariant(), '0xEA2414F8.shader'))
+            : fs.readFileSync(R('gi', far ? 'gtao_ao_far.cso' : 'gtao_ao.cso'));
         main.set('EA2414F8', g); main.set('A3716E2B', distinctCopy(g));
     }
     if (modules.includes('tonemap')) add(hdr, setFrom(S('tonemap_builds', 'fidelity')));
@@ -531,7 +543,7 @@ function build(orig, modules)
 function summary(modules, r, gtao)
 {
     const helpers = helperNote(modules);
-    const fog = modules.includes('fog') && fogVariant() !== FOG_DEFAULT ? fogVariant() : null, rule = hitsNote(modules);
+    const fog = modules.includes('fog') && fogVariant(modules) !== fogDefault(modules) ? fogVariant(modules) : null, rule = hitsNote(modules);
     return modules.join(', ') + (gtao ? ' (GTAO build ' + gtao + ')' : '') + (fog ? ' (fog build ' + fog + ')' : '') + (rule ? ' (lake image rule ' + rule + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : '') + ': main cache ' + r.mainHits + '/' + r.mainPlanned + ' shaders, side cache ' + r.hdrHits + '/' + r.hdrPlanned +
         (r.waterPlanned ? ', water ' + r.waterHits + '/' + r.waterPlanned : '') + (r.lakePlanned ? ', lake reflection image ' + r.lakeHits + '/' + r.lakePlanned : '') + (r.glarePlanned ? ', wet ground ' + (modules.includes('glare') ? 'glare ' + r.glareHits + ' ' : '') + (modules.includes('puddles') ? 'puddles ' + r.puddleHits + ' ' : '') + 'of ' + r.glarePlanned : '') +
         (r.decalPlanned ? ', water decals ' + r.decalHits + ' of ' + r.decalPlanned : '') +
@@ -561,10 +573,12 @@ if (require.main === module)
         // before the first write, so a table that cannot be made stops the install with the game untouched
         const t = twins.buildTwins(orig, r.out);
         const gtao = modules.includes('gtao') ? gtaoBuild(modules) : null, helpers = helperNote(modules) || null;
-        const fog = modules.includes('fog') && fogVariant() !== FOG_DEFAULT ? fogVariant() : null, rule = hitsNote(modules);
+        const fog = modules.includes('fog') && fogVariant(modules) !== fogDefault(modules) ? fogVariant(modules) : null, rule = hitsNote(modules);
         pak.installBuild(r.out, { variant: 'fidelity: ' + modules.join(',') + (fog ? ' (fog build ' + fog + ')' : '') + (rule ? ' (lake image rule ' + rule + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : ''), modules, gtaoVariant: gtao, fogVariant: fog, hitsRule: rule, helpers, patchedSha256: pak.sha256(r.out), date: pak.localStamp() });
-        // the table goes in last: the pak and its note stand without it, and the switches then have nothing to switch
-        const bin = path.join(path.dirname(pak.PAK), '..', '..', '..', 'Sources', 'Bin');
+        // the table goes in last: the pak and its note stand without it, and the switches then have nothing to switch.
+        // It lies next to SnowRunner.exe: the folder the installer names (SR_BIN_DIR: a store version keeps the exe
+        // elsewhere), else Sources\Bin beside preload
+        const bin = process.env.SR_BIN_DIR || path.join(path.dirname(pak.PAK), '..', '..', '..', 'Sources', 'Bin');
         if (fs.existsSync(bin))
         {
             const stock = path.join(bin, 'SnowRunnerShadows.stock');
@@ -604,8 +618,12 @@ if (require.main === module)
         if (fs.existsSync(pak.ORIG) && pak.sha256(fs.readFileSync(pak.ORIG)) === cur) console.log('stock');
         else
         {
+            // a note that names a module this version does not know (written by a newer installer) is no build of ours
+            // to this version: unknown, not an error
             const note = pak.noteFor(pak.readNote(), cur);
-            console.log(note && Array.isArray(note.modules) ? normalize(note.modules).join(',') : 'unknown');
+            let modules = null;
+            try { modules = note && Array.isArray(note.modules) ? normalize(note.modules) : null; } catch (e) { modules = null; }
+            console.log(modules ? modules.join(',') : 'unknown');
         }
     }
     else if (cmd === 'gtao')

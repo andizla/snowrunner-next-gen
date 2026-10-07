@@ -12,6 +12,7 @@ $configs = @(
     @{ name = 'off nofeed';     ini = @('Factor=1', 'Feed=0');      args = @('off', 'nofeed') },
     @{ name = 'nogi';           ini = @('GI=0');                    args = @('nogi') },
     @{ name = 'nomips';         ini = @('FeedMips=0');              args = @('nomips') },
+    @{ name = 'runtime mips';   ini = @('FeedMips=2');              args = @() },
     @{ name = 'hw';             ini = @();                          args = @('hw') },
     @{ name = 'puddles off';    ini = @('PuddlesOn=0');             args = @('puddlesoff') },
     @{ name = 'bounce off';     ini = @('BounceOn=0');              args = @('bounceoff') },

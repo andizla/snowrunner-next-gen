@@ -54,12 +54,18 @@ try {
   $list.files.'engine/parts.json' = (Get-Item -LiteralPath $partsFile).Length
   $list | ConvertTo-Json | Set-Content -LiteralPath $listFile -Encoding ASCII
   try {
+    $r = Run @('status')
+    $st = $r | Where-Object { $_.type -eq 'status' } | Select-Object -First 1
+    Expect 'grade code changed: the status names the grade as out of date, and nothing else' ((@($st.outdated) -join ',') -eq 'grade')
     $r = Run @('apply', '--selection', $selection)
     Expect 'grade code changed: done' ($r[$r.Count - 1].type -eq 'done')
     Expect 'grade code changed: the grade is made again' (Said $r '^Grading the colour at 50 %')
     Expect 'grade code changed: shader.pak is left as it is' (Said $r '^shader\.pak already has these 1 modules')
     $r = Run @('apply', '--selection', $selection)
     Expect 'same again: the new fingerprint was recorded (nothing made again)' ((Said $r '^the photo grade is already at 50 %') -and -not (Said $r '^Grading the colour'))
+    $r = Run @('status')
+    $st = $r | Where-Object { $_.type -eq 'status' } | Select-Object -First 1
+    Expect 'same again: the status names nothing as out of date' (@($st.outdated).Count -eq 0)
   }
   finally { [IO.File]::WriteAllText($partsFile, $partsText); [IO.File]::WriteAllText($listFile, $listText) }
   # the contact shadows without the shadow edges and the blocker search: the bundle reads a shadow filter set for the

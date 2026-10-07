@@ -17,7 +17,9 @@
 // Distances="10, 25, 45" .../>, pretty printed), then binary data. A mesh whose first switch is nearer than 40 m gets
 // its switches raised to at least 40, 70, 110, 160 m (a value already further stays). The XML keeps its byte length
 // (the whitespace between tags gives or takes the difference), so the size prefix and the binary data stay byte for
-// byte. HidingDistance, MeshShadow and every other value stay.
+// byte. Every other value stays, unless one of the two extras is asked for: hide=plants|all takes the distance out
+// beyond which a mesh is no longer drawn (MeshLod's HidingDistance), shadows=plants|all the tag that ends its shadow at a
+// distance or keeps it from casting one at all (MeshShadow); plants = every plant mesh, all = models too (see patchMesh).
 //
 // shared.pak is always built from pak_backup\shared.pak.orig, a copy of the untouched file made on the first install.
 // Unchanged entries are copied raw; in changed ones only the deflate blocks holding the XML header are encoded anew
@@ -25,6 +27,8 @@
 // verify or a game update puts the stock file back; after an update, `backup` takes the new file as the original.
 // usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup
 //        node lod_patch.js build <file> [nature|all]     a patched copy anywhere, for tests
+//        list, install and build also take hide=plants|all and shadows=plants|all (the extras; left out = off)
+//        node lod_patch.js status-json    the status with the extras of this tool's build: {"state","hide","shadows"}
 //        node lod_patch.js grass-status | grass-build <file> [factor]   the grass half (GRASS_FACTOR sets the factor)
 //        node lod_patch.js grass-install [factor] | grass-restore   the grass alone (with LOD_GRASS=leave, install and
 //        restore then leave it to these; SR_STATE_DIR moves pak_backup's files elsewhere)
@@ -133,23 +137,42 @@ function meshType(data)
     return m ? m[1].toLowerCase() : '';
 }
 
-// the mesh with its switches raised and its XML at the old byte length, or null (nothing to raise, or no whitespace
-// between tags to balance with); notes collects "old -> new". Works on the header alone as well.
-function patchMesh(data, notes = [])
+// The two extras beside the LOD switches, each 'off', 'plants' (every plant mesh: trees, bushes, rocks, twigs, roots
+// and the like) or 'all' (models too):
+//   hide     MeshLod's HidingDistance taken out. The game stops drawing a mesh beyond that distance (35 to 1400 m; 80 m
+//            for small rocks), which shows as things appearing ahead of the truck; without it the mesh is drawn as far
+//            as its last LOD goes on being drawn.
+//   shadows  the MeshShadow tag taken out. Its HidingDistance is where the mesh's shadow ends: 0 = it never casts one
+//            (small rocks, twigs), 25 to 50 m on others; without the tag the shadow is drawn like the mesh.
+const EXTRA = ['off', 'plants', 'all'];
+const takes = (mode, type) => mode === 'all' || (mode === 'plants' && type === 'plant');
+const LOD_ONLY = { lod: true, hide: false, shadows: false };
+
+// the mesh with what `what` asks for done to its XML (lod: the switches raised; hide, shadows: see above) at the old
+// byte length, or null (nothing to change, or no whitespace between tags to balance with); notes collects "old -> new".
+// Works on the header alone as well.
+function patchMesh(data, notes = [], what = LOD_ONLY)
 {
     const n = data.length >= 8 ? data.readUInt32LE(0) : 0;
     if (n < 16 || n > data.length - 4) return null;
     const xml = data.toString('latin1', 4, 4 + n);
-    let delta = 0;
-    let out = xml.replace(/(<MeshLod\b[^>]*?\bDistances\s*=\s*")([^"]*)(")/gi, (all, open, list, close) =>
+    let out = xml;
+    if (what.lod) out = out.replace(/(<MeshLod\b[^>]*?\bDistances\s*=\s*")([^"]*)(")/gi, (all, open, list, close) =>
     {
         const raised = raise(list);
         if (raised === null) return all;
-        delta += raised.length - list.length;
         notes.push(list + ' -> ' + raised);
         return open + raised + close;
     });
+    if (what.hide) out = out.replace(/(<MeshLod\b[^>]*?)\s+HidingDistance\s*=\s*"([^"]*)"/gi, (all, head, value) => { notes.push('hidden from ' + value.trim() + ' m -> never'); return head; });
+    if (what.shadows) out = out.replace(/<MeshShadow\b[^>]*\/>/gi, (all) =>
+    {
+        const m = /\bHidingDistance\s*=\s*"([^"]*)"/i.exec(all);
+        notes.push(!m ? 'shadow tag out' : Number(m[1]) === 0 ? 'no shadow -> a shadow' : 'shadow to ' + m[1].trim() + ' m -> at any distance');
+        return '';
+    });
     if (out === xml) return null;
+    const delta = out.length - xml.length;
     if (delta < 0) out = out.replace(/>([ \t\r\n]+)</, (all, ws) => '>' + ws + ' '.repeat(-delta) + '<');
     else if (delta > 0)
     {
@@ -323,35 +346,46 @@ function redeflate(raw, next, xmlEnd)
     return { comp, length: comp.length, how: cut.final ? 'one block' : 'splice failed' };
 }
 
-// every entry the set changes, with what its new data is made of, counts per group, and the size of the result
-function plan(file, set = 'nature')
+// every entry the set and the two extras (hide, shadows: see patchMesh) change, with what its new data is made of,
+// counts per group, and the size of the result
+function plan(file, set = 'nature', extras = {})
 {
     if (!SETS[set]) throw new Error('unknown set ' + set + ' (nature or all)');
+    const hide = extras.hide || 'off', shadows = extras.shadows || 'off';
+    if (!EXTRA.includes(hide) || !EXTRA.includes(shadows)) throw new Error('hide and shadows are each off, plants or all');
+    const anyMesh = hide === 'all' || shadows === 'all', anyPlant = hide === 'plants' || shadows === 'plants';
     const fd = fs.openSync(file, 'r');
     try
     {
         const z = readZip(fd);
-        const jobs = new Map(), changed = {}, kept = {}, noRoom = [], how = {};
+        const jobs = new Map(), changed = {}, kept = {}, noRoom = [], how = {}, extra = { hide: 0, shadows: 0 };
         let grow = 0;
         for (const ent of z.entries)
         {
+            // the set's meshes get their switches raised; an extra takes every plant, or every mesh, in or out of the set
             const c = classify(ent.name, set);
-            if (!c) continue;
+            if (!c && !(ent.name.startsWith('[meshes]') && (anyMesh || (anyPlant && baseName(ent.name).startsWith('plants_'))))) continue;
             const start = readStart(fd, ent), type = meshType(start);
-            if (!type || type === 'grass' || (c.type && type !== c.type)) continue;
-            const group = c.group || 'other ' + type + 's';
+            if (!type || type === 'grass') continue;
+            const what = { lod: !!c && !(c.type && type !== c.type), hide: takes(hide, type), shadows: takes(shadows, type) };
+            if (!what.lod && !what.hide && !what.shadows) continue;
+            const group = (c && c.group) || 'other ' + type + 's';
             const peek = [];
-            if (!patchMesh(start, peek))
+            if (!patchMesh(start, peek, what))
             {
-                if (peek.length) noRoom.push(ent.name); else if (hasLods(start)) kept[group] = (kept[group] || 0) + 1;
+                if (peek.length) noRoom.push(ent.name); else if (what.lod && hasLods(start)) kept[group] = (kept[group] || 0) + 1;
                 continue;
             }
             const { head, raw, data } = readEntry(fd, ent);
             const notes = [];
-            const next = patchMesh(data, notes);
+            const next = patchMesh(data, notes, what);
             if (!next) throw new Error('the header and the whole entry disagree: ' + ent.name);
             const n = data.readUInt32LE(0);
-            const job = { head, crc: zlib.crc32(next), usize: next.length, type, group, notes };
+            const job = { head, crc: zlib.crc32(next), usize: next.length, type, group, notes, what };
+            const hid = notes.some((s) => s.startsWith('hidden from')), shadowed = notes.some((s) => s.includes('shadow'));
+            job.raised = notes.some((s) => !s.startsWith('hidden from') && !s.includes('shadow'));
+            if (hid) extra.hide++;
+            if (shadowed) extra.shadows++;
             if (ent.method === 8)
             {
                 const r = redeflate(raw, next, 4 + n);
@@ -366,12 +400,12 @@ function plan(file, set = 'nature')
                 how.stored = (how.stored || 0) + 1;
             }
             jobs.set(ent, job);
-            changed[group] = (changed[group] || 0) + 1;
+            if (job.raised) changed[group] = (changed[group] || 0) + 1;
             grow += job.length - ent.csize;
         }
         const end = z.cdOff + grow + z.cd.length + z.eocd.length;
         const size = z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end;
-        return { z, set, jobs, changed, kept, noRoom, grow, how, size };
+        return { z, set, hide, shadows, jobs, changed, kept, noRoom, grow, how, size, extra };
     }
     finally { fs.closeSync(fd); }
 }
@@ -389,8 +423,19 @@ function writePak(src, dst, p)
         const order = p.z.entries.slice().sort((a, b) => a.lho - b.lho);
         const newLho = new Map(), buf = Buffer.alloc(8 << 20);
         let pos = 0;
-        const put = (b) => { fs.writeSync(fout, b, 0, b.length, pos); pos += b.length; };
-        const copy = (from, to) => { for (let q = from; q < to;) { const k = Math.min(buf.length, to - q); fs.readSync(fin, buf, 0, k, q); put(buf.subarray(0, k)); q += k; } };
+        // every byte asked for: a write may take less than it was given, and a read that comes back short would leave
+        // the buffer's earlier bytes in the copy
+        const put = (b) => { for (let at = 0; at < b.length;) at += fs.writeSync(fout, b, at, b.length - at, pos + at); pos += b.length; };
+        const copy = (from, to) =>
+        {
+            for (let q = from; q < to;)
+            {
+                const k = Math.min(buf.length, to - q), got = fs.readSync(fin, buf, 0, k, q);
+                if (got !== k) throw new Error('read ' + got + ' of ' + k + ' bytes at ' + q + ' of ' + path.basename(src));
+                put(buf.subarray(0, k));
+                q += k;
+            }
+        };
         copy(0, order[0].lho);
         order.forEach((ent, i) =>
         {
@@ -471,7 +516,7 @@ function verify(file, p)
             if (job)
             {
                 const { data } = readEntry(fd, ent);
-                if (ent.crc !== job.crc || ent.usize !== was.usize || meshType(data) !== job.type || patchMesh(data) !== null) throw new Error('changed entry reads back wrong: ' + ent.name);
+                if (ent.crc !== job.crc || ent.usize !== was.usize || meshType(data) !== job.type || patchMesh(data, [], job.what) !== null) throw new Error('changed entry reads back wrong: ' + ent.name);
                 return;
             }
             if (ent.crc !== was.crc || ent.csize !== was.csize || ent.usize !== was.usize || ent.method !== was.method) throw new Error('entry record changed: ' + ent.name);
@@ -889,7 +934,9 @@ function initialAdopt()
 function report(p, names)
 {
     const sum = (o) => Object.entries(o).map(([g, v]) => g + ' ' + v).join(', ') || 'none';
-    console.log(SETS[p.set] + ': changed ' + sum(p.changed) + ' (' + p.jobs.size + ' meshes)');
+    console.log(SETS[p.set] + ': changed ' + sum(p.changed) + ' (' + p.jobs.size + ' meshes in all)');
+    if (p.hide !== 'off' || p.shadows !== 'off')
+        console.log('extras: hiding distance out of ' + p.extra.hide + ' meshes (' + p.hide + '), shadow tag out of ' + p.extra.shadows + ' (' + p.shadows + ')');
     console.log('left as they are (first switch at 40 m or later): ' + sum(p.kept));
     if (p.noRoom.length) console.log('skipped, no whitespace to keep the length: ' + p.noRoom.join(', '));
     console.log('size: ' + (p.grow >= 0 ? '+' : '') + p.grow + ' bytes compressed (' + Object.entries(p.how).map(([k, v]) => k + ' ' + v).join(', ') + '), result ' + p.size + ' bytes');
@@ -905,17 +952,27 @@ if (require.main === module)
 {
     const args = process.argv.slice(2), cmd = args[0];
     const set = args.find((a) => SETS[a]) || 'nature';
+    // the two extras: hide=plants|all, shadows=plants|all (left out = off)
+    const extraArg = (name) => { const a = args.find((v) => v.startsWith(name + '=')); return a ? a.slice(name.length + 1) : 'off'; };
+    const extras = { hide: extraArg('hide'), shadows: extraArg('shadows') };
+    const extrasSay = (p) => (p.hide === 'off' && p.shadows === 'off' ? '' : ', hiding distance out of ' + p.extra.hide + ' (' + p.hide + '), shadow tag out of ' + p.extra.shadows + ' (' + p.shadows + ')');
     const source = () => (fs.existsSync(ORIG) ? ORIG : PAK);
     try
     {
         finishAdopt(INITIAL_ORIG);
-        if (cmd === 'list') { const from = source(); console.log('from ' + from); report(plan(from, set), args.includes('names')); }
+        if (cmd === 'list') { const from = source(); console.log('from ' + from); report(plan(from, set, extras), args.includes('names')); }
         else if (cmd === 'status') console.log(status());
+        else if (cmd === 'status-json')
+        {
+            // the set as status gives it, and the extras of this tool's build (off for anything else)
+            const st = status(), rec = SETS[st] ? built(readNote(), cdHash(PAK)) : null;
+            console.log(JSON.stringify({ state: st, hide: (rec && rec.hide) || 'off', shadows: (rec && rec.shadows) || 'off' }));
+        }
         else if (cmd === 'build' && args[1] && !SETS[args[1]])
         {
-            const p = plan(source(), set);
+            const p = plan(source(), set, extras);
             writePak(source(), args[1], p);
-            console.log('built ' + args[1] + ' (' + SETS[set] + '): ' + p.jobs.size + ' meshes changed, ' + p.size + ' bytes, read back ok (' + verify(args[1], p) + ' untouched entries sampled)');
+            console.log('built ' + args[1] + ' (' + SETS[set] + extrasSay(p) + '): ' + p.jobs.size + ' meshes changed, ' + p.size + ' bytes, read back ok (' + verify(args[1], p) + ' untouched entries sampled)');
         }
         else if (cmd === 'backup')
         {
@@ -929,8 +986,8 @@ if (require.main === module)
             if (st === 'changed') throw new Error('shared.pak is neither the backup nor our build (a game update or Steam verify?). If it is the game\'s own file, run: node lod_patch.js backup');
             if (!fs.existsSync(ORIG)) backup();
             console.log('planning ' + SETS[set] + ' from the original shared.pak');
-            const p = plan(ORIG, set), tmp = PAK + '.tmp';
-            console.log('writing ' + p.jobs.size + ' changed meshes into a new shared.pak (' + p.size + ' bytes)');
+            const p = plan(ORIG, set, extras), tmp = PAK + '.tmp';
+            console.log('writing ' + p.jobs.size + ' changed meshes into a new shared.pak (' + p.size + ' bytes' + extrasSay(p) + ')');
             if (!p.jobs.size) console.log('warning: scenery detail changed no mesh: this game version\'s meshes do not have the switch distances it raises');
             let next;
             try
@@ -938,7 +995,8 @@ if (require.main === module)
                 writePak(ORIG, tmp, p);
                 const sampled = verify(tmp, p);
                 const note = readNote();
-                next = { origSha256: note.origSha256, origCdSha256: note.origCdSha256, origDate: note.origDate, set, cdSha256: cdHash(tmp), size: p.size, date: stamp(), floors: FLOORS, changed: p.changed };
+                next = { origSha256: note.origSha256, origCdSha256: note.origCdSha256, origDate: note.origDate, set, hide: p.hide, shadows: p.shadows, cdSha256: cdHash(tmp), size: p.size, date: stamp(),
+                    floors: FLOORS, changed: p.changed, extra: p.extra };
                 writeJson(NOTE, withPending(note, next));
                 swapIn(tmp, PAK);
                 console.log('read back ok (' + sampled + ' untouched entries sampled)');
@@ -1000,10 +1058,13 @@ if (require.main === module)
         {
             if (GRASS_WITH_SETS) restoreGrass();
             if (!fs.existsSync(ORIG)) { console.log('no backup: shared.pak was never changed by this tool'); return; }
-            if (status() === 'vanilla') { console.log('shared.pak is already the original'); return; }
+            const st = status();
+            if (st === 'vanilla') { console.log('shared.pak is already the original'); return; }
+            // neither the original nor this tool's build: a game update's new file or another tool's change would be lost
+            if (st === 'changed') { console.log('scenery detail: shared.pak is neither the original nor this tool\'s build (another tool or a game update): left alone'); return; }
             const tmp = PAK + '.tmp';
             try { fs.copyFileSync(ORIG, tmp); swapIn(tmp, PAK); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
-            if (cdHash(PAK) !== readNote().origCdSha256) throw new Error('shared.pak does not match the backup after the copy');
+            if (cdHash(PAK) !== (readNote().origCdSha256 || cdHash(ORIG))) throw new Error('shared.pak does not match the backup after the copy');
             console.log('scenery detail: vanilla');
         }
         else console.log('usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup | build <file> [nature|all] | grass-status | grass-build <file> [factor] | grass-install [factor] | grass-restore | fill-status | fill-install [factor] | fill-restore | stars-status | stars-install [factor] | stars-restore | weather-status | weather-install [parts] | weather-restore | initial-status | initial-restore | initial-refresh | initial-adopt | initial-build <file> [grass=<f>] [fill=<f>] [stars=<f>] [weather=<parts>]');

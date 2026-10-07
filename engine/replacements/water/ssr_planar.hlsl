@@ -169,10 +169,10 @@
                               //     engine's ripple: 0.2 x f(depth) x the view-projected wave normal, SSR_V2_RIPPLE): the
                               //     ray is the level water's everywhere, the reflection a mirror image that wobbles
 #ifndef SSR_V2_WAVES_NEAR
-#define SSR_V2_WAVES_NEAR 0.006
+#define SSR_V2_WAVES_NEAR 0.2
 #endif
 #ifndef SSR_V2_WAVES_FAR
-#define SSR_V2_WAVES_FAR 0.08
+#define SSR_V2_WAVES_FAR 2.0
 #endif
 #ifndef SSR_V2_RIPPLE
 #define SSR_V2_RIPPLE 1.0     // (SSR_V2_NEAR_WAVES 0) the lookup's shift, times the stock distortion. It grows with how

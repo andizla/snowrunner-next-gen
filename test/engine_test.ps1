@@ -149,6 +149,39 @@ $clock.Stop()
 Check 'same again: done' (Last $r) 'done'
 Check 'same again: nothing rebuilt (under 30 s)' ($clock.Elapsed.TotalSeconds -lt 30) 'True'
 
+'the fog with its sun shafts (off in the default set)'
+$shaderDefault = Hash (Join-Path $paks 'shader.pak')
+$withShafts = @($default | ForEach-Object { $_; if ($_ -eq 'fog') { 'fogsun' } })
+$shafts = [ordered]@{}
+foreach ($k in $everything.Keys) { $shafts[$k] = $everything[$k] }
+$shafts['shader'] = $withShafts
+$r = Apply $shafts
+Check 'sun shafts: done' (Last $r) 'done'
+Check 'sun shafts: status lists the module after the fog' ((Status).shader.modules -join ',') ($withShafts -join ',')
+Check 'sun shafts: shader.pak is another build' ((Hash (Join-Path $paks 'shader.pak')) -ne $shaderDefault) 'True'
+$r = Apply $everything
+Check 'sun shafts off again: the default build byte for byte' ((Hash (Join-Path $paks 'shader.pak')) -eq $shaderDefault) 'True'
+
+'the scenery set with its two extras (off in the default set)'
+$sharedPlain = Hash (Join-Path $paks 'shared.pak')
+$far = [ordered]@{}
+foreach ($k in $everything.Keys) { $far[$k] = $everything[$k] }
+$far['sceneryHide'] = 'plants'
+$far['sceneryShadows'] = 'plants'
+$r = Apply $far
+Check 'scenery extras: done' (Last $r) 'done'
+$s = Status
+Check 'scenery extras: status names both' ('{0} {1} {2}' -f $s.scenery, $s.sceneryHide, $s.sceneryShadows) 'all plants plants'
+Check 'scenery extras: shared.pak is another build' ((Hash (Join-Path $paks 'shared.pak')) -ne $sharedPlain) 'True'
+$clock = [Diagnostics.Stopwatch]::StartNew()
+$r = Apply $far
+$clock.Stop()
+Check 'scenery extras, the same again: nothing rebuilt (under 30 s)' ($clock.Elapsed.TotalSeconds -lt 30) 'True'
+$r = Apply $everything
+$s = Status
+Check 'scenery extras off again: status' ('{0} {1} {2}' -f $s.scenery, $s.sceneryHide, $s.sceneryShadows) 'all off off'
+Check 'scenery extras off again: the plain build byte for byte' ((Hash (Join-Path $paks 'shared.pak')) -eq $sharedPlain) 'True'
+
 'every part changed'
 $r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3'; slopeBias = '0'; aoHalf = '0' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5'; stars = '2'; weather = 'showers,shadows' })
 Check 'changed: done' (Last $r) 'done'
@@ -172,6 +205,17 @@ $r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; sl
 Check 'beside it: done' (Last $r) 'done'
 Check 'beside it: the other one is hid_chain.dll' ((Test-Path (Join-Path $bin 'hid_chain.dll')) -and ((Hash (Join-Path $bin 'hid_chain.dll')) -eq $foreignHash)) 'True'
 Check 'beside it: ours is hid.dll' ((Status).dll.state) 'ours'
+# ours taken out by hand (or by a virus scanner) while the other mod's waits as hid_chain.dll: unticking SnowRunner
+# Shadows gives the other mod its hid.dll back. And an older ShadowScale add-on file moves out of the game, into the
+# state folder, when ours goes in
+[System.IO.File]::Delete((Join-Path $bin 'hid.dll'))
+$r = Apply ([ordered]@{ shader = $less; shadows = $null; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5' })
+Check 'ours gone by hand: the other mod''s hid.dll is back, no hid_chain.dll, no ini' ('{0} {1} {2}' -f ((Hash (Join-Path $bin 'hid.dll')) -eq $foreignHash), (Test-Path (Join-Path $bin 'hid_chain.dll')), (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini'))) 'True False False'
+Set-Content -LiteralPath (Join-Path $bin 'ShadowScale.ini') -Value 'the older add-on''s settings'
+$r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; slopeBias = '1' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5' })
+Check 'beside it again: ours is hid.dll, the other one hid_chain.dll' ('{0} {1}' -f (Status).dll.state, ((Hash (Join-Path $bin 'hid_chain.dll')) -eq $foreignHash)) 'ours True'
+Check 'the older add-on''s file: out of the game, kept in the state folder' ('{0} {1}' -f (Test-Path (Join-Path $bin 'ShadowScale.ini')), @(Get-ChildItem -LiteralPath (Join-Path $env:NGEN_STATE_ROOT 'games') -Recurse -Filter 'ShadowScale.ini').Count) 'False 1'
+Check 'status: no part is out of date' (@((Status).outdated).Count) 0
 
 'a second engine on the same game, and a pak that cannot be written'
 $same = [ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; slopeBias = '1' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5' }
@@ -278,6 +322,30 @@ Check 'after the file check: the note names the two paks' (Note) 'boot.pak initi
 $r = Engine @('restore')
 Check 'after the file check: restore, and the note is gone' ('{0} {1}' -f (Last $r), (Note)) 'done none'
 foreach ($p in 'boot', 'initial') { Check "after the file check: $p.pak is the original byte for byte" (Hash (Join-Path $paks "$p.pak")) (Hash (Join-Path $originals "$p.pak.orig")) }
+
+'the game folder is moved (a library put elsewhere): its state is found again by the notes'
+$r = Apply $small
+Check 'before the move: done' (Last $r) 'done'
+$games = Join-Path $env:NGEN_STATE_ROOT 'games'
+function KeepsOriginals { return @(Get-ChildItem -LiteralPath $games -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'shader.pak.orig') } | ForEach-Object { $_.Name }) }
+$stateBefore = @(KeepsOriginals)
+$home0 = $game
+$game = Join-Path $work 'game moved'
+Rename-Item -LiteralPath $home0 -NewName 'game moved'
+$paks = Join-Path $game 'preload\paks\client'
+$s = Status
+Check 'moved: no pak is without its original, and the installed parts are read' ('{0} {1} {2} {3}' -f @($s.orphaned).Count, $s.shader.state, $s.fill.state, $s.grade.state) '0 ours ours ours'
+$stateAfter = @(KeepsOriginals)
+Check 'moved: still one state folder with originals, under the moved folder''s name' ('{0} {1} {2}' -f $stateBefore.Count, $stateAfter.Count, ($stateAfter[0] -ne $stateBefore[0])) '1 1 True'
+Check 'moved: its label names the new place' ((Get-Content -LiteralPath (Join-Path (Join-Path $games $stateAfter[0]) 'game.txt') -TotalCount 1)) $game
+# and back again, where a folder with a label of its own may have been left by a look at the game
+Rename-Item -LiteralPath $game -NewName 'game'
+$game = $home0
+$paks = Join-Path $game 'preload\paks\client'
+Check 'moved back: the same state again, under the first name' ('{0} {1}' -f @((Status).orphaned).Count, (@(KeepsOriginals) -join ' ')) ('0 ' + $stateBefore[0])
+$r = Engine @('restore')
+Check 'moved back: restore, and the note is gone' ('{0} {1}' -f (Last $r), (Note)) 'done none'
+foreach ($p in 'shader', 'boot', 'initial') { Check "moved back: $p.pak is the original byte for byte" (Hash (Join-Path $paks "$p.pak")) (Hash (Join-Path $originals "$p.pak.orig")) }
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }
 'all passed'

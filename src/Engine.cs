@@ -32,6 +32,7 @@ namespace SnowRunnerNextGen
         public string Factor, SlopeBias;
         public string AoHalf;                     // the DLL draws the ambient occlusion pass at half size: "1", or full: "0"
         public string Scenery = "vanilla";        // vanilla, nature, all, changed, missing
+        public string SceneryHide = "off", SceneryShadows = "off";   // the set's two extras: off, plants, all
         public string Grass = "vanilla";          // vanilla, ours, changed, missing
         public string GrassFactor;
         public string Fill = "vanilla";           // the fill light, the other part of initial.pak: the same states
@@ -46,6 +47,7 @@ namespace SnowRunnerNextGen
         public string Sky = "vanilla";            // the night sky, the third part of boot.pak: the same states
         public string Logos = "vanilla";          // the Next Gen logos in gfx.pak: the same states
         public readonly List<string> Orphaned = new List<string>();   // paks that hold our changes while their kept originals are gone
+        public readonly List<string> Outdated = new List<string>();   // installed parts this installer carries in another build: Apply updates them
 
         public bool AnythingOurs
         {
@@ -70,6 +72,8 @@ namespace SnowRunnerNextGen
             s.SlopeBias = Text(dll, "slopeBias");
             s.AoHalf = Text(dll, "aoHalf");
             s.Scenery = d.ContainsKey("scenery") && d["scenery"] != null ? d["scenery"].ToString() : "missing";
+            s.SceneryHide = d.ContainsKey("sceneryHide") && d["sceneryHide"] != null ? d["sceneryHide"].ToString() : "off";
+            s.SceneryShadows = d.ContainsKey("sceneryShadows") && d["sceneryShadows"] != null ? d["sceneryShadows"].ToString() : "off";
             s.Grass = Text(grass, "state") ?? "missing";
             s.GrassFactor = Text(grass, "factor");
             s.Fill = Text(fill, "state") ?? "missing";
@@ -87,6 +91,8 @@ namespace SnowRunnerNextGen
             s.Logos = Text(Part(d, "logos"), "state") ?? "missing";
             IEnumerable orphaned = d.ContainsKey("orphaned") ? d["orphaned"] as IEnumerable : null;
             if (orphaned != null && !(orphaned is string)) foreach (object f in orphaned) if (f != null) s.Orphaned.Add(f.ToString());
+            IEnumerable outdated = d.ContainsKey("outdated") ? d["outdated"] as IEnumerable : null;
+            if (outdated != null && !(outdated is string)) foreach (object p in outdated) if (p != null) s.Outdated.Add(p.ToString());
             return s;
         }
 
@@ -140,15 +146,39 @@ namespace SnowRunnerNextGen
             return File.Exists(file) ? file : null;
         }
 
-        static string LogPath()
+        // where the engine keeps its state folders and its log (engine\ngen.js stateRoot)
+        static string StateRoot()
         {
             string root = Environment.GetEnvironmentVariable("NGEN_STATE_ROOT");
-            if (string.IsNullOrEmpty(root))
+            if (!string.IsNullOrEmpty(root)) return root;
+            string local = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+            return Path.Combine(string.IsNullOrEmpty(local) ? Path.GetTempPath() : local, "SnowRunnerNextGen");
+        }
+
+        static string LogPath() { return Path.Combine(StateRoot(), "install.log"); }
+
+        // The game folder the player picked last, kept beside the log (last_game.txt): the next start opens on it
+        // instead of the first install found. Null when none was picked or it is no game folder any more.
+        public static string RememberedGame()
+        {
+            try
             {
-                string local = Environment.GetEnvironmentVariable("LOCALAPPDATA");
-                root = Path.Combine(string.IsNullOrEmpty(local) ? Path.GetTempPath() : local, "SnowRunnerNextGen");
+                string file = Path.Combine(StateRoot(), "last_game.txt");
+                if (!File.Exists(file)) return null;
+                string folder = File.ReadAllText(file, Encoding.UTF8).Trim();
+                return folder.Length > 0 && Directory.Exists(folder) && GameFinder.IsGame(folder) ? folder : null;
             }
-            return Path.Combine(root, "install.log");
+            catch (Exception) { return null; }
+        }
+
+        public static void RememberGame(string folder)
+        {
+            try
+            {
+                Directory.CreateDirectory(StateRoot());
+                File.WriteAllText(Path.Combine(StateRoot(), "last_game.txt"), folder + "\r\n", new UTF8Encoding(false));
+            }
+            catch (Exception) { }   // the next start looks for the game again
         }
 
         // the log's file shown in its folder, ready to be sent

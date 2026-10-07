@@ -104,8 +104,11 @@ namespace SnowRunnerNextGen
                 "River waves between you and a low sun light up in the water's own colour, wherever the sun really reaches them.", "water"));
             list.Add(M("glare", "WATER", "Headlight glare cap", false, "Tamer headlight shine on wet ground and puddles, with no long bright band across them."));
 
-            list.Add(M("fog", "ATMOSPHERE", "Volumetric fog", true,
-                "No banding, a glow toward the sun, and sun shafts through trees and dust. The shafts are experimental: they also show over your truck and other things close to the camera."));
+            Module fog = M("fog", "ATMOSPHERE", "Volumetric fog", true,
+                "No banding and a glow toward the sun. Sun shafts through trees and dust can be switched on: they are experimental and also show over your truck and other things close to the camera.");
+            // the fog build with the sun's light through it (module fogsun): off unless picked
+            fog.Options.Add(new OptionSet("Sun shafts", new[] { "off", "on" }, new[] { "", "fogsun" }, 0));
+            list.Add(fog);
             // the weather, the fourth part of initial.pak: five parts, each its own row; the key of a row that is on is the
             // part's name, and the selection joins them into the tool's comma list
             Module weather = M("weather", "ATMOSPHERE", "Weather", true,
@@ -141,8 +144,11 @@ namespace SnowRunnerNextGen
             list.Add(grade);
 
             Module scenery = M("scenery", "SCENERY", "Scenery detail", false,
-                "Scenery keeps its full detail farther out, so less pops in while you drive. All meshes makes shared.pak larger than 2 GB.");
+                "Scenery keeps its full detail farther out, so less pops in while you drive. All meshes makes shared.pak larger than 2 GB. " +
+                "Shown far away: plants (trees, bushes, rocks, twigs), or everything, no longer vanish at a set distance. Small shadows: what casts none, or loses it a few metres away, gets one.");
             scenery.Options.Add(new OptionSet("Set", new[] { "nature", "all meshes" }, new[] { "nature", "all" }, 0));
+            scenery.Options.Add(new OptionSet("Shown far away", new[] { "as the game", "plants", "everything" }, new[] { "", "plants", "all" }, 0));
+            scenery.Options.Add(new OptionSet("Small shadows", new[] { "off", "plants", "everything" }, new[] { "", "plants", "all" }, 0));
             list.Add(scenery);
             Module grass = M("grass", "SCENERY", "Grass reach", false, "Grass drawn farther out. Costs frame rate in grassy areas.");
             grass.Options.Add(new OptionSet("Reach", new[] { "3x", "2x" }, new[] { "3", "2" }, 0));

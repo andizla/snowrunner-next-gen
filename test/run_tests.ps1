@@ -75,6 +75,14 @@ try {
   $s = & $selection
   Check 'selection: not with the march-only method' (@($s['shader']) -contains 'headglow') 'False'
   $cards['objrefl'].Choice[0] = 0
+  # the fog's sun shafts: off unless picked, and then their build of the fog goes out with the fog
+  $s = & $selection
+  Check 'sun shafts: off by default' ("$(& $keyOf 'fog')") ''
+  Check 'selection: the fog without the sun shafts' ((@($s['shader']) -contains 'fog') -and -not (@($s['shader']) -contains 'fogsun')) 'True'
+  $cards['fog'].Choice[0] = 1
+  $s = & $selection
+  Check 'selection: the sun shafts picked' ((@($s['shader']) -contains 'fog') -and (@($s['shader']) -contains 'fogsun')) 'True'
+  $cards['fog'].Choice[0] = 0
   # the weather: the rows that are on, as the tool's comma list
   $s = & $selection
   Check 'selection: the weather, all seven parts by default' ($s['weather']) 'shadows,showers,evening,horizon,far,fireflies,pollen'
@@ -102,6 +110,38 @@ try {
   Check 'select all' (Note) '29 of 29 selected'
   foreach ($c in $list.Cards) { $c.Reset() }
   Check 'defaults again' (Ticked) $defaults
+
+  # the cards as a game with the sun shafts installed has them, and as one with the fog alone
+  $installed = [Activator]::CreateInstance($asm.GetType('SnowRunnerNextGen.GameStatus'))
+  $installed.Shader = 'ours'
+  foreach ($m in 'fog', 'fogsun') { $installed.Modules.Add($m) }
+  $viewType.GetMethod('Mirror', $flags).Invoke($view, @($installed))
+  Check 'mirror: the sun shafts as installed' ('{0} {1}' -f $cards['fog'].On, (& $keyOf 'fog')) 'True fogsun'
+  [void]$installed.Modules.Remove('fogsun')
+  $viewType.GetMethod('Mirror', $flags).Invoke($view, @($installed))
+  Check 'mirror: the fog alone' ('{0} [{1}]' -f $cards['fog'].On, (& $keyOf 'fog')) 'True []'
+  foreach ($c in $list.Cards) { $c.Reset() }
+  Check 'defaults once more' (Ticked) $defaults
+
+  # the bar for a game that has the default set installed: "as installed", and when this installer carries a newer
+  # build of an installed part, that Apply updates it (the same ticks would build it again)
+  $s = & $selection
+  $has = [Activator]::CreateInstance($asm.GetType('SnowRunnerNextGen.GameStatus'))
+  $has.Shader = 'ours'; foreach ($m in @($s['shader'])) { $has.Modules.Add($m) }
+  $has.Dll = 'ours'; $has.DllCurrent = $true; $has.Factor = '1'; $has.SlopeBias = '1'; $has.AoHalf = '1'
+  $has.Fill = 'ours'; $has.FillFactor = '0.7'; $has.Grade = 'ours'; $has.GradeStrength = '1'; $has.Particles = 'ours'
+  $has.Stars = 'ours'; $has.StarsFactor = '3'; $has.Sky = 'ours'; $has.Logos = 'ours'
+  $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,far,fireflies,pollen'
+  $viewType.GetField('installed', $flags).SetValue($view, $has)
+  $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
+  Check 'bar: the default set as installed' (Note) "26 of 29 selected  $([char]0xB7)  as installed"
+  $has.Outdated.Add('shader')
+  $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
+  Check 'bar: a newer build of an installed part' (Note) "26 of 29 selected  $([char]0xB7)  Apply to update the game to this version"
+  $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($has))
+  Check 'header: says that Apply updates the game' ($said -match 'Note: this installer has a newer build of what is installed: Apply updates the game$') 'True'
+  $viewType.GetField('installed', $flags).SetValue($view, $null)
+  $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
 
   # the header for a game whose paks hold our changes while their kept originals are gone
   $status = [Activator]::CreateInstance($asm.GetType('SnowRunnerNextGen.GameStatus'))
