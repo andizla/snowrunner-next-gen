@@ -11,7 +11,7 @@ const DEV = process.env.SR_TOOLS_TREE || 'C:\\Games\\SnowRunner-shaders';
 const pkgEngine = path.join(ROOT, 'out', 'package', 'SnowRunnerNextGen', 'engine');
 const pkgTools = path.join(pkgEngine, 'tools'), pkgNode = path.join(pkgEngine, 'node.exe');
 const OUT = path.join(ROOT, 'out', 'compare');
-// the window's default shader modules
+// the window's default shader modules with the fog and the bounce light, which are off by default: their sets are compared too
 const MODULES = 'gtao,aofar,revec,blocker,seam,ambient,fog,tonemap,bloom,water,rivertint,crestglow,puddles,gi,smoke,smokeshade,sssr,headglow,contact';
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });

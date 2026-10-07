@@ -2,8 +2,8 @@
 
 ## [1.0.2] 2026-10-08
 
-- Bounce light: snow and ice no longer glow blue in tracks, ruts and along drifts. The bounce light counted every surface four times as bright as it is, which suits dark mud and was far too much for snow. A surface is now raised at most to 0.6 of the scene's ambient light, and one brighter than that counts as it is.
-- Volumetric fog: the sun shafts are off by default and have their own switch on the card, Sun shafts. They stay experimental: they also show over the truck and other things close to the camera. An install made with 1.0.0 or 1.0.1 has them, and Apply takes them out unless the switch is on.
+- Bounce light is off by default and marked experimental: on snow and ice it comes out too strong and blue, in tracks, ruts and along drifts. Its strength of four now stops where a surface reaches 0.6 of the scene's ambient light, which eases the glow and does not cure it. An install made with 1.0.0 or 1.0.1 keeps the card ticked: untick Bounce light and click Apply.
+- Volumetric fog is off by default. Its sun shafts have their own switch on the card, Sun shafts, also off: they stay experimental and show over the truck and other things close to the camera. An install made with 1.0.0 or 1.0.1 has the fog with the shafts: Apply takes the shafts out unless the switch is on, and unticking the card takes the fog out.
 - Water reflections follow the waves farther out. At 3840 x 2160, from a camera 3 m over the water, the reflection lets go of the waves between about 40 and 130 m. In 1.0.1 that was 7 to 27 m.
 - GTAO without the Bounce light card is drawn at half size too, as it already was with the card. In a test scene the frame took 10.24 ms, down from 12.56 ms.
 - SnowRunner Shadows makes the smaller levels of its scene copy itself. With a ReShade add-on that changes the game's texture formats those levels stayed empty, and the bounce light lost most of its reach.

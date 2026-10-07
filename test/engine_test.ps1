@@ -118,8 +118,8 @@ $modFile2 = 'ngen_test/another_mod_2.txt'; $modText2 = "another mod's file 2"; $
 $modFile3 = 'ngen_test/another_mod_3.txt'; $modText3 = "another mod's file 3"; $modCrc3 = [uint32]3334707821   # c6c39a6d
 $boot = Join-Path $paks 'boot.pak'; $initial = Join-Path $paks 'initial.pak'; $gfx = Join-Path $paks 'gfx.pak'
 
-# the window's default shader modules, in the bundle's order: every module but the headlight glare cap, the 16-tap
-# filter and the march-only reflections
+# the window's default shader modules with the fog and the bounce light (both off by default) on top, in the
+# bundle's order: every module but the headlight glare cap, the 16-tap filter and the march-only reflections
 $default = 'gtao', 'aofar', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'puddles', 'gi', 'smoke', 'smokeshade', 'sssr', 'headglow', 'contact'
 # every part changed: without the fog, the contact shadows and the headlights in reflections, the 16-tap filter in
 # place of the rebuilt edges (so both filters' sets get made, and the seam dither goes with the rebuilt edges)

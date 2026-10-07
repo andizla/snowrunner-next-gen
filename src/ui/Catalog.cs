@@ -83,8 +83,10 @@ namespace SnowRunnerNextGen
                 "Less of the flat light that fills in shade: shaded sides, the insides of trees and trucks in shadow get darker, while sunlit parts and the sky stay as they are.");
             fill.Options.Add(new OptionSet("Strength", new[] { "70 %", "55 %", "85 %" }, new[] { "0.7", "0.55", "0.85" }, 0));
             list.Add(fill);
-            list.Add(M("gi", "LIGHT", "Bounce light", true,
-                "Sunlit snow, mud and paint light up what stands next to them, in their colour: under trucks, in wheel arches, at the feet of walls.",
+            // off by default: on snow and ice it comes out too strong and blue
+            list.Add(M("gi", "LIGHT", "Bounce light", false,
+                "Sunlit ground and paint light up what stands next to them, in their colour: under trucks, in wheel arches, at the feet of walls. " +
+                "Experimental: on snow and ice it comes out too strong and blue.",
                 "gtao", "shadows"));
 
             Module refl = M("objrefl", "REFLECTIONS", "Object reflections", true,
@@ -104,7 +106,8 @@ namespace SnowRunnerNextGen
                 "River waves between you and a low sun light up in the water's own colour, wherever the sun really reaches them.", "water"));
             list.Add(M("glare", "WATER", "Headlight glare cap", false, "Tamer headlight shine on wet ground and puddles, with no long bright band across them."));
 
-            Module fog = M("fog", "ATMOSPHERE", "Volumetric fog", true,
+            // off by default since 1.0.2
+            Module fog = M("fog", "ATMOSPHERE", "Volumetric fog", false,
                 "No banding and a glow toward the sun. Sun shafts through trees and dust can be switched on: they are experimental and also show over your truck and other things close to the camera.");
             // the fog build with the sun's light through it (module fogsun): off unless picked
             fog.Options.Add(new OptionSet("Sun shafts", new[] { "off", "on" }, new[] { "", "fogsun" }, 0));

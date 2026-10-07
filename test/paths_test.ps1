@@ -52,7 +52,7 @@ function Said($events, [string]$pattern) { return [bool]@($events | Where-Object
 function Hash($file) { return (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash }
 
 # the window's default selection (see test\run_tests.ps1 and engine\ngen.js), in a file whose name has the letters too
-$default = 'gtao', 'aofar', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'puddles', 'gi', 'smoke', 'smokeshade', 'sssr', 'headglow', 'contact'
+$default = 'gtao', 'aofar', 'revec', 'blocker', 'seam', 'ambient', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'puddles', 'smoke', 'smokeshade', 'sssr', 'headglow', 'contact'
 $selection = [ordered]@{ shader = $default; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = $null; grass = $null; fill = '0.7'; grade = '1'; particles = '1'; sky = '1'; stars = '3'; weather = 'shadows,showers,evening,horizon,far,fireflies,pollen'; logos = '1' }
 $file = Join-Path $user ('Auswahl ' + $o + $u + '.json')
 $selection | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $file -Encoding ASCII

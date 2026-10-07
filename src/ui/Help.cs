@@ -162,7 +162,7 @@ namespace SnowRunnerNextGen
                 Does, "Light bounces. Sunlit snow brightens the underside of a truck, and red paint tints the ground beside it. This adds that bounce at short range, up to about 1.5 metres, gathered from the scene's picture every frame.",
                 Notice, "Less black under trucks and in wheel arches on bright days, and a faint spill of colour from paint and mud.",
                 Costs, "Under 1 ms per frame at 4K (measured on an RTX 4080): it gathers light in the ambient occlusion pass and adds it to every lit material.",
-                Know, "Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene's picture. In the game, F10 switches it off and on.");
+                Know, "Off by default and experimental: on snow and ice the bounce comes out too strong and blue. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene's picture. In the game, F10 switches it off and on.");
 
             d["objrefl"] = E(
                 Does, "The game's paint, glass and chrome reflect a ready-made picture of the sky, so trucks never mirror what is around them. This makes them reflect what is on screen: the road, the trees and other trucks.",
@@ -209,7 +209,7 @@ namespace SnowRunnerNextGen
                 Does, "The game draws its fog in steps that show as bands. This breaks the bands up and adds a glow toward the sun. Sun shafts: the fog also sees the sun's shadows, so shafts of light show through trees and dust.",
                 Notice, "Smooth fog and a bright haze toward the sun. With the sun shafts on, fog and a low sun behind trees: rays of light.",
                 Costs, "Small.",
-                Know, "The sun shafts are off unless you switch them on. They are experimental: the fog is drawn without knowing what stands in front of it, so with a low sun the rays also show over your truck and other things close to the camera.\nThe rays need fog and a low sun. On a clear day there is little to see.");
+                Know, "Off by default. The sun shafts on the card are off too unless you switch them on. They are experimental: the fog is drawn without knowing what stands in front of it, so with a low sun the rays also show over your truck and other things close to the camera.\nThe rays need fog and a low sun. On a clear day there is little to see.");
 
             d["weather"] = E(
                 Does, "The game cycles each region through day states that can carry rain or snow, and on two maps moving cloud shadows. This adds more of that, from the game's own weather system. Cloud shadows: every map gets them, drawn from the game's own shadow textures. Showers: rain and snow swell and ease over time instead of holding one strength. Evening drizzle: the rain regions get light rain at dusk, at night and at dawn, as the snow regions already have flurries then. Horizon clouds: the cloud layer on the horizon that 17 sky files hold switched off, switched on. Far rain and snow: drawn out to 1.5 times the distance, 48 metres instead of 32. Fireflies: fireflies at night in the rain regions, drawn with the game's own firefly sprite. Pollen: pollen drifting through the clear days of the same regions. These two are weather types from the game's later engine, written in as two new files.",

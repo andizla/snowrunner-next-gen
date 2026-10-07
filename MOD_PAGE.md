@@ -16,11 +16,11 @@ The pictures were taken in photo mode with the time of day held still and the ca
 
 ## What is in it
 
-Light and shadow: SnowRunner Shadows with a larger shadow texture if you want one, straight shadow edges with blended cascade seams, a blocker search for soft shadow ends, contact shadows, GTAO with a wide search, sky ambient, less fill light, and bounce light from sunlit snow, mud and paint.
+Light and shadow: SnowRunner Shadows with a larger shadow texture if you want one, straight shadow edges with blended cascade seams, a blocker search for soft shadow ends, contact shadows, GTAO with a wide search, sky ambient, less fill light, and, off by default, bounce light from sunlit ground and paint.
 
 Reflections and water: paint, glass and chrome mirror the scene, headlights show in them at night, water and wet ground mirror banks, trees and trucks, deeper water keeps its own colour, and river waves light up against a low sun.
 
-Atmosphere and image: volumetric fog with a glow toward the sun, moving cloud shadows and more weather on every map, smoke that glows against the sun with a lit and a shaded side, sharper particles, the night sky from NASA's star map with brighter stars, a tonemap with more contrast, a bloom without haze, and the photo grade.
+Atmosphere and image: volumetric fog with a glow toward the sun (off by default), moving cloud shadows and more weather on every map, smoke that glows against the sun with a lit and a shaded side, sharper particles, the night sky from NASA's star map with brighter stars, a tonemap with more contrast, a bloom without haze, and the photo grade.
 
 Scenery, off by default: scenery detail that pops in less, and grass drawn farther out.
 
@@ -41,7 +41,9 @@ The program keeps a copy of each file before its first change and builds from th
 
 ## Known
 
-The fog's sun shafts are off by default and can be switched on on the Volumetric fog card. They are experimental: with a low sun they also show over the truck and other things close to the camera.
+Bounce light is off by default and experimental: on snow and ice it comes out too strong and blue.
+
+Volumetric fog is off by default. Its sun shafts are a separate switch on the card, also off. They are experimental: with a low sun they also show over the truck and other things close to the camera.
 
 ## If something goes wrong
 

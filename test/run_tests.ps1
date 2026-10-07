@@ -49,10 +49,10 @@ try {
   function Ticked { ($list.Cards | Where-Object { $_.On } | ForEach-Object { $_.Module.Id }) -join ' ' }
   function Note { $bar.GetType().GetField('note', $flags).GetValue($bar) }
 
-  # on by default: every card but Headlight glare cap, Scenery detail and Grass reach
-  $defaults = 'shadows edges blocker contact gtao aofar ambient fill gi objrefl headglow water puddles rivertint crestglow fog weather smoke smokeshade particles sky stars tonemap bloom grade logos'
+  # on by default: every card but Bounce light, Headlight glare cap, Volumetric fog, Scenery detail and Grass reach
+  $defaults = 'shadows edges blocker contact gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow weather smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '26 of 29 selected'
+  Check 'count' (Note) '24 of 29 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
@@ -75,7 +75,10 @@ try {
   $s = & $selection
   Check 'selection: not with the march-only method' (@($s['shader']) -contains 'headglow') 'False'
   $cards['objrefl'].Choice[0] = 0
-  # the fog's sun shafts: off unless picked, and then their build of the fog goes out with the fog
+  # the fog: off by default; its sun shafts: off unless picked, and then their build of the fog goes out with the fog
+  $s = & $selection
+  Check 'selection: no fog by default' (@($s['shader']) -contains 'fog') 'False'
+  $cards['fog'].ToggleByUser()
   $s = & $selection
   Check 'sun shafts: off by default' ("$(& $keyOf 'fog')") ''
   Check 'selection: the fog without the sun shafts' ((@($s['shader']) -contains 'fog') -and -not (@($s['shader']) -contains 'fogsun')) 'True'
@@ -83,6 +86,7 @@ try {
   $s = & $selection
   Check 'selection: the sun shafts picked' ((@($s['shader']) -contains 'fog') -and (@($s['shader']) -contains 'fogsun')) 'True'
   $cards['fog'].Choice[0] = 0
+  $cards['fog'].ToggleByUser()
   # the weather: the rows that are on, as the tool's comma list
   $s = & $selection
   Check 'selection: the weather, all seven parts by default' ($s['weather']) 'shadows,showers,evening,horizon,far,fireflies,pollen'
@@ -96,13 +100,13 @@ try {
   $cards['shadows'].ToggleByUser()
   # Headlights in reflections goes with Object reflections and Sun glow through waves with Water reflections, which
   # both need SnowRunner Shadows
-  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint fog weather smoke smokeshade particles sky stars tonemap bloom grade logos'
-  Check 'its note' (Note) 'Contact shadows, Bounce light, Object reflections, Headlights in reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
+  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint weather smoke smokeshade particles sky stars tonemap bloom grade logos'
+  Check 'its note' (Note) 'Contact shadows, Object reflections, Headlights in reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
   $cards['gi'].ToggleByUser()
-  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint fog weather smoke smokeshade particles sky stars tonemap bloom grade logos'
+  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint weather smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Bounce light needs SnowRunner Shadows: ticked it too.'
   $cards['gtao'].ToggleByUser()
-  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint fog weather smoke smokeshade particles sky stars tonemap bloom grade logos'
+  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint weather smoke smokeshade particles sky stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Wide occlusion and Bounce light need GTAO: unticked them too.'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($false))
   Check 'clear' (Note) '0 of 29 selected'
@@ -134,10 +138,10 @@ try {
   $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,far,fireflies,pollen'
   $viewType.GetField('installed', $flags).SetValue($view, $has)
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: the default set as installed' (Note) "26 of 29 selected  $([char]0xB7)  as installed"
+  Check 'bar: the default set as installed' (Note) "24 of 29 selected  $([char]0xB7)  as installed"
   $has.Outdated.Add('shader')
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: a newer build of an installed part' (Note) "26 of 29 selected  $([char]0xB7)  Apply to update the game to this version"
+  Check 'bar: a newer build of an installed part' (Note) "24 of 29 selected  $([char]0xB7)  Apply to update the game to this version"
   $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($has))
   Check 'header: says that Apply updates the game' ($said -match 'Note: this installer has a newer build of what is installed: Apply updates the game$') 'True'
   $viewType.GetField('installed', $flags).SetValue($view, $null)

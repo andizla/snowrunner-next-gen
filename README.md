@@ -18,7 +18,7 @@ Light and shadow
 - Wide occlusion: soft shade under trucks, roofs and tree crowns, out to 6 metres.
 - Sky ambient: the fill light takes the sky's colour.
 - Fill light: less of the flat light that fills in shade.
-- Bounce light: sunlit snow, mud and paint light up what stands next to them.
+- Bounce light: sunlit ground and paint light up what stands next to them. Off by default and experimental: on snow and ice it comes out too strong and blue.
 
 Reflections and water
 
@@ -32,7 +32,7 @@ Reflections and water
 
 Atmosphere and image
 
-- Volumetric fog: no banding and a glow toward the sun. Sun shafts through trees and dust are a switch on the card, off by default: they are experimental and also show over the truck and other things close to the camera.
+- Volumetric fog, off by default: no banding and a glow toward the sun. Sun shafts through trees and dust are a separate switch on the card, also off: they are experimental and also show over the truck and other things close to the camera.
 - Weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out, fireflies at night and pollen by day.
 - Smoke glow: smoke glows when the sun is behind it.
 - Smoke shape and softer edges: puffs get a lit and a shaded side and fade softly where they meet the ground.
