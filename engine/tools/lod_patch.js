@@ -80,6 +80,8 @@ const WEATHER_PARTS = weatherCanonical(process.env.WEATHER_PARTS || WEATHER_DEFA
 // and the debris and splashes (particle_debris.js)
 const { isDebrisEntry, debrisEdit, debrisSpec, DEBRIS_FACTOR: DEBRIS_DEFAULT } = require('./particle_debris.js');
 const DEBRIS_FACTOR = Number(process.env.DEBRIS_FACTOR || DEBRIS_DEFAULT);
+// and the winter cube in the snow regions' clear days, a fact of boot.pak like the photo skies (daytime_cubes.js)
+const { isCubeState, cubeContext, cubeEdit, winterCubes } = require('./daytime_cubes.js');
 // boot.pak holds the photo night skies; builds of them with the stars in their alpha need a sky alpha to match
 // (sky_stars.js). SR_BOOT_PAK points at another copy (dry runs)
 const BOOT = process.env.SR_BOOT_PAK || path.join(path.dirname(PAK), 'boot.pak');
@@ -614,7 +616,8 @@ function backup()
 // factor. The fill light: the day states' ambient times its factor (daytime_fill.js). The stars: the star layer times
 // its factor (sky_stars.js). The weather: cloud shadows, showers, evening drizzle, horizon clouds and rain drawn farther,
 // as listed (daytime_weather.js). The debris and splashes: what the wheels throw up lives longer and comes to rest
-// (particle_debris.js). Not a part but a fact of the game folder: the photo night skies whose picture in boot.pak
+// (particle_debris.js). Not parts but facts of the game folder: the winter cube in boot.pak (daytime_cubes.js: the snow
+// regions' clear days then name it), and the photo night skies whose picture in boot.pak
 // carries the stars in its alpha get their sky alpha times 3 in every build, stars part or not (without it the aurora
 // comes out at a third). Changed entries are small XML
 // files and are stored again whole (deflated at zlib -9 where they were deflated); everything else is copied raw.
@@ -630,32 +633,33 @@ function scaleList(list, factor)
 // the photo skies an earlier build was made for (the note's starsPhoto, for initialAdopt); left out = what boot.pak holds
 // now. A job's parts: the parts whose edit changed that entry (an entry can take two: a day state the fill light and the
 // weather); its group is the first of them
-function planInitial(file, parts, photoWas)
+function planInitial(file, parts, photoWas, winterWas)
 {
     const grass = parts.grass || null, fill = parts.fill || null, stars = parts.stars || null, weather = weatherCanonical(parts.weather || null), debris = parts.debris ? debrisSpec(parts.debris) : null;
     if (grass !== null && !(grass > 0)) throw new Error('grass factor ' + grass);
     if (fill !== null && !(fill > 0 && fill <= 2)) throw new Error('fill factor ' + fill);
     if (stars !== null && !(stars > 0 && stars <= 20)) throw new Error('stars factor ' + stars);
-    const photo = photoWas || photoSkies(BOOT), wParts = weatherSpec(weather);
+    const photo = photoWas || photoSkies(BOOT), wParts = weatherSpec(weather), winter = winterWas !== undefined ? !!winterWas : winterCubes(BOOT);
     const fd = fs.openSync(file, 'r');
     try
     {
         const z = readZip(fd), jobs = new Map(), changed = {}, weatherCount = {};
         // the evening part, the fireflies and the pollen ask which regions have rain in their day states: the day states
         // read once ahead
-        let ctx = { rainRegions: new Set() };
-        if (wParts.has('evening') || wParts.has('fireflies') || wParts.has('pollen'))
+        let ctx = { rainRegions: new Set() }, cctx = null;
+        if (wParts.has('evening') || wParts.has('fireflies') || wParts.has('pollen') || winter)
         {
             const texts = [];
             for (const ent of z.entries) if (WEATHER_DAYTIME.test(ent.name) && ent.flags === 0 && (ent.method === 0 || ent.method === 8)) texts.push({ name: ent.name, text: readEntry(fd, ent).data.toString('latin1') });
             ctx = weatherContext(texts);
+            if (winter) cctx = cubeContext(texts);
         }
         let grow = 0;
         for (const ent of z.entries)
         {
             const isGrass = grass !== null && GRASS_ENTRY.test(ent.name), isFill = fill !== null && isFillState(ent.name), isStars = (stars !== null || photo.size > 0) && isSkyEntry(ent.name);
-            const isWeather = wParts.size > 0 && isWeatherEntry(ent.name), isDebris = debris !== null && isDebrisEntry(ent.name);
-            if (!(isGrass || isFill || isStars || isWeather || isDebris) || ent.flags !== 0 || (ent.method !== 0 && ent.method !== 8)) continue;
+            const isWeather = wParts.size > 0 && isWeatherEntry(ent.name), isDebris = debris !== null && isDebrisEntry(ent.name), isWinter = winter && isCubeState(ent.name);
+            if (!(isGrass || isFill || isStars || isWeather || isDebris || isWinter) || ent.flags !== 0 || (ent.method !== 0 && ent.method !== 8)) continue;
             const { head, data } = readEntry(fd, ent);
             const text = data.toString('latin1'), notes = [], hit = [];
             let out = text, was = text;
@@ -674,7 +678,9 @@ function planInitial(file, parts, photoWas)
             if (isWeather) { const r = weatherEdit(out, ent.name, wParts, ctx); out = r.out; notes.push(...r.notes); for (const k of r.kinds) weatherCount[k] = (weatherCount[k] || 0) + 1; }
             if (out !== was) { hit.push('weather'); was = out; }
             if (isDebris) { const r = debrisEdit(out, ent.name, debris); out = r.out; notes.push(...r.notes); }
-            if (out !== was) hit.push('debris');
+            if (out !== was) { hit.push('debris'); was = out; }
+            if (isWinter) { const r = cubeEdit(out, ent.name, cctx); out = r.out; notes.push(...r.notes); }
+            if (out !== was) hit.push('winter');
             if (!hit.length) continue;
             const group = hit[0], next = Buffer.from(out, 'latin1');
             const comp = ent.method === 8 ? zlib.deflateRawSync(next, { level: 9, memLevel: 9 }) : next;
@@ -703,7 +709,7 @@ function planInitial(file, parts, photoWas)
         if (adds.length) changed.weather = (changed.weather || 0) + adds.length;
         const end = z.cdOff + grow + z.cd.length + z.eocd.length;
         const size = z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end;
-        return { z, set: 'initial', parts: { grass, fill, stars, weather, debris }, photo: [...photo].sort(), factor: grass, jobs, adds, changed, weatherCount, kept: {}, noRoom: [], grow, how: { rewritten: jobs.size, added: adds.length }, size };
+        return { z, set: 'initial', parts: { grass, fill, stars, weather, debris }, photo: [...photo].sort(), winter, factor: grass, jobs, adds, changed, weatherCount, kept: {}, noRoom: [], grow, how: { rewritten: jobs.size, added: adds.length }, size };
     }
     finally { fs.closeSync(fd); }
 }
@@ -766,7 +772,7 @@ function buildInitial(parts, label)
     if (now.state === 'changed') { console.log(label + ': initial.pak is neither the original nor this tool\'s build (another tool or a game update): left alone'); return; }
     const tmp = INITIAL + '.tmp';
     // with photo night skies in boot.pak that carry the stars in their alpha, no part still means a build: their sky alpha
-    if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !photoSkies(BOOT).size)
+    if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !photoSkies(BOOT).size && !winterCubes(BOOT))
     {
         if (now.state !== 'ours') return;
         try { fs.copyFileSync(INITIAL_ORIG, tmp); swapIn(tmp, INITIAL); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
@@ -787,7 +793,7 @@ function buildInitial(parts, label)
     {
         writePak(INITIAL_ORIG, tmp, p);
         const sampled = verifyInitial(tmp, p);
-        next = { origCdSha256: cdHash(INITIAL_ORIG), factor: p.parts.grass, fill: p.parts.fill, stars: p.parts.stars, weather: p.parts.weather, debris: p.parts.debris, starsPhoto: p.photo, cdSha256: cdHash(tmp), size: p.size, date: stamp(), changed: p.jobs.size };
+        next = { origCdSha256: cdHash(INITIAL_ORIG), factor: p.parts.grass, fill: p.parts.fill, stars: p.parts.stars, weather: p.parts.weather, debris: p.parts.debris, starsPhoto: p.photo, winterCubes: p.winter, cdSha256: cdHash(tmp), size: p.size, date: stamp(), changed: p.jobs.size };
         writeJson(GRASS_NOTE, withPending(readGrassNote(), next));
         swapIn(tmp, INITIAL);
         const has = [];
@@ -797,6 +803,7 @@ function buildInitial(parts, label)
         if (p.parts.weather) has.push('the weather (' + p.parts.weather.split(',').map((k) => k + ' ' + (p.weatherCount[k] || 0)).join(', ') + ' files)');
         if (p.parts.debris) has.push('the debris and splashes in ' + (p.changed.debris || 0) + ' particle types (' + p.parts.debris + 'x drops)');
         if (p.photo.length) has.push('the sky alpha that boot.pak\'s photo night skies need (' + p.photo.join(', ') + ')');
+        if (p.winter && p.changed.winter) has.push('the winter cube for ' + p.changed.winter + ' clear day states of the snow regions');
         console.log(label + ': initial.pak now has ' + has.join(' and ') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
         // a chosen part that found nothing to change in this game version's files
         const none = [];
@@ -869,15 +876,15 @@ function initialAdopt()
     if (now.state === 'ours') { console.log('initial.pak is this tool\'s own build: nothing to adopt'); return; }
     if (now.state === 'vanilla') { console.log('initial.pak is already the original'); return; }
     const note = readGrassNote(), had = { grass: note.factor || null, fill: note.fill || null, stars: note.stars || null, weather: note.weather || null, debris: note.debris || null };
-    const hadPhoto = new Set(note.starsPhoto || []);   // the photo skies the last build's sky alpha was made for
+    const hadPhoto = new Set(note.starsPhoto || []), hadWinter = !!note.winterCubes;   // the photo skies the last build's sky alpha was made for
     // what the last build wrote, by entry name, with the old original's bytes of each entry
     const ours = new Map();
-    if (fs.existsSync(INITIAL_ORIG) && (had.grass || had.fill || had.stars || had.weather || had.debris || hadPhoto.size))
+    if (fs.existsSync(INITIAL_ORIG) && (had.grass || had.fill || had.stars || had.weather || had.debris || hadPhoto.size || hadWinter))
     {
-        const last = planInitial(INITIAL_ORIG, had, hadPhoto), fdo = fs.openSync(INITIAL_ORIG, 'r');
+        const last = planInitial(INITIAL_ORIG, had, hadPhoto, hadWinter), fdo = fs.openSync(INITIAL_ORIG, 'r');
         try { for (const [ent, job] of last.jobs) ours.set(ent.name, { job, orig: readEntry(fdo, ent) }); } finally { fs.closeSync(fdo); }
     }
-    const fd = fs.openSync(INITIAL, 'r'), jobs = new Map(), still = { grass: 0, fill: 0, stars: 0, weather: 0, debris: 0 };
+    const fd = fs.openSync(INITIAL, 'r'), jobs = new Map(), still = { grass: 0, fill: 0, stars: 0, weather: 0, debris: 0, winter: 0 };
     let z, grow = 0;
     try
     {
@@ -921,11 +928,12 @@ function initialAdopt()
     const parts = { grass: still.grass ? had.grass : null, fill: still.fill ? had.fill : null, stars: still.stars ? had.stars : null, weather: still.weather ? had.weather : null, debris: still.debris ? had.debris : null };
     // the photo skies' alpha (the stars group without a stars part) counts as ours while boot.pak still asks for it
     const photoNow = photoSkies(BOOT), photoKept = still.stars > 0 && hadPhoto.size > 0 && photoNow.size > 0;
-    if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !photoKept)
+    const winterNow = winterCubes(BOOT), winterKept = still.winter > 0 && hadWinter && winterNow;
+    if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !photoKept && !winterKept)
     {
         writeJson(GRASS_NOTE, { origCdSha256: cdHash(INITIAL_ORIG), date: stamp(), adopted: keptNote });
         console.log('initial.pak: the current file is the new original (none of this tool\'s changes were in it' + keptSay + ')');
-        if (photoNow.size) buildInitial(parts, 'initial.pak');   // boot.pak's photo skies need their sky alpha in any case
+        if (photoNow.size || winterNow) buildInitial(parts, 'initial.pak');   // boot.pak's photo skies need their sky alpha in any case
         return;
     }
     // some of ours was still in: initial.pak is our build of those parts over the new original when every entry the
@@ -942,8 +950,8 @@ function initialAdopt()
         }
     }
     finally { fs.closeSync(fdc); }
-    writeJson(GRASS_NOTE, { origCdSha256: cdHash(INITIAL_ORIG), factor: parts.grass, fill: parts.fill, stars: parts.stars, weather: parts.weather, debris: parts.debris, starsPhoto: want.photo, cdSha256: cdHash(INITIAL), size: fs.statSync(INITIAL).size, date: stamp(), changed: want.jobs.size, adopted: keptNote });
-    const which = [parts.grass ? 'grass x' + parts.grass : null, parts.fill ? 'fill light ' + parts.fill : null, parts.stars ? 'stars x' + parts.stars : null, parts.weather ? 'weather ' + parts.weather : null, parts.debris ? 'debris x' + parts.debris : null, photoKept && !parts.stars ? 'photo skies\' alpha' : null].filter(Boolean).join(' and ');
+    writeJson(GRASS_NOTE, { origCdSha256: cdHash(INITIAL_ORIG), factor: parts.grass, fill: parts.fill, stars: parts.stars, weather: parts.weather, debris: parts.debris, starsPhoto: want.photo, winterCubes: want.winter, cdSha256: cdHash(INITIAL), size: fs.statSync(INITIAL).size, date: stamp(), changed: want.jobs.size, adopted: keptNote });
+    const which = [parts.grass ? 'grass x' + parts.grass : null, parts.fill ? 'fill light ' + parts.fill : null, parts.stars ? 'stars x' + parts.stars : null, parts.weather ? 'weather ' + parts.weather : null, parts.debris ? 'debris x' + parts.debris : null, photoKept && !parts.stars ? 'photo skies\' alpha' : null, winterKept ? 'winter cube' : null].filter(Boolean).join(' and ');
     console.log('initial.pak: the current file is the new original (this tool\'s ' + which + ' was still in it: left out of the original; the other changes kept' + keptSay + ')');
     if (!exact) buildInitial(parts, 'initial.pak');
 }
@@ -1048,13 +1056,13 @@ if (require.main === module)
         else if (cmd === 'debris-status') console.log(debrisStatus());
         else if (cmd === 'debris-install') installDebris(args[1] || DEBRIS_FACTOR);
         else if (cmd === 'debris-restore') restoreDebris();
-        else if (cmd === 'initial-status') console.log(JSON.stringify(Object.assign(initialState(), { photoSkies: [...photoSkies(BOOT)].sort() })));
+        else if (cmd === 'initial-status') console.log(JSON.stringify(Object.assign(initialState(), { photoSkies: [...photoSkies(BOOT)].sort(), winterCubes: winterCubes(BOOT) })));
         else if (cmd === 'initial-refresh')
         {
             // the same parts built again: after sky_stars.js changed its rules, or after the photo night skies in boot.pak
             // were replaced or put back (their sky alpha follows boot.pak)
             const s = initialState();
-            if (s.state === 'ours' || (s.state === 'vanilla' && photoSkies(BOOT).size)) buildInitial(partsNow(), 'initial.pak');
+            if (s.state === 'ours' || (s.state === 'vanilla' && (photoSkies(BOOT).size || winterCubes(BOOT)))) buildInitial(partsNow(), 'initial.pak');
             else console.log(s.state === 'vanilla' ? 'initial.pak is the original and boot.pak asks for nothing: left alone' : 'initial.pak ' + s.state + ': left alone');
         }
         else if (cmd === 'initial-adopt') initialAdopt();
