@@ -18,7 +18,7 @@ Light and shadow
 - Wide occlusion: soft shade under trucks, roofs and tree crowns, out to 6 metres.
 - Sky ambient: the fill light takes the sky's colour.
 - Fill light: less of the flat light that fills in shade.
-- Bounce light: sunlit ground and paint light up what stands next to them. Off by default and experimental: on snow and ice it comes out too strong and blue.
+- Bounce light: sunlit snow, mud and paint light up what stands next to them.
 
 Reflections and water
 
@@ -29,7 +29,7 @@ Reflections and water
 - River depth colour: deeper water tints teal or brown from its own colour.
 - Sun glow through waves: river waves light up against a low sun.
 - Headlight glare cap: tamer headlight shine on wet ground. Off by default.
-- Winter reflection cubes: the snow regions' painted sky cubes, which paint and chrome mirror and the ambient light reads, made anew from winter panoramas. Off by default.
+- Winter reflection cubes: the snow regions' painted sky cubes, which paint and chrome mirror and the ambient light reads, made anew from winter panoramas.
 
 Atmosphere and image
 

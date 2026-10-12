@@ -83,10 +83,9 @@ namespace SnowRunnerNextGen
                 "Less of the flat light that fills in shade: shaded sides, the insides of trees and trucks in shadow get darker, while sunlit parts and the sky stay as they are.");
             fill.Options.Add(new OptionSet("Strength", new[] { "70 %", "55 %", "85 %" }, new[] { "0.7", "0.55", "0.85" }, 0));
             list.Add(fill);
-            // off by default: on snow and ice it comes out too strong and blue
-            list.Add(M("gi", "LIGHT", "Bounce light", false,
-                "Sunlit ground and paint light up what stands next to them, in their colour: under trucks, in wheel arches, at the feet of walls. " +
-                "Experimental: on snow and ice it comes out too strong and blue.",
+            // on by default again: with the winter reflection cubes snow and ice keep their colour under it
+            list.Add(M("gi", "LIGHT", "Bounce light", true,
+                "Sunlit snow, mud and paint light up what stands next to them, in their colour: under trucks, in wheel arches, at the feet of walls.",
                 "gtao", "shadows"));
 
             Module refl = M("objrefl", "REFLECTIONS", "Object reflections", true,
@@ -106,7 +105,7 @@ namespace SnowRunnerNextGen
                 "River waves between you and a low sun light up in the water's own colour, wherever the sun really reaches them.", "water"));
             list.Add(M("glare", "WATER", "Headlight glare cap", false, "Tamer headlight shine on wet ground and puddles, with no long bright band across them."));
             // the snow regions' two day cubes made anew from winter panoramas, the fourth part of boot.pak
-            list.Add(M("cubes", "WATER", "Winter reflection cubes", false,
+            list.Add(M("cubes", "WATER", "Winter reflection cubes", true,
                 "The painted skies that paint, glass and chrome mirror in the snow regions, and that Sky ambient and Bounce light read the sky's and the ground's colour from, made anew from two winter panoramas: a clear day with a low sun over a snow field and forest, and an overcast day. Alaska, Amur, Kola, Yukon and Quebec by day."));
 
             // off by default since 1.0.2
