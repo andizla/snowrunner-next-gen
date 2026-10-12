@@ -26,7 +26,7 @@ Shot 'narrow' @('--scale', '1', '--size', '560x0')
 Shot 'wide' @('--scale', '1', '--size', '1600x0')
 
 # every (?) pop-up, and the one with pictures at 200 and 225 %
-$ids = 'shadows', 'edges', 'blocker', 'contact', 'gtao', 'ambient', 'gi', 'objrefl', 'headglow', 'water', 'rivertint', 'glare', 'cubes', 'fog', 'weather', 'smoke', 'smokeshade', 'particles', 'debris', 'sky', 'stars', 'tonemap', 'bloom', 'scenery', 'grass', 'logos', 'installer'
+$ids = 'shadows', 'edges', 'blocker', 'contact', 'gtao', 'ambient', 'gi', 'objrefl', 'headglow', 'water', 'rivertint', 'glare', 'cubes', 'skies', 'fog', 'weather', 'smoke', 'smokeshade', 'particles', 'debris', 'sky', 'stars', 'tonemap', 'bloom', 'scenery', 'grass', 'logos', 'installer'
 foreach ($id in $ids) { Shot "help-$id" @('--scale', '1', '--help', $id) }
 Shot 'help-gtao-2' @('--scale', '2', '--help', 'gtao')
 Shot 'help-gtao-2.25' @('--scale', '2.25', '--help', 'gtao')
@@ -52,7 +52,7 @@ try {
   # on by default: every card but Bounce light, Headlight glare cap, Volumetric fog, Scenery detail and Grass reach
   $defaults = 'shadows edges blocker contact gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow weather smoke smokeshade particles debris sky stars tonemap bloom grade logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '25 of 31 selected'
+  Check 'count' (Note) '25 of 32 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
@@ -109,9 +109,9 @@ try {
   Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint weather smoke smokeshade particles debris sky stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Wide occlusion and Bounce light need GTAO: unticked them too.'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($false))
-  Check 'clear' (Note) '0 of 31 selected'
+  Check 'clear' (Note) '0 of 32 selected'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($true))
-  Check 'select all' (Note) '31 of 31 selected'
+  Check 'select all' (Note) '32 of 32 selected'
   foreach ($c in $list.Cards) { $c.Reset() }
   Check 'defaults again' (Ticked) $defaults
 
@@ -139,10 +139,10 @@ try {
   $has.Debris = 'ours'; $has.DebrisFactor = '4'
   $viewType.GetField('installed', $flags).SetValue($view, $has)
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: the default set as installed' (Note) "25 of 31 selected  $([char]0xB7)  as installed"
+  Check 'bar: the default set as installed' (Note) "25 of 32 selected  $([char]0xB7)  as installed"
   $has.Outdated.Add('shader')
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: a newer build of an installed part' (Note) "25 of 31 selected  $([char]0xB7)  Apply to update the game to this version"
+  Check 'bar: a newer build of an installed part' (Note) "25 of 32 selected  $([char]0xB7)  Apply to update the game to this version"
   $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($has))
   Check 'header: says that Apply updates the game' ($said -match 'Note: this installer has a newer build of what is installed: Apply updates the game$') 'True'
   $viewType.GetField('installed', $flags).SetValue($view, $null)

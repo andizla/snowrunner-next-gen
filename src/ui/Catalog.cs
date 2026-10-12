@@ -142,6 +142,9 @@ namespace SnowRunnerNextGen
             // the star map and the photo night skies with its stars painted in, into boot.pak beside the grade and the particles
             list.Add(M("sky", "ATMOSPHERE", "Night sky", true,
                 "NASA's star map in place of the game's star texture: the real sky's stars as fine points, with the glow of the Milky Way."));
+            // Kola's two clear-day sky domes made anew from a winter panorama, the fifth part of boot.pak
+            list.Add(M("skies", "ATMOSPHERE", "Winter skies", false,
+                "Kola's clear-day skies, the painted dome the game draws its cloud layers over, made anew from a photograph of a clear winter day, a deep blue sky with its own sun taken out. The game's cloud bands and its sun still drift over it."));
             // the night sky's star layer times a factor, the third part of initial.pak
             Module stars = M("stars", "ATMOSPHERE", "Brighter stars", true, "The stars of the night sky drawn brighter, so they stand out against the dark.");
             stars.Options.Add(new OptionSet("Brightness", new[] { "3x", "2x" }, new[] { "3", "2" }, 0));

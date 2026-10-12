@@ -235,6 +235,12 @@ namespace SnowRunnerNextGen
                 Costs, "Video memory for the larger textures. The installer is 114 MB larger for the set.",
                 Know, "It changes boot.pak, together with Photo grade and Night sky, which it keeps. Other mods that change boot.pak, such as a texture pack, are kept too: Apply asks before it builds on them.");
 
+            d["skies"] = E(
+                Does, "A region's sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces Kola's two clear-day domes with a photograph of a clear winter day, a deep blue sky, at the game's own size of 8192 by 2048. The photograph's own sun is taken out, so the game's sun disc is the only sun. The cloud bands, the sun and the stars stay as they are and drift over the photograph.",
+                Notice, "On Kola's clear days, a photographed sky behind the game's clouds and sun.",
+                Costs, "Nothing in the game. The download is 45 MB larger for the two textures.",
+                Know, "Off by default and a first step: Kola only, and the painted cloud bands untouched. It changes boot.pak, together with Photo grade, Sharper smoke and particles, Night sky and Winter reflection cubes, which it keeps. The skies are made with engine\\tools\\make_cube.js from a CC0 panorama by Poly Haven.");
+
             d["cubes"] = E(
                 Does, "Each day state names a reflection cube, a small painted sky with its ground, which paint, glass and chrome mirror where the scene has nothing nearer, and which Sky ambient and Bounce light read the sky's and the ground's colour from. The snow regions share two painted ones. This replaces them with cubes made from photographs of winter days: a clear one with a low sun over a snow field and forest for the clear states, an overcast one for the weather states. Alaska, Amur, Kola day 3, Yukon day 3 and Quebec use them as the game stands; the other Kola and Yukon days name a summer cube and keep it.",
                 Notice, "Chrome and glass mirroring a winter sky and snow instead of a hazy painting, and the snow's shade and bounce light taking their colour from it.",

@@ -26,9 +26,11 @@
 // A fourth part is the reflection cubes: the snow regions' two day cubes (env_day_al_01, the clear days; env_day_al_02,
 // the weather variants) made anew from winter panoramas by make_cube.js, SR_CUBES_DIR, default replacements\cubes\pct,
 // written the way the particle set is.
+// A fifth part is the winter skies: Kola's two clear-day sky textures (env_sky_01_ru_03_day, env_sky_02_ru_03_day, the
+// sphere_sky layer of its sky) from the same panorama, SR_SKIES_DIR, default replacements\skies\pct, written the same way.
 // usage: node lut_grade.js status | list [strength] | install [strength] | restore | adopt | build <file> [strength]
-//        [particles] [sky] [cubes] | particles-status | particles-install | particles-restore | sky-status | sky-install |
-//        sky-restore | cubes-status | cubes-install | cubes-restore
+//        [particles] [sky] [cubes] [skies] | particles-status | particles-install | particles-restore | sky-status | sky-install |
+//        sky-restore | cubes-status | cubes-install | cubes-restore | skies-status | skies-install | skies-restore
 //        (strength 0-1, 1 by default: the measured grade; SR_BOOT_PAK and SR_STATE_DIR as in the other tools;
 //        install, restore and adopt with the game closed; adopt: another mod's boot.pak becomes the original, see adopt();
 //        status answers for the grade as before ("grade <strength>", vanilla, changed, missing), particles-status for the
@@ -49,6 +51,7 @@ const HEAD = 82, TEXELS = 4096, SIZE = HEAD + TEXELS * 4 + 6;
 const PARTICLES = process.env.SR_PARTICLES_DIR || path.join(__dirname, '..', 'replacements', 'particles', 'pct');
 const SKY = process.env.SR_SKY_DIR || path.join(__dirname, '..', 'replacements', 'sky', 'pct');
 const CUBES = process.env.SR_CUBES_DIR || path.join(__dirname, '..', 'replacements', 'cubes', 'pct');
+const SKIES = process.env.SR_SKIES_DIR || path.join(__dirname, '..', 'replacements', 'skies', 'pct');
 const baseName = (n) => n.split(/[\\/]/).pop().toLowerCase();
 
 // ---- the texture sets (particles, night sky) ---------------------------------------------------------------------
@@ -74,6 +77,8 @@ const skyFiles = () => setFiles(SKY, 'night sky');
 const skySetHash = () => setHash(skyFiles());
 const cubeFiles = () => setFiles(CUBES, 'reflection cube');
 const cubeSetHash = () => setHash(cubeFiles());
+const skiesFiles = () => setFiles(SKIES, 'winter sky');
+const skiesSetHash = () => setHash(skiesFiles());
 
 // ---- the grade ------------------------------------------------------------------------------------------------
 // chroma gain by CIELAB hue (degrees), from the four pairs. The per-hue ratios (0 0.90, 30 0.78, 60 0.75, 90 0.80,
@@ -136,7 +141,7 @@ function gradeLut(data, strength)
 // one must be there). A number for parts is the grade alone, as before.
 function plan(file, parts)
 {
-    if (typeof parts === 'number') parts = { grade: parts, particles: false, sky: false, cubes: false };
+    if (typeof parts === 'number') parts = { grade: parts, particles: false, sky: false, cubes: false, skies: false };
     const strength = parts.grade || null;
     if (strength !== null && !(strength > 0 && strength <= 1)) throw new Error('strength ' + strength);
     const fd = fs.openSync(file, 'r');
@@ -154,7 +159,7 @@ function plan(file, parts)
             const next = gradeLut(data, strength);
             jobs.set(ent, { head, crc: zlib.crc32(next), usize: next.length, length: next.length, comp: next, next, type: 'lut', group: 'lut', notes: [name] });
         }
-        for (const [type, files] of [['particle', parts.particles ? particleFiles() : null], ['sky', parts.sky ? skyFiles() : null], ['cube', parts.cubes ? cubeFiles() : null]])
+        for (const [type, files] of [['particle', parts.particles ? particleFiles() : null], ['sky', parts.sky ? skyFiles() : null], ['cube', parts.cubes ? cubeFiles() : null], ['wsky', parts.skies ? skiesFiles() : null]])
         {
             if (!files) continue;
             let found = 0;
@@ -169,10 +174,10 @@ function plan(file, parts)
                 grow += next.length - ent.csize;
                 found++;
             }
-            if (found !== files.size) throw new Error('boot.pak has ' + found + ' of the ' + (type === 'sky' ? 'night sky' : type === 'cube' ? 'reflection cube' : 'particle') + ' set\'s ' + files.size + ' textures');
+            if (found !== files.size) throw new Error('boot.pak has ' + found + ' of the ' + (type === 'sky' ? 'night sky' : type === 'cube' ? 'reflection cube' : type === 'wsky' ? 'winter sky' : 'particle') + ' set\'s ' + files.size + ' textures');
         }
         const end = z.cdOff + grow + z.cd.length + z.eocd.length;
-        return { z, jobs, strength, particles: !!parts.particles, sky: !!parts.sky, cubes: !!parts.cubes, size: grow ? (z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end) : z.size };
+        return { z, jobs, strength, particles: !!parts.particles, sky: !!parts.sky, cubes: !!parts.cubes, skies: !!parts.skies, size: grow ? (z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end) : z.size };
     }
     finally { fs.closeSync(fd); }
 }
@@ -225,7 +230,7 @@ function state()
 function partsNow()
 {
     const note = record();
-    return state() === 'ours' ? { grade: note.strength || null, particles: !!note.particles, sky: !!note.sky, cubes: !!note.cubes } : { grade: null, particles: false, sky: false, cubes: false };
+    return state() === 'ours' ? { grade: note.strength || null, particles: !!note.particles, sky: !!note.sky, cubes: !!note.cubes, skies: !!note.skies } : { grade: null, particles: false, sky: false, cubes: false, skies: false };
 }
 // for the grade, as before: 'grade <strength>', 'vanilla' (no grade in it: the original, or a build of the particles
 // alone), 'changed' or 'missing'
@@ -254,6 +259,12 @@ function cubeStatus()
     const st = state();
     return st === 'ours' ? (record().cubes ? 'cubes' : 'none') : st === 'vanilla' ? 'none' : st;
 }
+// for the winter skies: 'skies', 'none', 'changed' or 'missing'
+function skiesStatus()
+{
+    const st = state();
+    return st === 'ours' ? (record().skies ? 'skies' : 'none') : st === 'vanilla' ? 'none' : st;
+}
 // boot.pak built from its original with these parts, or the original itself when neither is asked for. Refuses a file that
 // is neither the original nor this tool's build (label names the caller), unless an adopt has just made it the base
 function buildBoot(parts, label, adopted = false)
@@ -262,7 +273,7 @@ function buildBoot(parts, label, adopted = false)
     if (st === 'missing') { console.log(label + ': no boot.pak, left alone'); return; }
     if (st === 'changed') { console.log(label + ': boot.pak is neither the original nor this tool\'s build (another tool or a game update): left alone'); return; }
     const tmp = BOOT + '.tmp';
-    if (!parts.grade && !parts.particles && !parts.sky && !parts.cubes)
+    if (!parts.grade && !parts.particles && !parts.sky && !parts.cubes && !parts.skies)
     {
         if (st !== 'ours') return;
         // the note keeps the last build's parts (adopt reads them)
@@ -289,6 +300,7 @@ function buildBoot(parts, label, adopted = false)
         if (p.particles) Object.assign(note, { particles: true, particleSet: particleSetHash() });
         if (p.sky) Object.assign(note, { sky: true, skySet: skySetHash() });
         if (p.cubes) Object.assign(note, { cubes: true, cubeSet: cubeSetHash() });
+        if (p.skies) Object.assign(note, { skies: true, skiesSet: skiesSetHash() });
         writeJson(NOTE, withPending(readNote(), note));
         swapIn(tmp, BOOT);
         const has = [];
@@ -297,6 +309,7 @@ function buildBoot(parts, label, adopted = false)
         if (p.particles) has.push(count('particle') + ' particle files at twice the size');
         if (p.sky) has.push('the night sky (' + count('sky') + ' files: the star map and the photo skies)');
         if (p.cubes) has.push('the winter reflection cubes (' + count('cube') + ' files)');
+        if (p.skies) has.push('the winter skies (' + count('wsky') + ' files)');
         console.log(label + ': boot.pak now has ' + has.join(' and ') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
     }
     finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
@@ -330,6 +343,13 @@ function cubesRestore()
     if (st !== 'ours' || !record().cubes) { if (st === 'changed') console.log('reflection cubes: boot.pak changed by something else: left alone'); return; }
     buildBoot(Object.assign(partsNow(), { cubes: false }), 'reflection cubes');
 }
+function skiesInstall() { buildBoot(Object.assign(partsNow(), { skies: true }), 'winter skies'); }
+function skiesRestore()
+{
+    const st = state();
+    if (st !== 'ours' || !record().skies) { if (st === 'changed') console.log('winter skies: boot.pak changed by something else: left alone'); return; }
+    buildBoot(Object.assign(partsNow(), { skies: false }), 'winter skies');
+}
 
 // adopt: the current boot.pak becomes the original when something else changed it (another mod, a game update), so the
 // parts go over that and restore puts it back. The old original is kept (boot.pak.orig.<date>). Each entry that still
@@ -343,23 +363,23 @@ function adopt()
     if (st === 'missing') { console.log('photo grade: no boot.pak, nothing to adopt'); return; }
     if (st === 'ours') { console.log('photo grade: boot.pak is this tool\'s own build: nothing to adopt'); return; }
     if (st === 'vanilla') { console.log('photo grade: boot.pak is already the original'); return; }
-    const note = readNote(), had = { grade: note.strength || null, particles: !!note.particles, sky: !!note.sky, cubes: !!note.cubes };
+    const note = readNote(), had = { grade: note.strength || null, particles: !!note.particles, sky: !!note.sky, cubes: !!note.cubes, skies: !!note.skies };
     // what the last build wrote per entry name, with the old original's entry and bytes
     const last = new Map();
-    if ((had.grade || had.particles || had.sky || had.cubes) && fs.existsSync(ORIG))
+    if ((had.grade || had.particles || had.sky || had.cubes || had.skies) && fs.existsSync(ORIG))
     {
         let p;
         try { p = plan(ORIG, had); }
         catch (err)
         {
-            if (!had.particles && !had.sky && !had.cubes) throw err;
-            console.log('warning: the particle, night sky and reflection cube files of the last build could not be worked out again (' + err.message + '): those still in boot.pak stay in the new original');
-            p = had.grade ? plan(ORIG, { grade: had.grade, particles: false, sky: false, cubes: false }) : { jobs: new Map() };
+            if (!had.particles && !had.sky && !had.cubes && !had.skies) throw err;
+            console.log('warning: the particle, night sky, reflection cube and winter sky files of the last build could not be worked out again (' + err.message + '): those still in boot.pak stay in the new original');
+            p = had.grade ? plan(ORIG, { grade: had.grade, particles: false, sky: false, cubes: false, skies: false }) : { jobs: new Map() };
         }
         const fdo = fs.openSync(ORIG, 'r');
         try { for (const [ent, job] of p.jobs) last.set(ent.name, { job, ent, orig: readEntry(fdo, ent) }); } finally { fs.closeSync(fdo); }
     }
-    const fd = fs.openSync(BOOT, 'r'), jobs = new Map(), still = { grade: null, particles: false, sky: false, cubes: false };
+    const fd = fs.openSync(BOOT, 'r'), jobs = new Map(), still = { grade: null, particles: false, sky: false, cubes: false, skies: false };
     let z, grow = 0;
     try
     {
@@ -373,7 +393,7 @@ function adopt()
             // still ours: the old original's compressed bytes and method under the current header
             jobs.set(ent, { head: cur.head, crc: l.ent.crc, usize: l.ent.usize, length: l.orig.raw.length, comp: l.orig.raw, next: l.orig.data, method: l.ent.method, type: l.job.type, group: l.job.group, notes: l.job.notes });
             grow += l.orig.raw.length - ent.csize;
-            if (l.job.type === 'lut') still.grade = had.grade; else if (l.job.type === 'sky') still.sky = true; else if (l.job.type === 'cube') still.cubes = true; else still.particles = true;
+            if (l.job.type === 'lut') still.grade = had.grade; else if (l.job.type === 'sky') still.sky = true; else if (l.job.type === 'cube') still.cubes = true; else if (l.job.type === 'wsky') still.skies = true; else still.particles = true;
         }
     }
     finally { fs.closeSync(fd); }
@@ -393,7 +413,7 @@ function adopt()
             if (fileHash(tmp) !== fileHash(BOOT)) throw new Error('the boot.pak copy differs');
         }
         // the parts still in must be possible over the new original before anything is replaced
-        if (still.grade || still.particles || still.sky || still.cubes) plan(tmp, still);
+        if (still.grade || still.particles || still.sky || still.cubes || still.skies) plan(tmp, still);
     }
     catch (err) { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); throw err; }
     flush(tmp);
@@ -407,13 +427,13 @@ function adopt()
         console.log('photo grade: the current boot.pak is the new original (none of this tool\'s parts were in it' + keptSay + ')');
         return;
     }
-    const parts = [still.grade ? 'grade' : null, still.particles ? 'particles' : null, still.sky ? 'night sky' : null, still.cubes ? 'reflection cubes' : null].filter(Boolean), which = parts.join(' and ');
+    const parts = [still.grade ? 'grade' : null, still.particles ? 'particles' : null, still.sky ? 'night sky' : null, still.cubes ? 'reflection cubes' : null, still.skies ? 'winter skies' : null].filter(Boolean), which = parts.join(' and ');
     console.log('photo grade: the current boot.pak is the new original (this tool\'s ' + which + (parts.length > 1 ? ' were' : ' was') + ' still in it: left out of the original; the other changes kept' + keptSay + ')');
     // boot.pak becomes this tool's build of those parts over the new original
     buildBoot(still, 'photo grade', true);
 }
 
-module.exports = { gradeRgb, gainAt, shoulder, HUE_GAIN, TARGETS, PARTICLES, SKY, CUBES };
+module.exports = { gradeRgb, gainAt, shoulder, HUE_GAIN, TARGETS, PARTICLES, SKY, CUBES, SKIES };
 
 if (require.main === module)
 {
@@ -433,12 +453,15 @@ if (require.main === module)
         else if (cmd === 'cubes-status') console.log(cubeStatus());
         else if (cmd === 'cubes-install') cubesInstall();
         else if (cmd === 'cubes-restore') cubesRestore();
+        else if (cmd === 'skies-status') console.log(skiesStatus());
+        else if (cmd === 'skies-install') skiesInstall();
+        else if (cmd === 'skies-restore') skiesRestore();
         else if (cmd === 'adopt') adopt();
         else if (cmd === 'build' && a1)
         {
             // build <file> [strength, 0 = no grade] [particles] [sky]
-            const strength = a2 === undefined ? 1 : Number(a2), rest = process.argv.slice(5), particles = rest.includes('particles'), sky = rest.includes('sky'), cubes = rest.includes('cubes');
-            const from = fs.existsSync(ORIG) ? ORIG : BOOT, p = plan(from, { grade: strength || null, particles, sky, cubes });
+            const strength = a2 === undefined ? 1 : Number(a2), rest = process.argv.slice(5), particles = rest.includes('particles'), sky = rest.includes('sky'), cubes = rest.includes('cubes'), skies = rest.includes('skies');
+            const from = fs.existsSync(ORIG) ? ORIG : BOOT, p = plan(from, { grade: strength || null, particles, sky, cubes, skies });
             writePak(from, a1, p);
             console.log('built ' + a1 + ' from ' + from + ': ' + (p.strength ? TARGETS.length + ' LUTs at ' + Math.round(p.strength * 100) + ' %' : 'no grade') + (p.particles ? ' and the particle set' : '') + (p.sky ? ' and the night sky' : '') + ', read back ok (' + verify(a1, p) + ' untouched entries sampled)');
         }
@@ -449,7 +472,7 @@ if (require.main === module)
             console.log('lightness: ' + [60, 75, 80, 85, 90, 95, 100].map((L) => L + '->' + (L + (shoulder(L) - L) * strength).toFixed(1)).join(' '));
             console.log('LUTs: ' + TARGETS.map((n) => 'env_lut_' + n + '__vol_uncmp.pct').join(', '));
         }
-        else console.log('usage: node lut_grade.js status | list [strength] | install [strength] | restore | adopt | build <file> [strength] [particles] [sky] [cubes] | particles-status | particles-install | particles-restore | sky-status | sky-install | sky-restore | cubes-status | cubes-install | cubes-restore');
+        else console.log('usage: node lut_grade.js status | list [strength] | install [strength] | restore | adopt | build <file> [strength] [particles] [sky] [cubes] [skies] | particles-status | particles-install | particles-restore | sky-status | sky-install | sky-restore | cubes-status | cubes-install | cubes-restore | skies-status | skies-install | skies-restore');
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }

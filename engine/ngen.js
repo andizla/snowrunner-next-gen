@@ -22,7 +22,7 @@
 //              "scenery": null | "nature" | "all", and with it "sceneryHide": null | "plants" | "all" (nothing of those hidden
 //              by distance) and "sceneryShadows": null | "plants" | "all" (each of those casts its shadow at any distance),
 //              "grass": null | "3" | "2", "fill": null | "0.7" | "0.55" | "0.85",
-//              "grade": null | "1" | "0.5", "particles": null | "1", "sky": null | "1", "cubes": null | "1", "stars": null | "3" | "2",
+//              "grade": null | "1" | "0.5", "particles": null | "1", "sky": null | "1", "cubes": null | "1", "skies": null | "1", "stars": null | "3" | "2",
 //              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen),
 //              "debris": null | "4" | "8" (the drops factor of the debris and splashes),
 //              "logos": null | "1" }
@@ -488,7 +488,7 @@ function outdated(state, s)
 {
     const notes = lastNotes(state);
     const holds = { shader: s.shader.state === 'ours', scenery: s.scenery === 'nature' || s.scenery === 'all', initial: s.initialPak === 'ours',
-        grade: s.grade.state === 'ours', particles: s.particles.state === 'ours', sky: s.sky.state === 'ours', cubes: s.cubes.state === 'ours', logos: s.logos.state === 'ours' };
+        grade: s.grade.state === 'ours', particles: s.particles.state === 'ours', sky: s.sky.state === 'ours', cubes: s.cubes.state === 'ours', skies: s.skies.state === 'ours', logos: s.logos.state === 'ours' };
     return Object.keys(holds).filter((part) => holds[part] && !sameCode(notes, part));
 }
 // what the paks hold, as the tools answer it
@@ -508,8 +508,8 @@ async function readPaks(g, state)
     const lod = fs.existsSync(g.shared) ? JSON.parse(await answer('lod_patch.js', ['status-json'], env)) : { state: 'missing', hide: 'off', shadows: 'off' };
     const scenery = lod.state, sceneryHide = lod.hide, sceneryShadows = lod.shadows;
     const { grass, fill, stars, weather, debris, initialPak } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
-    const sky = await readSky(g, env), cubes = await readCubes(g, env), logos = await readLogos(g, env);
-    return { shader, scenery, sceneryHide, sceneryShadows, grass, fill, stars, weather, debris, initialPak, grade, particles, sky, cubes, logos };
+    const sky = await readSky(g, env), cubes = await readCubes(g, env), skies = await readSkies(g, env), logos = await readLogos(g, env);
+    return { shader, scenery, sceneryHide, sceneryShadows, grass, fill, stars, weather, debris, initialPak, grade, particles, sky, cubes, skies, logos };
 }
 // initial.pak: the grass, the fill light, the stars, the weather and the debris, five parts of one build, each { state, factor }
 // (the weather: { state, parts }, a comma list); initialPak is the file's own state (ours also when it holds none of
@@ -549,6 +549,12 @@ async function readCubes(g, env)
 {
     const said = fs.existsSync(g.boot) ? await answer('lut_grade.js', ['cubes-status'], env) : 'missing';
     return { state: said === 'cubes' ? 'ours' : said === 'none' ? 'vanilla' : said };
+}
+// the winter skies in boot.pak, the fifth part there ({ state }): ours, vanilla, changed, missing
+async function readSkies(g, env)
+{
+    const said = fs.existsSync(g.boot) ? await answer('lut_grade.js', ['skies-status'], env) : 'missing';
+    return { state: said === 'skies' ? 'ours' : said === 'none' ? 'vanilla' : said };
 }
 // the Next Gen logos in gfx.pak ({ state }): ours, vanilla, changed, missing
 async function readLogos(g, env)
@@ -595,7 +601,7 @@ function dirHash(file)
 // the paks that hold Next Gen's changes, from what readPaks read
 const holdsOurs = (s) => ({
     'shader.pak': s.shader.state === 'ours', 'shared.pak': s.scenery === 'nature' || s.scenery === 'all', 'initial.pak': s.initialPak === 'ours',
-    'boot.pak': s.grade.state === 'ours' || s.particles.state === 'ours' || s.sky.state === 'ours' || s.cubes.state === 'ours', 'gfx.pak': s.logos.state === 'ours',
+    'boot.pak': s.grade.state === 'ours' || s.particles.state === 'ours' || s.sky.state === 'ours' || s.cubes.state === 'ours' || s.skies.state === 'ours', 'gfx.pak': s.logos.state === 'ours',
 });
 // the note as the game is now, or no note when no pak holds a change
 async function leaveNote(g, state)
@@ -729,6 +735,7 @@ async function adoptPaks(g, env, now, files)
         now.particles = await readParticles(g, env);
         now.sky = await readSky(g, env);
         now.cubes = await readCubes(g, env);
+        now.skies = await readSkies(g, env);
         if (now.grade.state === 'changed') throw kept('boot.pak');
     }
     if (files.includes('gfx.pak'))
@@ -820,7 +827,7 @@ async function apply(g, state, sel, adopt, leave)
     if (debris && !(Number(debris) >= 1 && Number(debris) <= 16)) throw new EngineError('usage', 'debris drops factor ' + debris);
     const grade = sel.grade ? String(sel.grade) : null;
     if (grade && !(Number(grade) > 0 && Number(grade) <= 1)) throw new EngineError('usage', 'photo grade strength ' + grade);
-    const particles = !!sel.particles, sky = !!sel.sky, cubes = !!sel.cubes, logos = !!sel.logos;
+    const particles = !!sel.particles, sky = !!sel.sky, cubes = !!sel.cubes, skies = !!sel.skies, logos = !!sel.logos;
     const weather = sel.weather ? weatherList(sel.weather) : null;
     if (sel.weather && (!weather || !/^[a-z,]+$/.test(String(sel.weather)))) throw new EngineError('usage', 'weather parts ' + sel.weather);
     if (!sel.shadows && shader.some((m) => NEED_DLL.includes(m)))
@@ -839,7 +846,7 @@ async function apply(g, state, sel, adopt, leave)
     if (shader.length && !shaderSame && shaderNeedsAdopt(g, state, now)) changed.push('shader.pak');
     if (sel.scenery && now.scenery === 'changed') changed.push('shared.pak');
     if (now.grass.state === 'changed' && (grass || fill || stars || weather || debris || sky || last.grass || last.fill || last.stars || last.weather || last.debris || last.sky)) changed.push('initial.pak');
-    if (now.grade.state === 'changed' && (grade || last.grade || particles || last.particles || sky || last.sky || cubes || last.cubes)) changed.push('boot.pak');
+    if (now.grade.state === 'changed' && (grade || last.grade || particles || last.particles || sky || last.sky || cubes || last.cubes || skies || last.skies)) changed.push('boot.pak');
     if (now.logos.state === 'changed' && (logos || last.logos)) changed.push('gfx.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, false), { files: changed });
     g.touched = true;   // from here on files are written: the note in the game folder is renewed at the end, also after a stop (main)
@@ -998,6 +1005,17 @@ async function apply(g, state, sel, adopt, leave)
     else if (now.cubes.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the winter reflection cubes were left out.');
     else { step('Putting the winter reflection cubes in (boot.pak)'); await must('lut_grade.js', ['cubes-install'], env); }
 
+    // the winter skies (boot.pak, the fifth part there)
+    if (now.skies.state === 'missing') { if (skies) warn('No boot.pak in this game folder: the winter skies were left out.'); }
+    else if (!skies)
+    {
+        if (now.skies.state === 'ours') { step('Putting the original skies back (boot.pak)'); await must('lut_grade.js', ['skies-restore'], env); }
+        else if (now.skies.state === 'changed' && last.skies) warn(BOOT_CHANGED + ': left as it is, so the winter skies could not be taken out.');
+    }
+    else if (now.skies.state === 'ours' && sameCode(notes, 'skies')) emit({ type: 'log', text: 'boot.pak already has the winter skies' });
+    else if (now.skies.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the winter skies were left out.');
+    else { step('Putting the winter skies in (boot.pak, 45 MB)'); await must('lut_grade.js', ['skies-install'], env); }
+
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
 
     // the Next Gen logos (gfx.pak)
@@ -1030,7 +1048,7 @@ async function restore(g, state, adopt, leave)
     const last = lastNotes(state).selection || {};
     const changed = [];
     if (now.grass.state === 'changed' && (last.grass || last.fill || last.stars || last.weather || last.debris || last.sky)) changed.push('initial.pak');
-    if (now.grade.state === 'changed' && (last.grade || last.particles || last.sky || last.cubes)) changed.push('boot.pak');
+    if (now.grade.state === 'changed' && (last.grade || last.particles || last.sky || last.cubes || last.skies)) changed.push('boot.pak');
     if (now.logos.state === 'changed' && last.logos) changed.push('gfx.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, true), { files: changed });
     g.touched = true;   // files are written from here on: see apply
@@ -1052,6 +1070,7 @@ async function restore(g, state, adopt, leave)
         else { step('Putting the game\'s own night sky back (boot.pak)'); await must('lut_grade.js', ['sky-restore'], env); }
     }
     if (now.cubes.state === 'ours') { step('Putting the original reflection cubes back (boot.pak)'); await must('lut_grade.js', ['cubes-restore'], env); }
+    if (now.skies.state === 'ours') { step('Putting the original skies back (boot.pak)'); await must('lut_grade.js', ['skies-restore'], env); }
     if (now.grass.state === 'ours' || now.fill.state === 'ours' || now.stars.state === 'ours' || now.weather.state === 'ours' || now.debris.state === 'ours') { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
     else if (initialLeft) warn('initial.pak was changed by something else: left as it is.');
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
