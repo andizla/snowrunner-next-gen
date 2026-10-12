@@ -343,6 +343,83 @@ function writePct(file, faces, stockFile)
     fs.writeFileSync(file + '_header', stock.subarray(0, HEAD));
 }
 
+// ---- a sky texture: the sphere_sky layer of a region's sky (classes\skies\sky_<region>.xml) is a panorama of the
+// upper hemisphere, w x h BC7 with mips down to 4 x 4 blocks (the stock ones 8192 x 2048, 12 mips), azimuth across,
+// elevation 90 degrees at the top row and the horizon at the bottom, its alpha fading out over the lowest rows.
+// Rendered from the panorama one bilinear sample per texel, the same exposure as the cubes, alpha 255 down to
+// HORIZON_FADE of the height, then to 0 (the stock sky_01_ru_03_day fades over its lowest 11 %). The layers are drawn
+// times their DiffuseMultiplier (4 to 8 by day), so the texture itself is darker than a cube: SKY_TEX_MEAN
+const HORIZON_FADE = 0.11, SKY_TEX_MEAN = 0.45;   // the stock Kola day skies: 0.42 and 0.47
+function renderSky(p, exposure, yaw, w, h)
+{
+    const rgba = new Uint8Array(w * h * 4), out = [0, 0, 0];
+    for (let j = 0; j < h; j++)
+    {
+        const v = (j + 0.5) / h / 2, fade = (h - 1 - j) / (h * HORIZON_FADE), alpha = Math.max(0, Math.min(255, Math.round(fade * 255)));
+        for (let i = 0; i < w; i++)
+        {
+            sample(p, (i + 0.5) / w - yaw / 360, v, out);
+            const o = (j * w + i) * 4;
+            rgba[o] = encode(out[0], exposure); rgba[o + 1] = encode(out[1], exposure); rgba[o + 2] = encode(out[2], exposure); rgba[o + 3] = alpha;
+        }
+    }
+    return rgba;
+}
+// the texture's mip sizes as the game stores them: each dimension halves, a level is at least 4 x 4 (one block)
+const mipDims = (w, h, mips) => Array.from({ length: mips }, (_, k) => [Math.max(w >> k, 4), Math.max(h >> k, 4)]);
+// a 2 x 2 box of a w x h RGBA picture (a dimension of 4 or less stays)
+function halveRect(pic, w, h)
+{
+    const nw = Math.max(w >> 1, 4), nh = Math.max(h >> 1, 4), sx = w > 4 ? 2 : 1, sy = h > 4 ? 2 : 1, out = new Uint8Array(nw * nh * 4);
+    for (let j = 0; j < nh; j++)
+        for (let i = 0; i < nw; i++)
+            for (let c = 0; c < 4; c++)
+            {
+                let sum = 0, n = 0;
+                for (let dy = 0; dy < sy; dy++) for (let dx = 0; dx < sx; dx++) { const x = Math.min(w - 1, i * sx + dx), y = Math.min(h - 1, j * sy + dy); sum += pic[(y * w + x) * 4 + c]; n++; }
+                out[(j * nw + i) * 4 + c] = Math.round(sum / n);
+            }
+    return out;
+}
+// a w x h RGBA picture as BC7 blocks (rows and columns beyond the picture repeat its edge)
+function encodeRect(pic, w, h)
+{
+    const bw = Math.max(1, Math.ceil(w / 4)), bh = Math.max(1, Math.ceil(h / 4)), out = new Uint8Array(bw * bh * 16), px = [];
+    for (let k = 0; k < 16; k++) px.push([0, 0, 0, 0]);
+    for (let by = 0; by < bh; by++)
+        for (let bx = 0; bx < bw; bx++)
+        {
+            for (let k = 0; k < 16; k++)
+            {
+                const x = Math.min(w - 1, bx * 4 + (k & 3)), y = Math.min(h - 1, by * 4 + (k >> 2)), o = (y * w + x) * 4;
+                px[k][0] = pic[o]; px[k][1] = pic[o + 1]; px[k][2] = pic[o + 2]; px[k][3] = pic[o + 3];
+            }
+            out.set(encodeBlock(px), (by * bw + bx) * 16);
+        }
+    return out;
+}
+// the .pct of a sky texture: the stock file's header (its size and mip count read from it), the blocks, the stock tail
+function writeSkyPct(file, p, exposure, yaw, stockFile)
+{
+    const stock = fs.readFileSync(stockFile);
+    const w = stock.readUInt32LE(0x10), h = stock.readUInt32LE(0x14), mips = stock.readUInt32LE(0x30);
+    const dims = mipDims(w, h, mips), dataLen = dims.reduce((s, [mw, mh]) => s + mw * mh, 0), head = stock.length - dataLen - TAIL;
+    if (head < 48 || head > 256 || stock.readUInt32LE(stock.length - 4) !== stock.length) throw new Error(stockFile + ': not a BC7 texture of ' + w + ' x ' + h + ' with ' + mips + ' mips (' + stock.length + ' bytes)');
+    let pic = renderSky(p, exposure, yaw, w, h), pw = w, ph = h;
+    const parts = [stock.subarray(0, head)];
+    for (let m = 0; m < mips; m++)
+    {
+        parts.push(encodeRect(pic, pw, ph));
+        if (m < mips - 1) { pic = halveRect(pic, pw, ph); pw = Math.max(pw >> 1, 4); ph = Math.max(ph >> 1, 4); }
+    }
+    parts.push(stock.subarray(stock.length - TAIL));
+    const out = Buffer.concat(parts);
+    if (out.length !== stock.length) throw new Error('the sky came out at ' + out.length + ' bytes, the stock one has ' + stock.length);
+    fs.writeFileSync(file, out);
+    fs.writeFileSync(file + '_header', stock.subarray(0, head));
+    return { w, h, mips };
+}
+
 // ---- a copy of a pak with cubes written over their entries (the same size, stored), for a look in the game:
 // replacements maps an entry's base name (lower case) to the file that replaces it
 function writeTestPak(src, dst, replacements)
@@ -406,6 +483,14 @@ if (require.main === module)
                 }
             png(args[2], w, h, rgb);
             console.log('wrote ' + args[2] + ': exposure ' + exposure.toFixed(4));
+        }
+        else if (cmd === 'sky' && args[1] && args[2] && opt('header'))
+        {
+            const p = readHdr(args[1]);
+            capOf(p);
+            const exposure = opt('exposure') ? Number(opt('exposure')) : exposureFor(p, Number(opt('sky-mean') || SKY_TEX_MEAN), yaw);
+            const t = writeSkyPct(args[2], p, exposure, yaw, opt('header'));
+            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): ' + t.w + ' x ' + t.h + ', ' + t.mips + ' mips, exposure ' + exposure.toFixed(4) + ', white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
         }
         else if (cmd === 'pak' && args[1] && args[2] && args.length > 3)
         {
