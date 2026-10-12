@@ -135,7 +135,7 @@ namespace SnowRunnerNextGen
                 "The game's smoke, dust, spray and spark textures at twice their size, so particles stay crisp up close."));
             // what the wheels throw up lives longer and comes to rest: the fifth part of initial.pak
             Module debris = M("debris", "ATMOSPHERE", "Debris and splashes", true,
-                "Leaves, grass, twigs and dirt thrown up by the wheels stay on the ground for half a minute and get pushed by the tyres, instead of vanishing after four seconds. Mud, water and snow splashes throw more drops that lie longer and leave more marks on the truck. Exhaust and dust hang in the air longer.");
+                "Leaves, grass, twigs and dirt thrown up by the wheels stay on the ground for half a minute and get pushed by the tyres, instead of vanishing after four seconds. Mud, water and snow splashes throw more drops that lie longer and leave more marks on the truck. Snow spray hangs in the air. Exhaust and dust hang longer too.");
             debris.Options.Add(new OptionSet("Splash drops", new[] { "4x", "8x" }, new[] { "4", "8" }, 0));
             list.Add(debris);
 

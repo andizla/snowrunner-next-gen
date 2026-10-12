@@ -15,6 +15,10 @@
 //              the mud and water marks on the truck (MudDecals, WetDecals x2, at most 1).
 //   puffs      exhaust, dust and steam (exhaust_small, exhaust_large, exhaust_fog, dust_small*, honk_dust, steam) hang
 //              in the air half as long again (LifeTime and its Random x1.5).
+//   snow       the snow splashes and bursts (snow_splash_*, dirt_burst_medium_snow, dirt_burst_medium_skid_snow) last
+//              three times as long instead of twice, and the snow drops they throw (snow__subparticles,
+//              snow_frag__subparticles) fall at half the gravity with 0.6 of the air resistance and live 15 seconds:
+//              light snow hangs in the air, as it does.
 // Nothing else changes: air resistance, gravity, wind, size, scale and the textures stay the game's. DROPS is the part's
 // one number, 4 by default (an installer may offer 8). Every attribute written is one the game's own particle files use.
 // lod_patch.js builds initial.pak with this edit next to the grass, the fill light, the stars and the weather
@@ -29,7 +33,9 @@ const SETTLE = /^fragments_(grass|leaves|twigs|spruce_twigs|firs_road|dirt|mushr
 const FLOAT = /^fragments_dandelion$/i;
 const SPLASH = /^(mud_splash_(large|small)|snow_splash_(large|small)|water_burst_medium|water_splash_small|water_surf_splash2?|water_flow|dirt_burst_(large|medium(_snow|_fast|_skid|_skid_snow)?))$/i;
 const PUFF = /^(exhaust_(small|large|fog)|dust_small(_autumn|_needles|_snow|_summer)?|honk_dust|steam)$/i;
-const FAMILIES = ['settle', 'float', 'splash', 'puff'];
+const SNOW_SPLASH = /^(snow_splash_(large|small)|dirt_burst_medium(_skid)?_snow)$/i;   // splashes that get the snow life
+const SNOW_DROPS = /^snow(_frag)?__subparticles$/i;
+const FAMILIES = ['settle', 'float', 'splash', 'puff', 'snowdrops'];
 // "30", "2.4", "0.5": no trailing zeros
 const fmt = (v) => { const s = v.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''); return s === '' || s === '-' ? '0' : s; };
 
@@ -48,8 +54,17 @@ function family(base)
     if (FLOAT.test(base)) return 'float';
     if (SPLASH.test(base)) return 'splash';
     if (PUFF.test(base)) return 'puff';
+    if (SNOW_DROPS.test(base)) return 'snowdrops';
     return null;
 }
+// a vector attribute "(0; -2.5; 0)" times f
+const vecTimes = (f) => (v) =>
+{
+    const m = /^\(\s*([^;]+);\s*([^;]+);\s*([^)]+)\)$/.exec(v || '');
+    if (!m) return null;
+    const next = '(' + m.slice(1).map((s) => fmt(Number(s) * f)).join('; ') + ')';
+    return next === v ? null : next;
+};
 
 // one attribute of a tag's text ("<Name ... >" or "<Name ... />"): fn(value, or null when the tag has none) gives the
 // new value, null leaves it. A missing attribute goes in right after the tag's name. notes gets "label old -> new"
@@ -130,12 +145,17 @@ function debrisEdit(text, entryName, drops)
     {
         tag('Subparticles', (t) => setAttr(t, 'Density', (v) => (v === null ? null : fmt(Math.min(Math.max(Number(v) * drops, 12 * drops), 64 * drops))), notes, 'drops'));
         tag('ExtraLifeTime', (t) => setAttr(t, 'Value', times(2), notes, 'drops life'));
-        tag('LifeTime', (t) => setAttr(t, 'Value', times(2), notes, 'life'));
+        tag('LifeTime', (t) => setAttr(t, 'Value', times(SNOW_SPLASH.test(m[1]) ? 3 : 2), notes, 'life'));
         tag('CombineParticles', (t) => setAttr(setAttr(t, 'MudDecals', times(2, 1), notes, 'mud marks'), 'WetDecals', times(2, 1), notes, 'wet marks'));
     }
     else if (fam === 'puff')
     {
         tag('LifeTime', (t) => setAttr(setAttr(t, 'Value', times(1.5), notes, 'life'), 'Random', times(1.5), notes, 'random'));
+    }
+    else if (fam === 'snowdrops')
+    {
+        tag('CombineParticles', (t) => setAttr(setAttr(t, 'Gravity', vecTimes(0.5), notes, 'gravity'), 'AirResistance', times(0.6), notes, 'air'));
+        if (!tag('LifeTime', (t) => setAttr(t, 'Value', () => '15', notes, 'life'))) { out = insertBeforeClose(out, '</CombineParticles>', '<LifeTime Value="15" />'); notes.push('life 15'); }
     }
     if (out !== text) kinds.add(fam);
     return { out, notes, kinds };
@@ -162,7 +182,7 @@ if (require.main === module)
                 const r = debrisEdit(readEntry(fd, ent).data.toString('latin1'), ent.name, drops);
                 if (!r.kinds.size) continue;
                 for (const k of r.kinds) count[k] = (count[k] || 0) + 1;
-                console.log('  ' + [...r.kinds][0].padEnd(7) + PARTICLE_ENTRY.exec(ent.name)[1].padEnd(32) + r.notes.join('; '));
+                console.log('  ' + [...r.kinds][0].padEnd(10) + PARTICLE_ENTRY.exec(ent.name)[1].padEnd(32) + r.notes.join('; '));
             }
             console.log(file + ': ' + FAMILIES.map((f) => f + ' ' + (count[f] || 0)).join(', ') + ' files changed (' + drops + 'x drops)');
         }
