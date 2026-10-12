@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Debris and splashes, a new card, on by default: leaves, grass, twigs, dirt and stones thrown up by the wheels live 30 to 40 seconds and come to rest on the ground, where the tyres push them. Mud, water and snow splashes throw four times the drops, 8x on the card, the drops lie twice as long and the splash leaves twice the marks on the truck. Exhaust, dust and steam hang in the air half as long again. A part of initial.pak beside Grass reach, Fill light, Brighter stars and Weather; air resistance, gravity, wind and sizes stay the game's.
+
 ## [1.0.2] 2026-10-08
 
 - Bounce light is off by default and marked experimental: on snow and ice it comes out too strong and blue, in tracks, ruts and along drifts. Its strength of four now stops where a surface reaches 0.6 of the scene's ambient light, which eases the glow and does not cure it. An install made with 1.0.0 or 1.0.1 keeps the card ticked: untick Bounce light and click Apply.

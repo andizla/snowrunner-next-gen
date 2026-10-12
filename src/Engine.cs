@@ -44,6 +44,8 @@ namespace SnowRunnerNextGen
         public string StarsFactor;
         public string Weather = "vanilla";        // the weather, the fourth part of initial.pak: the same states
         public string WeatherParts;               // its parts as a comma list (shadows, showers, evening, horizon, far)
+        public string Debris = "vanilla";         // the debris and splashes, the fifth part of initial.pak: the same states
+        public string DebrisFactor;               // its drops factor
         public string Sky = "vanilla";            // the night sky, the third part of boot.pak: the same states
         public string Logos = "vanilla";          // the Next Gen logos in gfx.pak: the same states
         public readonly List<string> Orphaned = new List<string>();   // paks that hold our changes while their kept originals are gone
@@ -53,7 +55,7 @@ namespace SnowRunnerNextGen
         {
             get
             {
-                return Shader == "ours" || Dll == "ours" || Scenery == "nature" || Scenery == "all" || Grass == "ours" || Fill == "ours" || Stars == "ours" || Weather == "ours"
+                return Shader == "ours" || Dll == "ours" || Scenery == "nature" || Scenery == "all" || Grass == "ours" || Fill == "ours" || Stars == "ours" || Weather == "ours" || Debris == "ours"
                     || Grade == "ours" || Particles == "ours" || Sky == "ours" || Logos == "ours";
             }
         }
@@ -87,6 +89,9 @@ namespace SnowRunnerNextGen
             Dictionary<string, object> weather = Part(d, "weather");
             s.Weather = Text(weather, "state") ?? "missing";
             s.WeatherParts = Text(weather, "parts");
+            Dictionary<string, object> debris = Part(d, "debris");
+            s.Debris = Text(debris, "state") ?? "missing";
+            s.DebrisFactor = Text(debris, "factor");
             s.Sky = Text(Part(d, "sky"), "state") ?? "missing";
             s.Logos = Text(Part(d, "logos"), "state") ?? "missing";
             IEnumerable orphaned = d.ContainsKey("orphaned") ? d["orphaned"] as IEnumerable : null;

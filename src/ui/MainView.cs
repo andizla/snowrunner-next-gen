@@ -273,6 +273,10 @@ namespace SnowRunnerNextGen
                         card.On = s.Stars == "ours";
                         if (card.On) Pick(card, 0, s.StarsFactor);
                         break;
+                    case "debris":
+                        card.On = s.Debris == "ours";
+                        if (card.On) Pick(card, 0, s.DebrisFactor);
+                        break;
                     case "sky":
                         card.On = s.Sky == "ours";
                         break;
@@ -317,7 +321,7 @@ namespace SnowRunnerNextGen
         {
             List<object> shader = new List<object>();
             object shadows = null, scenery = null, sceneryHide = null, sceneryShadows = null, grass = null, fill = null, grade = null, particles = null, stars = null, sky = null, logos = null,
-                weather = null;
+                weather = null, debris = null;
             foreach (Card card in list.Cards)
             {
                 if (!card.On) continue;
@@ -354,6 +358,7 @@ namespace SnowRunnerNextGen
                         if (byId.TryGetValue("objrefl", out refl) && refl.On && Key(refl, 0) == "sssr") shader.Add("headglow");
                         break;
                     case "stars": stars = Key(card, 0); break;
+                    case "debris": debris = Key(card, 0); break;
                     case "sky": sky = "1"; break;
                     case "weather":   // the rows that are on, as the tool's comma list; none on sends nothing
                         List<string> on = new List<string>();
@@ -377,6 +382,7 @@ namespace SnowRunnerNextGen
             selection["stars"] = stars;
             selection["sky"] = sky;
             selection["weather"] = weather;
+            selection["debris"] = debris;
             selection["logos"] = logos;
             return selection;
         }
@@ -390,18 +396,18 @@ namespace SnowRunnerNextGen
             Dictionary<string, object> dll = sel["shadows"] as Dictionary<string, object>;
             string mine = Signature(shader, dll == null ? null : (string)dll["factor"], dll == null ? null : (string)dll["slopeBias"], dll == null ? null : (string)dll["aoHalf"],
                 Scenery((string)sel["scenery"], (string)sel["sceneryHide"], (string)sel["sceneryShadows"]), (string)sel["grass"], (string)sel["fill"], (string)sel["grade"],
-                (string)sel["particles"], (string)sel["stars"], (string)sel["sky"], (string)sel["logos"], (string)sel["weather"]);
+                (string)sel["particles"], (string)sel["stars"], (string)sel["sky"], (string)sel["logos"], (string)sel["weather"], (string)sel["debris"]);
             GameStatus s = installed;
             string theirs = Signature(s.Shader == "ours" ? s.Modules : new List<string>(), s.Dll == "ours" ? s.Factor : null, s.Dll == "ours" ? s.SlopeBias : null, s.Dll == "ours" ? s.AoHalf : null,
                 s.Scenery == "nature" || s.Scenery == "all" ? Scenery(s.Scenery, s.SceneryHide == "off" ? null : s.SceneryHide, s.SceneryShadows == "off" ? null : s.SceneryShadows) : null,
                 s.Grass == "ours" ? s.GrassFactor : null, s.Fill == "ours" ? s.FillFactor : null,
                 s.Grade == "ours" ? s.GradeStrength : null, s.Particles == "ours" ? "1" : null, s.Stars == "ours" ? s.StarsFactor : null, s.Sky == "ours" ? "1" : null, s.Logos == "ours" ? "1" : null,
-                s.Weather == "ours" ? s.WeatherParts : null);
+                s.Weather == "ours" ? s.WeatherParts : null, s.Debris == "ours" ? s.DebrisFactor : null);
             return mine == theirs;
         }
 
         static string Signature(List<string> shader, string factor, string slopeBias, string aoHalf, string scenery, string grass, string fill, string grade, string particles, string stars,
-            string sky, string logos, string weather)
+            string sky, string logos, string weather, string debris)
         {
             List<string> sorted = new List<string>(shader);
             sorted.Sort(StringComparer.Ordinal);
@@ -409,7 +415,7 @@ namespace SnowRunnerNextGen
             parts.Sort(StringComparer.Ordinal);
             return string.Join(",", sorted.ToArray()) + "|" + (factor == null ? "-" : Number(factor) + "/" + slopeBias + "/" + (aoHalf ?? "1")) + "|" + (scenery ?? "-") + "|" + (grass == null ? "-" : Number(grass))
                 + "|" + (fill == null ? "-" : Number(fill)) + "|" + (grade == null ? "-" : Number(grade)) + "|" + (particles ?? "-") + "|" + (stars == null ? "-" : Number(stars))
-                + "|" + (sky ?? "-") + "|" + (logos ?? "-") + "|" + string.Join(",", parts.ToArray());
+                + "|" + (sky ?? "-") + "|" + (logos ?? "-") + "|" + string.Join(",", parts.ToArray()) + "|" + (debris == null ? "-" : Number(debris));
         }
 
         // the scenery set with its two extras as one word for the signature
@@ -455,6 +461,7 @@ namespace SnowRunnerNextGen
             if (s.Sky == "ours") parts.Add("night sky");
             if (s.Stars == "ours") parts.Add("stars " + Number(s.StarsFactor) + "x");
             if (s.Weather == "ours") parts.Add("weather " + (s.WeatherParts ?? "").Replace(",", ", "));
+            if (s.Debris == "ours") parts.Add("debris " + Number(s.DebrisFactor) + "x drops");
             if (s.Logos == "ours") parts.Add("logo");
             List<string> notes = new List<string>();
             // files another mod or a game update changed since their originals were kept: Apply asks before it builds on them

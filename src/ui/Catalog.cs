@@ -130,6 +130,11 @@ namespace SnowRunnerNextGen
             // the particle sprites at twice the size, into boot.pak beside the photo grade
             list.Add(M("particles", "ATMOSPHERE", "Sharper smoke and particles", true,
                 "The game's smoke, dust, spray and spark textures at twice their size, so particles stay crisp up close."));
+            // what the wheels throw up lives longer and comes to rest: the fifth part of initial.pak
+            Module debris = M("debris", "ATMOSPHERE", "Debris and splashes", true,
+                "Leaves, grass, twigs and dirt thrown up by the wheels stay on the ground for half a minute and get pushed by the tyres, instead of vanishing after four seconds. Mud, water and snow splashes throw more drops that lie longer and leave more marks on the truck. Exhaust and dust hang in the air longer.");
+            debris.Options.Add(new OptionSet("Splash drops", new[] { "4x", "8x" }, new[] { "4", "8" }, 0));
+            list.Add(debris);
 
             // the star map and the photo night skies with its stars painted in, into boot.pak beside the grade and the particles
             list.Add(M("sky", "ATMOSPHERE", "Night sky", true,

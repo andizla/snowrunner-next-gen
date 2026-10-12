@@ -235,6 +235,13 @@ namespace SnowRunnerNextGen
                 Costs, "Video memory for the larger textures. The installer is 114 MB larger for the set.",
                 Know, "It changes boot.pak, together with Photo grade and Night sky, which it keeps. Other mods that change boot.pak, such as a texture pack, are kept too: Apply asks before it builds on them.");
 
+            d["debris"] = E(
+                Does, "What the wheels throw up is gone in a few seconds: leaves, grass and twigs after four, the drops of a mud or water splash after two. This keeps it around. Leaves, grass, twigs, dirt and stones live 30 to 40 seconds and come to rest on the ground, where the tyres push them. Mud, water and snow splashes throw four times the drops, the drops lie twice as long, the splash lasts twice as long and leaves twice the mud and water marks on the truck. Exhaust, dust and steam hang in the air half as long again. Air resistance, gravity, wind and the sizes stay the game's.",
+                Notice, "A trail of leaves and torn grass behind the truck that stays, mud splashes with more and longer-lived drops, exhaust that lingers.",
+                Costs, "Frame rate where much is thrown up: about ten times as many pieces are alive at once, and a splash has four times the drops. At 8x drops, twice that.",
+                Choices, "Splash drops: 4x or 8x the game's drops per splash.",
+                Know, "It changes initial.pak, together with Grass reach, Fill light, Brighter stars and Weather, which it keeps. Other mods that change initial.pak change the same file: Apply asks before it builds on it.");
+
             d["sky"] = E(
                 Does, "The game's night sky is a small texture whose stars are one texel each. This puts NASA's star map in its place, with four times the pixels: the real sky's stars as fine points, and the glow of the Milky Way. Scandinavia, Kola and Quebec have a photo for a night sky, with the northern lights in it. There the same stars are painted into the photo.",
                 Notice, "A night sky full of fine stars, with the Milky Way across it.",
