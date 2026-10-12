@@ -262,7 +262,7 @@ namespace SnowRunnerNextGen
                 Credits, "The star map is made from Deep Star Maps 2020. Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.");
 
             d["stars"] = E(
-                Does, "The night sky draws its stars as one layer, at a low level set per region. This raises that level at night, dusk and dawn in every region where the stars are their own layer, so they stand out against the dark sky.",
+                Does, "The night sky draws its stars as one layer, at a low level set per region. This raises that level at night in every region where the stars are their own layer, so they stand out against the dark sky. Dusk and dawn keep the game's level.",
                 Notice, "A night sky with clearly visible stars.",
                 Costs, "None: it changes how bright the game draws a layer it draws anyway.",
                 Choices, "Brightness: three or two times the game's level.",

@@ -9,9 +9,11 @@
 // "g(r; g; b; a) x N": N scales the colour alone (the stock sun disc is "g(255; 244; 210; 80) x 80"), the alpha is
 // a / 255; the sky shader's output is the colour weighted by the alpha.
 //
-// 1. The star texture's own skies: N times the factor in every override of the star layer whose map is the star
-//    texture (a value without a multiplier gets " x <factor>"): the nights, and dusk and dawn where a region shows
-//    stars at those states. States with no map (the days, most dusks and dawns) draw nothing and stay.
+// 1. The star texture's own skies: N times the factor in the night overrides of the star layer whose map is the star
+//    texture (a value without a multiplier gets " x <factor>"). Dusk and dawn (day_to_night_*, night_to_day_*) keep
+//    the game's level where a region shows stars then: it is x 1 to x 3 there already, for a sky that is still
+//    bright, and times the factor the stars stood out in the sunset. States with no map (the days, most dusks and
+//    dawns) draw nothing and stay.
 // 2. The photo night skies (env/cloud_01_us_11s__s_d_a: Scandinavia; env/cloud_01_ru_03s__s_d_a: Kola and Quebec):
 //    one picture holds the aurora photo and the stars, so N would brighten the photo too. The stars' share is in the
 //    picture's alpha instead (the sky set's builds of them: alpha 85 where a texel is all photo, up to
@@ -28,6 +30,7 @@ const fs = require('fs'), path = require('path');
 const SKY_ENTRY = /classes[\\/]skies[\\/]sky_[^\\/]+\.xml$/i;
 const STAR_MAP = /^env[\\/]skysphere_stars__d_a\.tga$/i;
 const PHOTO_MAP = /^env[\\/](cloud_01_(?:us_11s|ru_03s)__s_d_a)\.tga$/i;
+const TWILIGHT = /^(?:day_to_night|night_to_day)_/i;   // dusk and dawn states: the star texture keeps the game's level
 const STARS_FACTOR = 3;   // the default: stars three times as bright
 const PHOTO_FACTOR = 3;   // fixed: photo_star_alpha.py's K (the pictures' alpha floor is 255 / 3)
 // the builds of the photo skies with the stars' share in their alpha: boot.pak [textures]/pct/env_<name>.pct, CRC-32
@@ -77,7 +80,7 @@ function photoSkies(bootPak)
     return ready;
 }
 
-// the star layer's overrides: the star texture's times factor, the ready photo skies' alpha times PHOTO_FACTOR;
+// the star layer's overrides: the star texture's at night times factor, the ready photo skies' alpha times PHOTO_FACTOR;
 // { out, notes }, out === text when nothing matched. photo: photoSkies()'s Set (none when left out)
 function starsEdit(text, factor, photo)
 {
@@ -90,7 +93,7 @@ function starsEdit(text, factor, photo)
             if (!state || !map) return tag;
             const picture = PHOTO_MAP.exec(map[1]);
             // factor 1 = the photo skies' alpha alone (lod_patch.js keeps it in step with boot.pak without the stars part)
-            if (picture ? !(photo && photo.has(picture[1].toLowerCase())) : !STAR_MAP.test(map[1]) || factor === 1) return tag;
+            if (picture ? !(photo && photo.has(picture[1].toLowerCase())) : !STAR_MAP.test(map[1]) || factor === 1 || TWILIGHT.test(state[1])) return tag;
             return tag.replace(/\b(DiffuseMultiplier)(\s*=\s*")([^"]*)(")/i, (all, name, eq, value, close) =>
             {
                 const m = /^\s*(g?)\(([^)]*)\)\s*(?:x\s*(\d+(?:\.\d+)?)\s*)?$/.exec(value);

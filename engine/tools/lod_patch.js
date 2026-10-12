@@ -36,7 +36,7 @@
 //        states' ambient times the factor, 0.7 unless FILL_FACTOR says otherwise). Grass and fill light are two parts of
 //        one initial.pak built from its original: installing or removing one keeps the other.
 //        node lod_patch.js stars-status | stars-install [factor] | stars-restore   brighter stars (sky_stars.js: the star
-//        layer times the factor at night, dusk and dawn, 3 unless STARS_FACTOR says otherwise): a third part of the same
+//        layer times the factor at night, 3 unless STARS_FACTOR says otherwise): a third part of the same
 //        build. The photo night skies (Scandinavia, Kola, Quebec) carry their stars in the picture's alpha when
 //        boot.pak holds those builds; their sky alpha then follows in every build, with or without the stars part
 //        node lod_patch.js weather-status | weather-install [parts] | weather-restore   the weather (daytime_weather.js:
