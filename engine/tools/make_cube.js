@@ -98,7 +98,32 @@ function dirToFace(x, y, z)
 }
 
 const srgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
-const encode = (v, exposure) => Math.max(0, Math.min(255, Math.round(srgb(Math.max(0, Math.min(1, v * exposure))) * 255)));
+// the picture's range into 0..1: a value times the exposure through a shoulder that reaches 1 at TONE.white (Reinhard
+// with a white point; white 0 = a hard clip), after a cap (linear, before the exposure) that takes the sun down to a
+// bright patch: TONE.cap is 0 for none, else the value a texel may reach, set from the sky's median by the caller
+const TONE = { white: 4, cap: 0 };
+function encode(v, exposure)
+{
+    if (TONE.cap > 0 && v > TONE.cap) v = TONE.cap;
+    let x = Math.max(0, v * exposure);
+    x = TONE.white > 0 ? x * (1 + x / (TONE.white * TONE.white)) / (1 + x) : x;
+    return Math.max(0, Math.min(255, Math.round(srgb(Math.min(1, x)) * 255)));
+}
+// the median linear luminance of the sky half (for the cap)
+function skyMedian(p, yaw)
+{
+    const out = [0, 0, 0], lum = [];
+    for (let j = 0; j < 64; j++)
+        for (let i = 0; i < 128; i++)
+        {
+            const theta = (j + 0.5) / 64 * (Math.PI / 2), phi = (i + 0.5) / 128 * 2 * Math.PI;
+            const [u, v] = dirToUv(Math.sin(theta) * Math.sin(phi), Math.cos(theta), Math.sin(theta) * Math.cos(phi), yaw);
+            sample(p, u, v, out);
+            lum.push(0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2]);
+        }
+    lum.sort((a, b) => a - b);
+    return lum[lum.length >> 1];
+}
 // the mean sRGB luminance of the sky half at an exposure, from a fixed set of directions
 function skyMean(p, exposure, yaw)
 {
@@ -354,18 +379,23 @@ if (require.main === module)
     try
     {
         const yaw = Number(opt('yaw') || 0);
+        if (opt('white') !== null) TONE.white = Number(opt('white'));
+        // the cap: --cap N clamps the picture at N times the sky's median (10 by default; 0 for none)
+        const capOf = (p) => { const n = opt('cap') === null ? 10 : Number(opt('cap')); TONE.cap = n > 0 ? n * skyMedian(p, yaw) : 0; };
         if (cmd === 'build' && args[1] && args[2] && opt('header'))
         {
             const p = readHdr(args[1]);
+            capOf(p);
             const exposure = opt('exposure') ? Number(opt('exposure')) : exposureFor(p, Number(opt('sky-mean') || SKY_MEAN), yaw);
             const faces = renderFaces(p, exposure, yaw);
             writePct(args[2], faces, opt('header'));
             if (args.includes('--preview')) { facesPng(args[2].replace(/\.pct$/i, '') + '_faces.png', faces); panoPng(args[2].replace(/\.pct$/i, '') + '_pano.png', faces); }
-            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): exposure ' + exposure.toFixed(4) + ', sky mean ' + skyMean(p, exposure, yaw).toFixed(3) + ', yaw ' + yaw);
+            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): exposure ' + exposure.toFixed(4) + ', sky mean ' + skyMean(p, exposure, yaw).toFixed(3) + ', white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
         }
         else if (cmd === 'preview' && args[1] && args[2])
         {
             const p = readHdr(args[1]), w = 1024, h = 512, rgb = new Uint8Array(w * h * 3), out = [0, 0, 0];
+            capOf(p);
             const exposure = opt('exposure') ? Number(opt('exposure')) : exposureFor(p, Number(opt('sky-mean') || SKY_MEAN), yaw);
             for (let j = 0; j < h; j++)
                 for (let i = 0; i < w; i++)
@@ -383,7 +413,7 @@ if (require.main === module)
             for (const a of args.slice(3)) { const m = /^([^=]+)=(.+)$/.exec(a); if (!m) throw new Error('expected <entry name>=<file>: ' + a); map.set(m[1].toLowerCase(), m[2]); }
             console.log('wrote ' + args[2] + ' with ' + writeTestPak(args[1], args[2], map) + ' entries replaced');
         }
-        else console.log('usage: node make_cube.js build <panorama.hdr> <out.pct> --header <stock.pct> [--exposure <x> | --sky-mean <0..1>] [--yaw <degrees>] [--preview] | preview <panorama.hdr> <out.png> [--exposure <x>] [--yaw <degrees>] | pak <in.pak> <out.pak> <entry name>=<cube.pct> ...');
+        else console.log('usage: node make_cube.js build <panorama.hdr> <out.pct> --header <stock.pct> [--exposure <x> | --sky-mean <0..1>] [--white <w>] [--cap <n>] [--yaw <degrees>] [--preview] | preview <panorama.hdr> <out.png> [the same options] | pak <in.pak> <out.pak> <entry name>=<cube.pct> ...');
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
