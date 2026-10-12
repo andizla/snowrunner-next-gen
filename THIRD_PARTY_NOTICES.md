@@ -82,9 +82,9 @@ Licensed under the Apache License, Version 2.0. The licence text is in licenses\
 ## Poly Haven panoramas
 
 The winter reflection cubes (engine\replacements\cubes\pct) and the winter skies (engine\replacements\skies\pct) are made
-with engine\tools\make_cube.js from two panoramas
-by Poly Haven (https://polyhaven.com): "Passendorf Snow" (passendorf_snow) and "Snow Field" (snow_field). Poly Haven
-publishes them under CC0 1.0 (public domain dedication).
+with engine\tools\make_cube.js from three panoramas published by Poly Haven (https://polyhaven.com) under CC0 1.0
+(public domain dedication): "Passendorf Snow" (passendorf_snow) and "Stierberg Sunrise" (stierberg_sunrise) by Grzegorz
+Wronkowski, and "Snow Field" (snow_field) by Sergej Majboroda.
 
 ## NASA Deep Star Maps
 

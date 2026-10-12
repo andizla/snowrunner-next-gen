@@ -23,8 +23,8 @@
 // replacements\sky\pct, written the way the particle set is. The photo skies need their sky alpha raised in
 // initial.pak: lod_patch.js does that in every build once boot.pak holds them, so `lod_patch.js initial-refresh`
 // follows a sky-install or sky-restore.
-// A fourth part is the reflection cubes: the snow regions' two day cubes (env_day_al_01, the clear days; env_day_al_02,
-// the weather variants) made anew from winter panoramas by make_cube.js, SR_CUBES_DIR, default replacements\cubes\pct,
+// A fourth part is the reflection cubes: four of the snow regions' cubes (env_day_al_01, the clear days; env_day_al_02,
+// the weather variants; env_evn_al_01 and env_morning_al_01, dusk and dawn) made anew from winter panoramas by make_cube.js, SR_CUBES_DIR, default replacements\cubes\pct,
 // written the way the particle set is.
 // A fifth part is the winter skies: Kola's two clear-day sky textures (env_sky_01_ru_03_day, env_sky_02_ru_03_day, the
 // sphere_sky layer of its sky) from the same panorama, SR_SKIES_DIR, default replacements\skies\pct, written the same way.

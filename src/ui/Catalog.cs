@@ -106,7 +106,7 @@ namespace SnowRunnerNextGen
             list.Add(M("glare", "WATER", "Headlight glare cap", false, "Tamer headlight shine on wet ground and puddles, with no long bright band across them."));
             // the snow regions' two day cubes made anew from winter panoramas, the fourth part of boot.pak
             list.Add(M("cubes", "WATER", "Winter reflection cubes", true,
-                "The painted skies that paint, glass and chrome mirror in the snow regions, and that Sky ambient and Bounce light read the sky's and the ground's colour from, made anew from two winter panoramas: a clear day with a low sun over a snow field and forest, and an overcast day. Alaska, Amur, Kola, Yukon and Quebec by day."));
+                "The painted skies that paint, glass and chrome mirror in the snow regions, and that Sky ambient and Bounce light read the sky's and the ground's colour from, made anew from three winter panoramas: a clear day with a low sun over a snow field and forest, an overcast day, and a sunrise for dusk and dawn. Alaska, Amur, Kola, Yukon and Quebec, and Scandinavia at dusk."));
 
             // off by default since 1.0.2
             Module fog = M("fog", "ATMOSPHERE", "Volumetric fog", false,
