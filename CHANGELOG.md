@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Debris and splashes, a new card, on by default: leaves, grass, twigs, dirt and stones thrown up by the wheels live 30 to 40 seconds and come to rest on the ground, where the tyres push them. Mud, water and snow splashes throw four times the drops, 8x on the card, the drops lie twice as long and the splash leaves twice the marks on the truck. Exhaust, dust and steam hang in the air half as long again. A part of initial.pak beside Grass reach, Fill light, Brighter stars and Weather; air resistance, gravity, wind and sizes stay the game's.
+- Winter reflection cubes, a new card, off by default: the two painted sky cubes the snow regions' day states name, which paint, glass and chrome mirror and which Sky ambient and Bounce light read the sky's and the ground's colour from, made anew from two CC0 winter panoramas, a clear day with a low sun and an overcast day. A part of boot.pak beside Photo grade, Sharper smoke and particles and Night sky. The cubes are built by `engine\tools\make_cube.js`.
 
 ## [1.0.2] 2026-10-08
 

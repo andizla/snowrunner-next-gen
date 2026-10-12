@@ -79,6 +79,12 @@ Licensed under the Apache License, Version 2.0. The licence text is in licenses\
 - engine\replacements\sky: two of the game's photo night skies (Scandinavia; Kola and Quebec) with the star map's stars
   painted in. They remain Saber Interactive's assets and are shipped only for use with the game.
 
+## Poly Haven panoramas
+
+The winter reflection cubes (engine\replacements\cubes\pct) are made with engine\tools\make_cube.js from two panoramas
+by Poly Haven (https://polyhaven.com): "Passendorf Snow" (passendorf_snow) and "Snow Field" (snow_field). Poly Haven
+publishes them under CC0 1.0 (public domain dedication).
+
 ## NASA Deep Star Maps
 
 The night sky's star texture (engine\replacements\sky\pct\env_skysphere_stars__d_a.pct) is made from "Deep Star Maps

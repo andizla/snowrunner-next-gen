@@ -95,7 +95,7 @@ foreach ($h in $helpers) {
 # the texture sets, shipped as files because they cannot be made at install time: the particle textures at twice the
 # size (lut_grade.js particles-install; list.csv names them), the night sky (lut_grade.js sky-install) and the logos
 # (gfx_logos.js)
-$textureSets = [ordered]@{ particles = 'particles\pct'; sky = 'sky\pct'; logos = 'splash\pct' }
+$textureSets = [ordered]@{ particles = 'particles\pct'; sky = 'sky\pct'; cubes = 'cubes\pct'; logos = 'splash\pct' }
 $textures = @{}
 foreach ($set in $textureSets.Keys) {
   $from = Join-Path $repl $textureSets[$set]
@@ -141,6 +141,7 @@ $parts = [ordered]@{
   grade     = Fingerprint @((& $tool 'lut_grade.js'))
   particles = Fingerprint ($textures['particles'] + (& $tool 'lut_grade.js'))
   sky       = Fingerprint ($textures['sky'] + (& $tool 'lut_grade.js'))
+  cubes     = Fingerprint ($textures['cubes'] + (& $tool 'lut_grade.js'))
   logos     = Fingerprint ($textures['logos'] + (& $tool 'gfx_logos.js') + (& $tool 'lod_patch.js'))
 }
 $parts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $engine 'parts.json') -Encoding ASCII

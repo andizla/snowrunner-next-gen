@@ -29,6 +29,7 @@ Reflections and water
 - River depth colour: deeper water tints teal or brown from its own colour.
 - Sun glow through waves: river waves light up against a low sun.
 - Headlight glare cap: tamer headlight shine on wet ground. Off by default.
+- Winter reflection cubes: the snow regions' painted sky cubes, which paint and chrome mirror and the ambient light reads, made anew from winter panoramas. Off by default.
 
 Atmosphere and image
 
@@ -83,7 +84,7 @@ Every Apply and Restore is written to `install.log` in `%LOCALAPPDATA%\SnowRunne
 
 ## What it changes
 
-In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather, debris and splashes), `boot.pak` (photo grade, particles, night sky) and `gfx.pak` (the logo) under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in the folder with `SnowRunner.exe` (`Sources\Bin` on Steam). Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
+In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather, debris and splashes), `boot.pak` (photo grade, particles, night sky, reflection cubes) and `gfx.pak` (the logo) under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in the folder with `SnowRunner.exe` (`Sources\Bin` on Steam). Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
 
 The kept originals live in `%LOCALAPPDATA%\SnowRunnerNextGen`. Every new file is written next to the old one, read back and checked before it takes the old one's place. The program refuses to write while the game runs.
 

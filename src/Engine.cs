@@ -47,6 +47,7 @@ namespace SnowRunnerNextGen
         public string Debris = "vanilla";         // the debris and splashes, the fifth part of initial.pak: the same states
         public string DebrisFactor;               // its drops factor
         public string Sky = "vanilla";            // the night sky, the third part of boot.pak: the same states
+        public string Cubes = "vanilla";          // the winter reflection cubes, the fourth part of boot.pak: the same states
         public string Logos = "vanilla";          // the Next Gen logos in gfx.pak: the same states
         public readonly List<string> Orphaned = new List<string>();   // paks that hold our changes while their kept originals are gone
         public readonly List<string> Outdated = new List<string>();   // installed parts this installer carries in another build: Apply updates them
@@ -56,7 +57,7 @@ namespace SnowRunnerNextGen
             get
             {
                 return Shader == "ours" || Dll == "ours" || Scenery == "nature" || Scenery == "all" || Grass == "ours" || Fill == "ours" || Stars == "ours" || Weather == "ours" || Debris == "ours"
-                    || Grade == "ours" || Particles == "ours" || Sky == "ours" || Logos == "ours";
+                    || Grade == "ours" || Particles == "ours" || Sky == "ours" || Cubes == "ours" || Logos == "ours";
             }
         }
 
@@ -93,6 +94,7 @@ namespace SnowRunnerNextGen
             s.Debris = Text(debris, "state") ?? "missing";
             s.DebrisFactor = Text(debris, "factor");
             s.Sky = Text(Part(d, "sky"), "state") ?? "missing";
+            s.Cubes = Text(Part(d, "cubes"), "state") ?? "missing";
             s.Logos = Text(Part(d, "logos"), "state") ?? "missing";
             IEnumerable orphaned = d.ContainsKey("orphaned") ? d["orphaned"] as IEnumerable : null;
             if (orphaned != null && !(orphaned is string)) foreach (object f in orphaned) if (f != null) s.Orphaned.Add(f.ToString());

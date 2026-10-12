@@ -105,6 +105,9 @@ namespace SnowRunnerNextGen
             list.Add(M("crestglow", "WATER", "Sun glow through waves", true,
                 "River waves between you and a low sun light up in the water's own colour, wherever the sun really reaches them.", "water"));
             list.Add(M("glare", "WATER", "Headlight glare cap", false, "Tamer headlight shine on wet ground and puddles, with no long bright band across them."));
+            // the snow regions' two day cubes made anew from winter panoramas, the fourth part of boot.pak
+            list.Add(M("cubes", "WATER", "Winter reflection cubes", false,
+                "The painted skies that paint, glass and chrome mirror in the snow regions, and that Sky ambient and Bounce light read the sky's and the ground's colour from, made anew from two winter panoramas: a clear day with a low sun over a snow field and forest, and an overcast day. Alaska, Amur, Kola, Yukon and Quebec by day."));
 
             // off by default since 1.0.2
             Module fog = M("fog", "ATMOSPHERE", "Volumetric fog", false,
