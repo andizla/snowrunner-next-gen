@@ -73,6 +73,7 @@ namespace SnowRunnerNextGen
             // the folder on the command line, else the one picked last, else the first install found
             header.Folder = gameFolder != null && GameFinder.IsGame(gameFolder) ? GameFinder.OnDisk(gameFolder) : Engine.RememberedGame() ?? FindGame();
             ShowCount();
+            if (severalNote != null) { string say = severalNote; severalNote = null; Changed(say); }
             ResumeLayout(false);
         }
 
@@ -535,10 +536,16 @@ namespace SnowRunnerNextGen
             using (HelpForm help = new HelpForm(look, topic)) help.ShowDialog(FindForm());
         }
 
+        // the first install found. When there are several, the bar says so once: which one this is, and that
+        // Change picks another (a folder picked there is remembered)
+        static string severalNote;
         static string FindGame()
         {
-            foreach (string pak in GameFinder.FindPaks()) return GameFinder.FolderOf(pak);
-            return null;
+            List<string> paks = GameFinder.FindPaks();
+            if (paks.Count == 0) return null;
+            string first = GameFinder.FolderOf(paks[0]);
+            if (paks.Count > 1) severalNote = "SnowRunner is installed in " + paks.Count + " places. This is " + first + ": Change picks another.";
+            return first;
         }
 
         void PickGame()
