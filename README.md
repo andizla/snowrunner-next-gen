@@ -18,7 +18,7 @@ Light and shadow
 - Wide occlusion: soft shade under trucks, roofs and tree crowns, out to 6 metres.
 - Sky ambient: the fill light takes the sky's colour.
 - Fill light: less of the flat light that fills in shade.
-- Bounce light: sunlit snow, mud and paint light up what stands next to them.
+- Bounce light: sunlit ground and paint light up what stands next to them. Off by default and experimental: in places it comes out too strong.
 
 Reflections and water
 

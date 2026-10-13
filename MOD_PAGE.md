@@ -16,7 +16,9 @@ The pictures were taken in photo mode with the time of day held still and the ca
 
 ## What is in it
 
-Light and shadow: SnowRunner Shadows with a larger shadow texture if you want one, straight shadow edges with blended cascade seams, a blocker search for soft shadow ends, contact shadows, GTAO with a wide search, sky ambient, less fill light, and bounce light from sunlit snow, mud and paint.
+Light and shadow: SnowRunner Shadows with a larger shadow texture if you want one, straight shadow edges with blended cascade seams, a blocker search for soft shadow ends, contact shadows, GTAO with a wide search, sky ambient, less fill light, and, off by default, bounce light from sunlit ground and paint.
+
+Bounce light is off by default and experimental: in places it comes out too strong.
 
 Reflections and water: paint, glass and chrome mirror the scene, headlights show in them at night, water and wet ground mirror banks, trees and trucks, deeper water keeps its own colour, and river waves light up against a low sun.
 

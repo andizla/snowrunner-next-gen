@@ -83,9 +83,10 @@ namespace SnowRunnerNextGen
                 "Less of the flat light that fills in shade: shaded sides, the insides of trees and trucks in shadow get darker, while sunlit parts and the sky stay as they are.");
             fill.Options.Add(new OptionSet("Strength", new[] { "70 %", "55 %", "85 %" }, new[] { "0.7", "0.55", "0.85" }, 0));
             list.Add(fill);
-            // on by default again: with the snow regions' reflection cubes snow and ice keep their colour under it
-            list.Add(M("gi", "LIGHT", "Bounce light", true,
-                "Sunlit snow, mud and paint light up what stands next to them, in their colour: under trucks, in wheel arches, at the feet of walls.",
+            // off by default: in places it comes out too strong
+            list.Add(M("gi", "LIGHT", "Bounce light", false,
+                "Sunlit ground and paint light up what stands next to them, in their colour: under trucks, in wheel arches, at the feet of walls. " +
+                "Experimental: in places it comes out too strong.",
                 "gtao", "shadows"));
 
             Module refl = M("objrefl", "REFLECTIONS", "Object reflections", true,
