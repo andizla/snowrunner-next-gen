@@ -26,7 +26,8 @@
 //              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen, drift, land),
 //              "debris": null | "4" | "8" (the drops factor of the debris and splashes),
 //              "logos": null | "1",
-//              "maps": null | "maine,bc" (a comma list of maine, bc, austria: the level paks, see level_states.js) }
+//              "maps": null | "maine,bc" (a comma list of maine or maineown, bc, austria: the level paks, see level_states.js;
+//              maineown gives Maine days of its own, which initial.pak then holds) }
 // config.json next to this file: { "tools": <folder>, "dll": <hid.dll to install> }. A dev build may add "devGame" and
 //   "devState" (that game folder's state lives in devState) and "dump" and "sets" (folders that already hold the game's
 //   shaders and the sets made from them, so prepare.js is not run); NGEN_STATE_ROOT moves the state folders (tests)
@@ -508,9 +509,9 @@ async function readPaks(g, state)
     // scenery: nature, all, vanilla, changed; its two extras: off, plants or all (off for anything but this installer's build)
     const lod = fs.existsSync(g.shared) ? JSON.parse(await answer('lod_patch.js', ['status-json'], env)) : { state: 'missing', hide: 'off', shadows: 'off' };
     const scenery = lod.state, sceneryHide = lod.hide, sceneryShadows = lod.shadows;
-    const { grass, fill, stars, weather, debris, initialPak } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
+    const { grass, fill, stars, weather, debris, initialPak, ownDays } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
     const sky = await readSky(g, env), cubes = await readCubes(g, env), skies = await readSkies(g, env), logos = await readLogos(g, env), maps = await readMaps(g, env);
-    return { shader, scenery, sceneryHide, sceneryShadows, grass, fill, stars, weather, debris, initialPak, grade, particles, sky, cubes, skies, logos, maps };
+    return { shader, scenery, sceneryHide, sceneryShadows, grass, fill, stars, weather, debris, initialPak, ownDays, grade, particles, sky, cubes, skies, logos, maps };
 }
 // initial.pak: the grass, the fill light, the stars, the weather and the debris, five parts of one build, each { state, factor }
 // (the weather: { state, parts }, a comma list); initialPak is the file's own state (ours also when it holds none of
@@ -520,7 +521,7 @@ async function readInitial(g, env)
     const init = fs.existsSync(g.initial) ? JSON.parse(await answer('lod_patch.js', ['initial-status'], env)) : { state: 'missing' };
     const part = (v) => (init.state !== 'ours' ? { state: init.state } : v ? { state: 'ours', factor: String(v) } : { state: 'vanilla' });
     const weather = init.state !== 'ours' ? { state: init.state } : init.weather ? { state: 'ours', parts: String(init.weather) } : { state: 'vanilla' };
-    return { grass: part(init.grass), fill: part(init.fill), stars: part(init.stars), weather, debris: part(init.debris), initialPak: init.state };   // ours (with factor), vanilla, changed, missing
+    return { grass: part(init.grass), fill: part(init.fill), stars: part(init.stars), weather, debris: part(init.debris), initialPak: init.state, ownDays: init.state === 'ours' ? init.days || null : null };   // ours (with factor), vanilla, changed, missing; ownDays: the regions with days of their own (the map days put them in)
 }
 // the weather's parts as a comma list in the tool's order, for one comparison
 const WEATHER_PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen', 'drift', 'land'];
@@ -561,13 +562,15 @@ async function readSkies(g, env)
 // vanilla, changed (a level file that names neither the game's states nor ours) or missing (no level pak of the rows
 // is there); part: a row was written halfway; changed: the rows another tool wrote
 const MAP_ROWS = ['maine', 'bc', 'austria'];
-const MAP_WORDS = { maine: 'Maine', bc: 'British Columbia', austria: 'Austria' };
-const mapsList = (spec) => MAP_ROWS.filter((r) => String(spec || '').split(',').map((s) => s.trim()).includes(r)).join(',');
+// a row can be asked for with "own" behind it (maineown): days of the region's own, which initial.pak then holds
+const MAP_NAMES = ['maine', 'maineown', 'bc', 'austria'];
+const MAP_WORDS = { maine: 'Maine', maineown: 'Maine (days of its own)', bc: 'British Columbia', austria: 'Austria' };
+const mapsList = (spec) => MAP_NAMES.filter((r) => String(spec || '').split(',').map((s) => s.trim()).includes(r)).join(',');
 const mapWords = (rows) => namesOf(rows.split(',').map((r) => MAP_WORDS[r]));
 async function readMaps(g, env)
 {
     const said = JSON.parse(await answer('level_states.js', ['status'], env));
-    const rows = MAP_ROWS.filter((r) => said[r] === 'ours' || said[r] === 'part').join(','), changed = MAP_ROWS.filter((r) => said[r] === 'changed').join(',');
+    const rows = MAP_ROWS.map((r) => (said[r] === 'own' ? r + 'own' : said[r] === 'ours' || said[r] === 'part' ? r : '')).filter(Boolean).join(','), changed = MAP_ROWS.filter((r) => said[r] === 'changed').join(',');
     const state = rows ? 'ours' : MAP_ROWS.every((r) => said[r] === 'missing') ? 'missing' : changed ? 'changed' : 'vanilla';
     return { state, rows, part: MAP_ROWS.some((r) => said[r] === 'part'), changed };
 }
@@ -1050,11 +1053,14 @@ async function apply(g, state, sel, adopt, leave)
     if (now.maps.state === 'missing') { if (maps) warn('No level file of Maine, British Columbia or Austria is in this game folder: the map days were left out.'); }
     else if ((maps || '') !== now.maps.rows || now.maps.part)
     {
-        step(maps ? 'Giving ' + mapWords(maps) + ' the new days (the level files)' : 'Putting the maps\' own days back (the level files)');
+        // days of a region's own sit in initial.pak: the tool puts them in before a level file names them and takes
+        // them out when none does
+        const own = /own/.test((maps || '') + ',' + now.maps.rows);
+        step(maps ? 'Giving ' + mapWords(maps) + ' the new days (the level files' + (own ? ', initial.pak' : '') + ')' : 'Putting the maps\' own days back (the level files' + (own ? ', initial.pak' : '') + ')');
         await must('level_states.js', maps ? ['install', maps] : ['restore'], env);
     }
     else if (maps) emit({ type: 'log', text: 'the level files already have the days of ' + mapWords(maps) });
-    const mapsLeft = maps ? mapsList(now.maps.changed).split(',').filter((r) => r && maps.split(',').includes(r)).join(',') : '';
+    const mapsLeft = maps ? mapsList(now.maps.changed).split(',').filter((r) => r && maps.split(',').map((m) => m.replace(/own$/, '')).includes(r)).join(',') : '';
     if (mapsLeft) warn('The level files of ' + mapWords(mapsLeft) + ' were changed by something else: left as they are, so the map days were left out there.');
 
     await leaveNote(g, state);
@@ -1099,12 +1105,16 @@ async function restore(g, state, adopt, leave)
     }
     if (now.cubes.state === 'ours') { step('Putting the original reflection cubes back (boot.pak)'); await must('lut_grade.js', ['cubes-restore'], env); }
     if (now.skies.state === 'ours') { step('Putting the original skies back (boot.pak)'); await must('lut_grade.js', ['skies-restore'], env); }
-    if (now.grass.state === 'ours' || now.fill.state === 'ours' || now.stars.state === 'ours' || now.weather.state === 'ours' || now.debris.state === 'ours') { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
+    // the level files before initial.pak: days of a region's own sit in initial.pak, and no level file may name them
+    // once they are gone
+    if (now.maps.state === 'ours') { step('Putting the maps\' own days back (the level files)'); await must('level_states.js', ['restore'], env); }
+    const partsIn = now.grass.state === 'ours' || now.fill.state === 'ours' || now.stars.state === 'ours' || now.weather.state === 'ours' || now.debris.state === 'ours';
+    // with days of a region's own in it, the step before may have left the original already
+    if (now.ownDays ? (await readInitial(g, env)).initialPak === 'ours' : partsIn) { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
     else if (initialLeft) warn('initial.pak was changed by something else: left as it is.');
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
     if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }
     else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is.');
-    if (now.maps.state === 'ours') { step('Putting the maps\' own days back (the level files)'); await must('level_states.js', ['restore'], env); }
     await leaveNote(g, state);
     g.touched = false;
     writeJson(path.join(state, 'nextgen.json'), { selection: null, date: stamp() });

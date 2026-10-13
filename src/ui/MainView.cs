@@ -311,7 +311,13 @@ namespace SnowRunnerNextGen
                         if (card.On)
                         {
                             List<string> rows = new List<string>((s.MapsRows ?? "").Split(','));
-                            for (int row = 0; row < card.Module.Options.Count; row++) Pick(card, row, rows.Contains(card.Module.Options[row].Keys[0]) ? card.Module.Options[row].Keys[0] : "");
+                            for (int row = 0; row < card.Module.Options.Count; row++)
+                            {
+                                // the value of the row whose key the game's files hold, else the one without a key
+                                string held = "";
+                                foreach (string key in card.Module.Options[row].Keys) if (key.Length > 0 && rows.Contains(key)) held = key;
+                                Pick(card, row, held);
+                            }
                         }
                         break;
                     default:

@@ -6,7 +6,12 @@ const fs = require('fs'), os = require('os'), path = require('path'), zlib = req
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ngen-levels-'));
 process.env.SR_PAKS_DIR = dir;
-const tool = require(process.argv[2] ? path.join(process.argv[2], 'level_states.js') : '../engine/tools/level_states.js');   // an engine's tools folder, or the working tree's
+// days of a region's own go into initial.pak: the stand-in for it, its kept original and the paks it asks about all
+// sit in the same folder
+const initialFile = path.join(dir, 'initial.pak');
+Object.assign(process.env, { SR_INITIAL_PAK: initialFile, SR_STATE_DIR: path.join(dir, 'state'), SR_BOOT_PAK: path.join(dir, 'boot.pak'), SR_SHARED_PAK: path.join(dir, 'shared.pak') });
+const toolsDir = process.argv[2] || path.join(__dirname, '..', 'engine', 'tools');   // an engine's tools folder, or the working tree's
+const tool = require(path.join(toolsDir, 'level_states.js')), lod = require(path.join(toolsDir, 'lod_patch.js')), loadList = require(path.join(toolsDir, 'load_list.js'));
 
 // a level file's head: a version word, a flag word, the length, a check value, then the names
 function levelData(level, region, sky)
@@ -97,6 +102,67 @@ try
     let threw = '';
     try { tool.rowSpec('maine,quebec'); } catch (err) { threw = err.message; }
     check('an unknown row is refused', /quebec/.test(threw), true);
+
+    // days of Maine's own: a stand-in initial.pak with a load list, Michigan's nine states and its sky
+    for (const level of Object.keys(stock)) fs.writeFileSync(file(level), stock[level]);
+    const states = ['night', 'night_to_day', 'day__1', 'day__1a', 'day__2', 'day__2a', 'day__3', 'day__3a', 'day_to_night'];
+    const classes = states.map((s) => ({ name: '[media]\\classes\\daytimes\\' + s + '_us_01.xml', data: Buffer.from('<DayTimeState ColorLUT="lut/day_us_01__vol_uncmp.tga" Tag="' + s + '" />') }))
+        .concat([{ name: '[media]\\classes\\daytimes\\night_us_04.xml', data: Buffer.from('<DayTimeState />') },
+            { name: '[media]\\classes\\skies\\sky_us_01.xml', data: Buffer.from('<CombineSky><Cloud DiffuseMap="env/cloud_01_us_01__s_d_a.tga">' + states.map((s) => '<DayTimeOverride DayTime="' + s + '_us_01" />').join('') + '</Cloud></CombineSky>') }])
+        .sort((a, b) => (a.name < b.name ? -1 : 1));
+    const E = (type, deps, ...strings) => ({ type, deps, strings }), listed = (n) => n.replace('[media]', '<media>');
+    const list = { entries: [E(5, []), E(1, [0], 'RES3_INIT load'), E(1, [1], 'TEMPLATES load'), ...classes.map((c) => E(2, [2], listed(c.name), 'cls_loader', 'initial.pak')),
+        E(1, classes.map((c, i) => 3 + i), 'CLASSES load'), E(6, [3 + classes.length])] };
+    const initial = zip([{ name: 'pak.load_list', data: loadList.serialise(list) }, { name: '[ssl_cache]\\initial_debug.sslbundle', data: Buffer.from('a') }, { name: '[ssl_cache]\\initial_profile.sslbundle', data: Buffer.from('b') },
+        { name: '[ssl_cache]\\initial_release.sslbundle', data: Buffer.from('c') }, { name: '[media]\\_templates\\environment.xml', data: Buffer.from('<e />') }, ...classes]);
+    fs.writeFileSync(initialFile, initial);
+    // what initial.pak holds: its names, the text of every us_06 file by its short name, its load list
+    function inside()
+    {
+        const fd = fs.openSync(initialFile, 'r');
+        try
+        {
+            const z = lod.readZip(fd), text = {};
+            for (const e of z.entries) if (/us_06/.test(e.name)) text[e.name.split('\\').pop()] = lod.readEntry(fd, e).data.toString('latin1');
+            return { names: z.entries.map((e) => e.name), text, list: loadList.parse(lod.readEntry(fd, z.entries[0]).data) };
+        }
+        finally { fs.closeSync(fd); }
+    }
+    check('own days: the stand-in list keeps the rules, the rows read as before', [loadList.check(list), tool.status().maine], [[], 'vanilla']);
+    check('own days: the row is asked for as maineown', tool.rowSpec('bc,maineown'), ['maineown', 'bc']);
+    threw = '';
+    try { tool.rowSpec('maine,maineown'); } catch (err) { threw = err.message; }
+    check('own days: a row asked for both ways is refused', /twice/.test(threw), true);
+
+    quiet(() => tool.install(tool.rowSpec('maineown')));
+    let got = inside();
+    check('own days: Maine reads as own', tool.status().maine, 'own');
+    check('own days: both maps name us_06, states and sky', ['level_us_06_01', 'level_us_06_02'].map((l) => /^night_us_06 .* sky_us_06$/.test(read(l).names) && !/us_0[124]/.test(read(l).names) && read(l).crcOk), [true, true]);
+    check('own days: initial.pak holds the nine states and the sky under us_06', Object.keys(got.text).sort(), states.map((s) => s + '_us_06.xml').concat(['sky_us_06.xml']).sort());
+    check('own days: its directory is in name order from the fifth record', got.names.slice(4), got.names.slice(4).sort());
+    check('own days: the load list names every new file and keeps the rules', [loadList.check(got.list), Object.keys(got.text).every((n) => got.list.entries.some((x) => x.strings[1] === 'cls_loader' && x.strings[0].endsWith('\\' + n)))], [[], true]);
+    check('own days: a state is the copy of Michigan\'s', got.text['day__1_us_06.xml'], '<DayTimeState ColorLUT="lut/day_us_01__vol_uncmp.tga" Tag="day__1" />');
+    check('own days: the sky names its own states and keeps Michigan\'s clouds', [/DayTime="night_us_06"/.test(got.text['sky_us_06.xml']), /DayTime="[a-z_0-9]*us_01"/.test(got.text['sky_us_06.xml']), /cloud_01_us_01/.test(got.text['sky_us_06.xml'])], [true, false, true]);
+    threw = '';
+    try { quiet(() => lod.setDays(null)); } catch (err) { threw = err.message; }
+    check('own days: they are not taken out of initial.pak while a level file names them', [/level file names/.test(threw), inside().names.length], [true, got.names.length]);
+
+    quiet(() => tool.install(tool.rowSpec('maine')));
+    check('own days: back to Michigan\'s days, initial.pak is byte for byte the original', [tool.status().maine, fs.readFileSync(initialFile).equals(initial)], ['ours', true]);
+
+    quiet(() => tool.install(tool.rowSpec('maineown')));
+    fs.writeFileSync(initialFile, initial);   // a game update puts the game's initial.pak back under the level files
+    check('own days: named without being in initial.pak reads as part', tool.status().maine, 'part');
+    quiet(() => tool.install(tool.rowSpec('maineown')));
+    check('own days: the next install mends it', [tool.status().maine, Object.keys(inside().text).length], ['own', 10]);
+
+    quiet(() => tool.install([]));
+    check('own days: restore leaves every level file and initial.pak byte for byte the stock', Object.keys(stock).map((l) => fs.readFileSync(file(l)).equals(stock[l])).concat([fs.readFileSync(initialFile).equals(initial)]), [true, true, true, true]);
+
+    const foreign2 = zip([{ name: 'pak.load_list', data: loadList.serialise(list) }, { name: '[media]\\other.xml', data: Buffer.from('<o />') }]);
+    fs.writeFileSync(initialFile, foreign2);   // another tool's initial.pak
+    quiet(() => tool.install(tool.rowSpec('maineown')));
+    check('own days: with another tool\'s initial.pak Maine takes Michigan\'s days and initial.pak is left alone', [tool.status().maine, fs.readFileSync(initialFile).equals(foreign2)], ['ours', true]);
 }
 finally { fs.rmSync(dir, { recursive: true, force: true }); }
 console.log(failed ? failed + ' FAILED' : 'all passed');

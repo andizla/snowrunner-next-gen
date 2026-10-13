@@ -82,6 +82,9 @@ const { isDebrisEntry, debrisEdit, debrisSpec, DEBRIS_FACTOR: DEBRIS_DEFAULT } =
 const DEBRIS_FACTOR = Number(process.env.DEBRIS_FACTOR || DEBRIS_DEFAULT);
 // and the winter cube in the snow regions' clear days, a fact of boot.pak like the photo skies (daytime_cubes.js)
 const { isCubeState, cubeContext, cubeEdit, winterCubes } = require('./daytime_cubes.js');
+// and regions with days of their own (daytime_own.js), which the pak's load list has to name (load_list.js)
+const { OWN_DAYS, ownSpec, ownCodes, ownSource, ownName, ownText, listName } = require('./daytime_own.js');
+const loadList = require('./load_list.js');
 // boot.pak holds the photo night skies; builds of them with the stars in their alpha need a sky alpha to match
 // (sky_stars.js). SR_BOOT_PAK points at another copy (dry runs)
 const BOOT = process.env.SR_BOOT_PAK || path.join(path.dirname(PAK), 'boot.pak');
@@ -419,6 +422,21 @@ function plan(file, set = 'nature', extras = {})
 // with new offsets and sizes, the end record, and zero padding to a 4096 byte multiple when the original has it.
 // p.adds (optional): new entries [{ name, data, comp, method, crc }], written after the last entry with a local header
 // and a central directory record of their own (version, time and date as the first record has them)
+// the directory of a planned pak: [{ ent, at } | { add }], each with its name. The source's entries keep their order.
+// An added entry stands behind them, but one marked sorted (a class file the load list names) where its name belongs:
+// initial.pak's directory is in the byte order of its names from the fifth record on
+function directoryOrder(p)
+{
+    const out = p.z.entries.map((ent, at) => ({ ent, at, name: ent.name })), adds = p.adds || [];
+    for (const add of adds.filter((a) => a.sorted))
+    {
+        let q = Math.min(4, out.length);
+        while (q < out.length && out[q].name < add.name) q++;
+        out.splice(q, 0, { add, name: add.name });
+    }
+    for (const add of adds.filter((a) => !a.sorted)) out.push({ add, name: add.name });
+    return out;
+}
 function writePak(src, dst, p)
 {
     if (p.size > LIMIT) throw new Error('the result would be ' + p.size + ' bytes, past what a plain zip can address');
@@ -468,7 +486,7 @@ function writePak(src, dst, p)
             copy(behind, end);
         });
         // the new entries: local header, name, data
-        const made = p.z.cd.readUInt16LE(4), time = p.z.cd.readUInt16LE(12), date = p.z.cd.readUInt16LE(14), recs = [];
+        const made = p.z.cd.readUInt16LE(4), time = p.z.cd.readUInt16LE(12), date = p.z.cd.readUInt16LE(14), recs = new Map();
         for (const a of p.adds || [])
         {
             const name = Buffer.from(a.name, 'latin1'), head = Buffer.alloc(30), rec = Buffer.alloc(46);
@@ -476,19 +494,19 @@ function writePak(src, dst, p)
             head.writeUInt32LE(a.crc, 14); head.writeUInt32LE(a.comp.length, 18); head.writeUInt32LE(a.data.length, 22); head.writeUInt16LE(name.length, 26);
             rec.writeUInt32LE(0x02014b50, 0); rec.writeUInt16LE(made, 4); rec.writeUInt16LE(20, 6); rec.writeUInt16LE(a.method, 10); rec.writeUInt16LE(time, 12); rec.writeUInt16LE(date, 14);
             rec.writeUInt32LE(a.crc, 16); rec.writeUInt32LE(a.comp.length, 20); rec.writeUInt32LE(a.data.length, 24); rec.writeUInt16LE(name.length, 28); rec.writeUInt32LE(pos, 42);
-            recs.push(rec, name);
+            recs.set(a, Buffer.concat([rec, name]));
             put(head); put(name); put(a.comp);
         }
-        const cd = Buffer.from(p.z.cd), cdOff = pos;
-        for (const ent of p.z.entries)
+        const cd = Buffer.from(p.z.cd), cdOff = pos, ents = p.z.entries;
+        for (const ent of ents)
         {
             cd.writeUInt32LE(newLho.get(ent), ent.rec + 42);
             const job = p.jobs.get(ent);
             if (job) { cd.writeUInt32LE(job.crc, ent.rec + 16); cd.writeUInt32LE(job.length, ent.rec + 20); cd.writeUInt32LE(job.usize, ent.rec + 24); }
             if (job && job.method !== undefined) cd.writeUInt16LE(job.method, ent.rec + 10);
         }
-        put(cd);
-        for (const r of recs) put(r);
+        // the directory: the source's records in their order, each added entry's where directoryOrder puts it
+        put(Buffer.concat(directoryOrder(p).map((it) => (it.add ? recs.get(it.add) : cd.subarray(it.ent.rec, it.at + 1 < ents.length ? ents[it.at + 1].rec : cd.length)))));
         const eocd = Buffer.from(p.z.eocd), added = (p.adds || []).length;
         if (added)
         {
@@ -629,13 +647,13 @@ function scaleList(list, factor)
     return parts.map((s) => { const v = Number(s) * factor; return Number.isInteger(v) ? String(v) : v.toFixed(1); }).join(', ');
 }
 // parts: { grass: factor or null, fill: factor or null, stars: factor or null, weather: comma list or null, debris: drops
-// factor or null }. photoWas:
+// factor or null, days: the regions with days of their own, a comma list of codes such as us_06, or null }. photoWas:
 // the photo skies an earlier build was made for (the note's starsPhoto, for initialAdopt); left out = what boot.pak holds
 // now. A job's parts: the parts whose edit changed that entry (an entry can take two: a day state the fill light and the
 // weather); its group is the first of them
 function planInitial(file, parts, photoWas, winterWas)
 {
-    const grass = parts.grass || null, fill = parts.fill || null, stars = parts.stars || null, weather = weatherCanonical(parts.weather || null), debris = parts.debris ? debrisSpec(parts.debris) : null;
+    const grass = parts.grass || null, fill = parts.fill || null, stars = parts.stars || null, weather = weatherCanonical(parts.weather || null), debris = parts.debris ? debrisSpec(parts.debris) : null, days = ownSpec(parts.days || null);
     if (grass !== null && !(grass > 0)) throw new Error('grass factor ' + grass);
     if (fill !== null && !(fill > 0 && fill <= 2)) throw new Error('fill factor ' + fill);
     if (stars !== null && !(stars > 0 && stars <= 20)) throw new Error('stars factor ' + stars);
@@ -657,6 +675,9 @@ function planInitial(file, parts, photoWas, winterWas)
         let grow = 0;
         for (const ent of z.entries)
         {
+            // a file of a region's own days (there only in an original adopted with it in) is written from its source
+            // region further down, never edited here a second time
+            if (Object.keys(OWN_DAYS).some((c) => ownSource(ent.name, c))) continue;
             const isGrass = grass !== null && GRASS_ENTRY.test(ent.name), isFill = fill !== null && isFillState(ent.name), isStars = (stars !== null || photo.size > 0) && isSkyEntry(ent.name);
             const isWeather = wParts.size > 0 && isWeatherEntry(ent.name), isDebris = debris !== null && isDebrisEntry(ent.name), isWinter = winter && isCubeState(ent.name);
             if (!(isGrass || isFill || isStars || isWeather || isDebris || isWinter) || ent.flags !== 0 || (ent.method !== 0 && ent.method !== 8)) continue;
@@ -707,9 +728,63 @@ function planInitial(file, parts, photoWas, winterWas)
             grow += 30 + f.name.length + data.length + 46 + f.name.length;
         }
         if (adds.length) changed.weather = (changed.weather || 0) + adds.length;
+        // regions with days of their own: the source region's states and sky as this build leaves them, under the new
+        // names, stored after the last entry, their directory records where the names belong, and every name in the
+        // pak's load list (its first entry), without which the game does not know the file
+        if (days)
+        {
+            const first = z.entries[0];
+            if (!first || first.name !== 'pak.load_list' || first.method !== 0 || first.flags !== 0) throw new Error('initial.pak does not begin with a stored pak.load_list: days of their own cannot be added');
+            const { head, data } = readEntry(fd, first), list = loadList.parse(data), listed = new Set(list.entries.map((x) => x.strings[0])), notes = [];
+            const before = loadList.check(list);
+            if (before.length) throw new Error('initial.pak\'s load list is not in the form this tool knows (' + before[0] + '): days of their own cannot be added');
+            for (const code of ownCodes(days))
+            {
+                const from = OWN_DAYS[code];
+                let made = 0, sky = false;
+                for (const ent of z.entries)
+                {
+                    if (!ownSource(ent.name, from)) continue;
+                    if (ent.flags !== 0 || (ent.method !== 0 && ent.method !== 8) || !listed.has(listName(ent.name))) throw new Error(ent.name + ' cannot be read or is not in the load list: days of their own cannot be added');
+                    const job = jobs.get(ent), name = ownName(ent.name, from, code);
+                    const out = Buffer.from(ownText((job ? job.next : readEntry(fd, ent).data).toString('latin1'), from, code), 'latin1'), had = byName.get(name.toLowerCase());
+                    if (had)
+                    {
+                        // an original adopted with the file in it: written anew in place when it differs
+                        const { head: h, data: cur } = readEntry(fd, had);
+                        if (had.flags !== 0 || (had.method !== 0 && had.method !== 8)) throw new Error(had.name + ' cannot be read: days of their own cannot be added');
+                        if (!cur.equals(out))
+                        {
+                            const comp = had.method === 8 ? zlib.deflateRawSync(out, { level: 9, memLevel: 9 }) : out;
+                            jobs.set(had, { head: h, crc: zlib.crc32(out), usize: out.length, length: comp.length, comp, next: out, type: 'days', group: 'days', parts: ['days'], notes: ['written anew'] });
+                            grow += comp.length - had.csize;
+                        }
+                    }
+                    else
+                    {
+                        adds.push({ name, data: out, comp: out, method: 0, crc: zlib.crc32(out), sorted: true });
+                        grow += 30 + name.length + out.length + 46 + name.length;
+                    }
+                    if (!listed.has(listName(name))) { loadList.addClassFile(list, listName(name), list.entries.find((x) => x.strings[0] === listName(ent.name)).strings[2]); listed.add(listName(name)); }
+                    made++;
+                    if (/[\\/]skies[\\/]/i.test(ent.name)) sky = true;
+                }
+                if (!sky || made < 7) throw new Error('this game version has no full set of states and a sky for ' + from + ': days of their own for ' + code + ' cannot be made');
+                notes.push(code + ': ' + made + ' files from ' + from);
+                changed.days = (changed.days || 0) + made;
+            }
+            const after = loadList.check(list);
+            if (after.length) throw new Error('the load list with the new names breaks a rule (' + after[0] + ')');
+            const next = loadList.serialise(list);
+            if (!next.equals(data))
+            {
+                jobs.set(first, { head, crc: zlib.crc32(next), usize: next.length, length: next.length, comp: next, next, type: 'days', group: 'days', parts: ['days'], notes });
+                grow += next.length - first.csize;
+            }
+        }
         const end = z.cdOff + grow + z.cd.length + z.eocd.length;
         const size = z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end;
-        return { z, set: 'initial', parts: { grass, fill, stars, weather, debris }, photo: [...photo].sort(), winter, factor: grass, jobs, adds, changed, weatherCount, kept: {}, noRoom: [], grow, how: { rewritten: jobs.size, added: adds.length }, size };
+        return { z, set: 'initial', parts: { grass, fill, stars, weather, debris, days }, photo: [...photo].sort(), winter, factor: grass, jobs, adds, changed, weatherCount, kept: {}, noRoom: [], grow, how: { rewritten: jobs.size, added: adds.length }, size };
     }
     finally { fs.closeSync(fd); }
 }
@@ -721,23 +796,26 @@ function verifyInitial(file, p)
     const fd = fs.openSync(file, 'r');
     try
     {
-        const z = readZip(fd), adds = p.adds || [], n = p.z.entries.length;
-        if (z.entries.length !== n + adds.length) throw new Error('initial.pak: entry count changed');
-        adds.forEach((a, k) =>
-        {
-            const ent = z.entries[n + k];
-            if (ent.name !== a.name || !readEntry(fd, ent).data.equals(a.data)) throw new Error('added entry reads back wrong: ' + a.name);
-        });
+        const z = readZip(fd), want = directoryOrder(p);
+        if (z.entries.length !== want.length) throw new Error('initial.pak: entry count changed');
         let sampled = 0;
-        z.entries.slice(0, n).forEach((ent, i) =>
+        want.forEach((it, i) =>
         {
-            const was = p.z.entries[i];
-            if (ent.name !== was.name) throw new Error('initial.pak: entry order changed at ' + i);
+            const ent = z.entries[i], was = it.ent;
+            if (ent.name !== it.name) throw new Error('initial.pak: entry order changed at ' + i);
+            if (it.add) { if (!readEntry(fd, ent).data.equals(it.add.data)) throw new Error('added entry reads back wrong: ' + it.name); return; }
             const job = p.jobs.get(was);
             if (job) { if (!readEntry(fd, ent).data.equals(job.next)) throw new Error('changed ' + job.group + ' entry reads back wrong: ' + ent.name); return; }
             if (ent.crc !== was.crc || ent.csize !== was.csize || ent.usize !== was.usize || ent.method !== was.method) throw new Error('entry record changed: ' + ent.name);
-            if (i % 50 === 0) { readEntry(fd, ent); sampled++; }
+            if (it.at % 50 === 0) { readEntry(fd, ent); sampled++; }
         });
+        // a load list this build wrote is read from the file as the game will read it: every added class file is in it
+        const list = p.jobs.get(p.z.entries[0]) && p.jobs.get(p.z.entries[0]).group === 'days' ? loadList.parse(readEntry(fd, z.entries[0]).data) : null;
+        if (list)
+        {
+            const named = new Set(list.entries.map((x) => x.strings[0]));
+            if (loadList.check(list).length || (p.adds || []).some((a) => a.sorted && !named.has(listName(a.name)))) throw new Error('initial.pak: the load list reads back wrong');
+        }
         return sampled;
     }
     finally { fs.closeSync(fd); }
@@ -748,10 +826,10 @@ const readGrassNote = () => readJson(GRASS_NOTE);
 // note of old; a note from before the fill light has no fill, one from before the stars no stars.
 function initialState()
 {
-    const none = { grass: null, fill: null, stars: null, weather: null, debris: null };
+    const none = { grass: null, fill: null, stars: null, weather: null, debris: null, days: null };
     if (!fs.existsSync(INITIAL)) return Object.assign({ state: 'missing' }, none);
     const cur = cdHash(INITIAL), note = readGrassNote(), rec = built(note, cur);
-    if (rec) return { state: 'ours', grass: rec.factor || null, fill: rec.fill || null, stars: rec.stars || null, weather: rec.weather || null, debris: rec.debris || null };
+    if (rec) return { state: 'ours', grass: rec.factor || null, fill: rec.fill || null, stars: rec.stars || null, weather: rec.weather || null, debris: rec.debris || null, days: rec.days || null };
     if (!fs.existsSync(INITIAL_ORIG)) return Object.assign({ state: 'vanilla' }, none);
     return Object.assign({ state: (note.origCdSha256 || cdHash(INITIAL_ORIG)) === cur ? 'vanilla' : 'changed' }, none);
 }
@@ -770,9 +848,14 @@ function buildInitial(parts, label)
     const now = initialState();
     if (now.state === 'missing') { console.log(label + ': no initial.pak, left alone'); return; }
     if (now.state === 'changed') { console.log(label + ': initial.pak is neither the original nor this tool\'s build (another tool or a game update): left alone'); return; }
+    // a region's own days are not taken out from under a level file that names them: the game stops loading that map
+    const goes = ownCodes(now.days).filter((c) => !ownCodes(ownSpec(parts.days || null)).includes(c));
+    const levels = goes.length ? require('./level_states.js') : null;   // asked only when it means this game folder
+    const held = levels && path.resolve(levels.PAKS).toLowerCase() === path.resolve(path.dirname(INITIAL)).toLowerCase() ? levels.ownNamed().filter((c) => goes.includes(c)) : [];
+    if (held.length) throw new Error('a level file names the days of ' + held.join(', ') + ', which this would take out of initial.pak: the map days go back first (level_states.js), then this');
     const tmp = INITIAL + '.tmp';
     // with photo night skies in boot.pak that carry the stars in their alpha, no part still means a build: their sky alpha
-    if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !photoSkies(BOOT).size && !winterCubes(BOOT))
+    if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !parts.days && !photoSkies(BOOT).size && !winterCubes(BOOT))
     {
         if (now.state !== 'ours') return;
         // the kept original against the hash noted for it: a backup damaged on disk does not go into the game
@@ -796,7 +879,7 @@ function buildInitial(parts, label)
     {
         writePak(INITIAL_ORIG, tmp, p);
         const sampled = verifyInitial(tmp, p);
-        next = { origCdSha256: cdHash(INITIAL_ORIG), factor: p.parts.grass, fill: p.parts.fill, stars: p.parts.stars, weather: p.parts.weather, debris: p.parts.debris, starsPhoto: p.photo, winterCubes: p.winter, cdSha256: cdHash(tmp), size: p.size, date: stamp(), changed: p.jobs.size };
+        next = { origCdSha256: cdHash(INITIAL_ORIG), factor: p.parts.grass, fill: p.parts.fill, stars: p.parts.stars, weather: p.parts.weather, debris: p.parts.debris, days: p.parts.days, starsPhoto: p.photo, winterCubes: p.winter, cdSha256: cdHash(tmp), size: p.size, date: stamp(), changed: p.jobs.size };
         writeJson(GRASS_NOTE, withPending(readGrassNote(), next));
         swapIn(tmp, INITIAL);
         const has = [];
@@ -805,6 +888,7 @@ function buildInitial(parts, label)
         if (p.parts.stars) has.push('the stars ' + p.parts.stars + 'x as bright in ' + (p.changed.stars || 0) + ' skies');
         if (p.parts.weather) has.push('the weather (' + p.parts.weather.split(',').map((k) => k + ' ' + (p.weatherCount[k] || 0)).join(', ') + ' files)');
         if (p.parts.debris) has.push('the debris and splashes in ' + (p.changed.debris || 0) + ' particle types (' + p.parts.debris + 'x drops)');
+        if (p.parts.days) has.push('days of their own for ' + p.parts.days + ' (' + (p.changed.days || 0) + ' files, named in the load list)');
         if (p.photo.length) has.push('the sky alpha that boot.pak\'s photo night skies need (' + p.photo.join(', ') + ')');
         if (p.winter && p.changed.winter) has.push('the snow cubes\' rule in ' + p.changed.winter + ' day, dusk and dawn states');
         console.log(label + ': initial.pak now has ' + has.join(' and ') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
@@ -821,41 +905,49 @@ function buildInitial(parts, label)
     writeJson(GRASS_NOTE, next);
 }
 // the parts in initial.pak now (none when it is not this tool's build)
-const partsNow = () => { const s = initialState(); return s.state === 'ours' ? { grass: s.grass, fill: s.fill, stars: s.stars, weather: s.weather, debris: s.debris } : { grass: null, fill: null, stars: null, weather: null, debris: null }; };
+const partsNow = () => { const s = initialState(); return s.state === 'ours' ? { grass: s.grass, fill: s.fill, stars: s.stars, weather: s.weather, debris: s.debris, days: s.days } : { grass: null, fill: null, stars: null, weather: null, debris: null, days: null }; };
 function installGrass(factor = GRASS_FACTOR) { buildInitial(Object.assign(partsNow(), { grass: factor }), 'grass'); }
 function restoreGrass()
 {
     const s = initialState();
     if (s.state !== 'ours' || !s.grass) { if (s.state === 'changed') console.log('grass: initial.pak changed by something else: left alone'); return; }
-    buildInitial({ grass: null, fill: s.fill, stars: s.stars, weather: s.weather, debris: s.debris }, 'grass');
+    buildInitial({ grass: null, fill: s.fill, stars: s.stars, weather: s.weather, debris: s.debris, days: s.days }, 'grass');
 }
 function installFill(factor = FILL_FACTOR) { buildInitial(Object.assign(partsNow(), { fill: factor }), 'fill light'); }
 function restoreFill()
 {
     const s = initialState();
     if (s.state !== 'ours' || !s.fill) { if (s.state === 'changed') console.log('fill light: initial.pak changed by something else: left alone'); return; }
-    buildInitial({ grass: s.grass, fill: null, stars: s.stars, weather: s.weather, debris: s.debris }, 'fill light');
+    buildInitial({ grass: s.grass, fill: null, stars: s.stars, weather: s.weather, debris: s.debris, days: s.days }, 'fill light');
 }
 function installStars(factor = STARS_FACTOR) { buildInitial(Object.assign(partsNow(), { stars: factor }), 'stars'); }
 function restoreStars()
 {
     const s = initialState();
     if (s.state !== 'ours' || !s.stars) { if (s.state === 'changed') console.log('stars: initial.pak changed by something else: left alone'); return; }
-    buildInitial({ grass: s.grass, fill: s.fill, stars: null, weather: s.weather, debris: s.debris }, 'stars');
+    buildInitial({ grass: s.grass, fill: s.fill, stars: null, weather: s.weather, debris: s.debris, days: s.days }, 'stars');
 }
 function installWeather(spec = WEATHER_PARTS) { buildInitial(Object.assign(partsNow(), { weather: weatherCanonical(spec) }), 'weather'); }
 function restoreWeather()
 {
     const s = initialState();
     if (s.state !== 'ours' || !s.weather) { if (s.state === 'changed') console.log('weather: initial.pak changed by something else: left alone'); return; }
-    buildInitial({ grass: s.grass, fill: s.fill, stars: s.stars, weather: null, debris: s.debris }, 'weather');
+    buildInitial({ grass: s.grass, fill: s.fill, stars: s.stars, weather: null, debris: s.debris, days: s.days }, 'weather');
+}
+// days of their own for these regions and no others (a comma list of region codes, or nothing for none). Returns what
+// initial.pak holds afterwards: the codes asked for, or what it held when the file is not this tool's to build
+function setDays(spec)
+{
+    const want = ownSpec(spec || null), s = initialState();
+    if (s.state === 'ours' ? (s.days || null) !== want : want !== null) buildInitial(Object.assign(partsNow(), { days: want }), 'days of their own');
+    return initialState().days || null;
 }
 function installDebris(drops = DEBRIS_FACTOR) { buildInitial(Object.assign(partsNow(), { debris: debrisSpec(drops) }), 'debris and splashes'); }
 function restoreDebris()
 {
     const s = initialState();
     if (s.state !== 'ours' || !s.debris) { if (s.state === 'changed') console.log('debris and splashes: initial.pak changed by something else: left alone'); return; }
-    buildInitial({ grass: s.grass, fill: s.fill, stars: s.stars, weather: s.weather, debris: null }, 'debris and splashes');
+    buildInitial({ grass: s.grass, fill: s.fill, stars: s.stars, weather: s.weather, debris: null, days: s.days }, 'debris and splashes');
 }
 
 // the name an original is kept under when a new one replaces it: <file>.<YYYY-MM-DD>, then -2, -3 on the same day
@@ -878,16 +970,16 @@ function initialAdopt()
     if (now.state === 'missing') { console.log('initial.pak: missing, nothing to adopt'); return; }
     if (now.state === 'ours') { console.log('initial.pak is this tool\'s own build: nothing to adopt'); return; }
     if (now.state === 'vanilla') { console.log('initial.pak is already the original'); return; }
-    const note = readGrassNote(), had = { grass: note.factor || null, fill: note.fill || null, stars: note.stars || null, weather: note.weather || null, debris: note.debris || null };
+    const note = readGrassNote(), had = { grass: note.factor || null, fill: note.fill || null, stars: note.stars || null, weather: note.weather || null, debris: note.debris || null, days: note.days || null };
     const hadPhoto = new Set(note.starsPhoto || []), hadWinter = !!note.winterCubes;   // the photo skies the last build's sky alpha was made for
     // what the last build wrote, by entry name, with the old original's bytes of each entry
     const ours = new Map();
-    if (fs.existsSync(INITIAL_ORIG) && (had.grass || had.fill || had.stars || had.weather || had.debris || hadPhoto.size || hadWinter))
+    if (fs.existsSync(INITIAL_ORIG) && (had.grass || had.fill || had.stars || had.weather || had.debris || had.days || hadPhoto.size || hadWinter))
     {
         const last = planInitial(INITIAL_ORIG, had, hadPhoto, hadWinter), fdo = fs.openSync(INITIAL_ORIG, 'r');
         try { for (const [ent, job] of last.jobs) ours.set(ent.name, { job, orig: readEntry(fdo, ent) }); } finally { fs.closeSync(fdo); }
     }
-    const fd = fs.openSync(INITIAL, 'r'), jobs = new Map(), still = { grass: 0, fill: 0, stars: 0, weather: 0, debris: 0, winter: 0 };
+    const fd = fs.openSync(INITIAL, 'r'), jobs = new Map(), still = { grass: 0, fill: 0, stars: 0, weather: 0, debris: 0, days: 0, winter: 0 };
     let z, grow = 0;
     try
     {
@@ -928,11 +1020,11 @@ function initialAdopt()
     if (kept) renameOver(INITIAL_ORIG, kept);
     renameOver(tmp, INITIAL_ORIG);
     const keptNote = kept ? path.basename(kept) : null, keptSay = kept ? '; the old original is kept as ' + path.basename(kept) : '';
-    const parts = { grass: still.grass ? had.grass : null, fill: still.fill ? had.fill : null, stars: still.stars ? had.stars : null, weather: still.weather ? had.weather : null, debris: still.debris ? had.debris : null };
+    const parts = { grass: still.grass ? had.grass : null, fill: still.fill ? had.fill : null, stars: still.stars ? had.stars : null, weather: still.weather ? had.weather : null, debris: still.debris ? had.debris : null, days: still.days ? had.days : null };
     // the photo skies' alpha (the stars group without a stars part) counts as ours while boot.pak still asks for it
     const photoNow = photoSkies(BOOT), photoKept = still.stars > 0 && hadPhoto.size > 0 && photoNow.size > 0;
     const winterNow = winterCubes(BOOT), winterKept = still.winter > 0 && hadWinter && winterNow;
-    if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !photoKept && !winterKept)
+    if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !parts.days && !photoKept && !winterKept)
     {
         writeJson(GRASS_NOTE, { origCdSha256: cdHash(INITIAL_ORIG), date: stamp(), adopted: keptNote });
         console.log('initial.pak: the current file is the new original (none of this tool\'s changes were in it' + keptSay + ')');
@@ -953,8 +1045,8 @@ function initialAdopt()
         }
     }
     finally { fs.closeSync(fdc); }
-    writeJson(GRASS_NOTE, { origCdSha256: cdHash(INITIAL_ORIG), factor: parts.grass, fill: parts.fill, stars: parts.stars, weather: parts.weather, debris: parts.debris, starsPhoto: want.photo, winterCubes: want.winter, cdSha256: cdHash(INITIAL), size: fs.statSync(INITIAL).size, date: stamp(), changed: want.jobs.size, adopted: keptNote });
-    const which = [parts.grass ? 'grass x' + parts.grass : null, parts.fill ? 'fill light ' + parts.fill : null, parts.stars ? 'stars x' + parts.stars : null, parts.weather ? 'weather ' + parts.weather : null, parts.debris ? 'debris x' + parts.debris : null, photoKept && !parts.stars ? 'photo skies\' alpha' : null, winterKept ? 'winter cube' : null].filter(Boolean).join(' and ');
+    writeJson(GRASS_NOTE, { origCdSha256: cdHash(INITIAL_ORIG), factor: parts.grass, fill: parts.fill, stars: parts.stars, weather: parts.weather, debris: parts.debris, days: parts.days, starsPhoto: want.photo, winterCubes: want.winter, cdSha256: cdHash(INITIAL), size: fs.statSync(INITIAL).size, date: stamp(), changed: want.jobs.size, adopted: keptNote });
+    const which = [parts.grass ? 'grass x' + parts.grass : null, parts.fill ? 'fill light ' + parts.fill : null, parts.stars ? 'stars x' + parts.stars : null, parts.weather ? 'weather ' + parts.weather : null, parts.debris ? 'debris x' + parts.debris : null, parts.days ? 'days of their own (' + parts.days + ')' : null, photoKept && !parts.stars ? 'photo skies\' alpha' : null, winterKept ? 'winter cube' : null].filter(Boolean).join(' and ');
     console.log('initial.pak: the current file is the new original (this tool\'s ' + which + ' was still in it: left out of the original; the other changes kept' + keptSay + ')');
     if (!exact) buildInitial(parts, 'initial.pak');
 }
@@ -1059,6 +1151,7 @@ if (require.main === module)
         else if (cmd === 'debris-status') console.log(debrisStatus());
         else if (cmd === 'debris-install') installDebris(args[1] || DEBRIS_FACTOR);
         else if (cmd === 'debris-restore') restoreDebris();
+        else if (cmd === 'days-set') console.log('days of their own in initial.pak: ' + (setDays(args[1] === 'none' ? null : args[1]) || 'none'));
         else if (cmd === 'initial-status') console.log(JSON.stringify(Object.assign(initialState(), { photoSkies: [...photoSkies(BOOT)].sort(), winterCubes: winterCubes(BOOT) })));
         else if (cmd === 'initial-refresh')
         {
@@ -1072,16 +1165,16 @@ if (require.main === module)
         else if (cmd === 'initial-restore')
         {
             const s = initialState();
-            if (s.state === 'ours') buildInitial({ grass: null, fill: null, stars: null, weather: null, debris: null }, 'initial.pak');
+            if (s.state === 'ours') buildInitial({ grass: null, fill: null, stars: null, weather: null, debris: null, days: null }, 'initial.pak');
             else console.log(s.state === 'changed' ? 'initial.pak changed by something else: left alone' : 'initial.pak is already the original');
         }
         else if (cmd === 'initial-build' && args[1])
         {
             const from = fs.existsSync(INITIAL_ORIG) ? INITIAL_ORIG : INITIAL, arg = (name) => { const a = args.find((v) => v.startsWith(name + '=')); return a ? a.slice(name.length + 1) : null; };
             const part = (name) => (arg(name) === null ? null : Number(arg(name)));
-            const p = planInitial(from, { grass: part('grass'), fill: part('fill'), stars: part('stars'), weather: arg('weather'), debris: arg('debris') });
+            const p = planInitial(from, { grass: part('grass'), fill: part('fill'), stars: part('stars'), weather: arg('weather'), debris: arg('debris'), days: arg('days') });
             writePak(from, args[1], p);
-            console.log('built ' + args[1] + ' from ' + from + ': grass ' + (p.parts.grass || 'as is') + ', fill light ' + (p.parts.fill || 'as is') + ', stars ' + (p.parts.stars || 'as is') + ', weather ' + (p.parts.weather || 'as is') + ', debris ' + (p.parts.debris || 'as is') + ', ' + p.jobs.size + ' entries changed ' + JSON.stringify(p.changed) + (p.parts.weather ? ' ' + JSON.stringify(p.weatherCount) : '') + ', ' + p.size + ' bytes, read back ok (' + verifyInitial(args[1], p) + ' untouched entries sampled)');
+            console.log('built ' + args[1] + ' from ' + from + ': ' + (p.parts.days ? 'days of their own for ' + p.parts.days + ', ' : '') + 'grass ' + (p.parts.grass || 'as is') + ', fill light ' + (p.parts.fill || 'as is') + ', stars ' + (p.parts.stars || 'as is') + ', weather ' + (p.parts.weather || 'as is') + ', debris ' + (p.parts.debris || 'as is') + ', ' + p.jobs.size + ' entries changed ' + JSON.stringify(p.changed) + (p.parts.weather ? ' ' + JSON.stringify(p.weatherCount) : '') + ', ' + p.size + ' bytes, read back ok (' + verifyInitial(args[1], p) + ' untouched entries sampled)');
             let shown = 0;
             for (const [ent, job] of p.jobs) if (shown++ < 4 || /day__1_ru_17/.test(ent.name)) console.log('  ' + baseName(ent.name).padEnd(40) + ' ' + job.notes.join('; '));
         }
@@ -1104,4 +1197,4 @@ if (require.main === module)
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
-module.exports = { classify, raise, patchMesh, meshType, plan, readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt, FLOORS, SETS };
+module.exports = { INITIAL, classify, raise, patchMesh, meshType, plan, planInitial, verifyInitial, initialState, setDays, readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt, FLOORS, SETS };

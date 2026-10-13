@@ -107,6 +107,18 @@ try {
   $s = & $selection
   Check 'selection: the fireflies leave the list' ($s['weather']) 'shadows,showers,evening,horizon,far,pollen,drift'
   Check 'selection: no map days by default' ([string]$s['maps']) ''
+  # the map days: Maine's row has three values, the third a set of its own
+  $cards['maps'].ToggleByUser()
+  $s = & $selection
+  Check 'selection: the map days on give Maine Michigan''s days' ([string]$s['maps']) 'maine'
+  $cards['maps'].Choice[0] = 2
+  $s = & $selection
+  Check 'selection: Maine with days of its own' ([string]$s['maps']) 'maineown'
+  $cards['maps'].Choice[0] = 1
+  $s = & $selection
+  Check 'selection: Maine with the game''s days and no other row sends no map days' ([string]$s['maps']) ''
+  $cards['maps'].Choice[0] = 0
+  $cards['maps'].ToggleByUser()
   foreach ($row in 0..8) { $cards['weather'].Choice[$row] = 1 }
   $s = & $selection
   Check 'selection: every row off sends no weather' ("$($s['weather'])") ''
