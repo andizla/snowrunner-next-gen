@@ -34,6 +34,9 @@
 //   crestglow tools\patch_water_mix.js patchGlow + water\blend_glow.cso in place of the blend, in the river shaders that
 //            sample the sun shadow map (12 of the 20): sunlight through the thin backs of waves in the water's colour,
 //            looking into a low sun (implies water; in DEFAULT)
+//   watersun tools\patch_water_sun.js on top of the water module's shaders: the sun's highlight goes out where the
+//            shader's own shadow test says the sun is hidden, in the 64 lake and 8 river shaders drawn with the sun's
+//            shadow map (implies water; off by default: where it was tried the game's test said lit, so nothing changed)
 //   rivertint tools\patch_water_mix.js + water\absorb.cso, the same 20: the see-through fade per colour channel, so
 //            deeper water tints teal or brown from its own colour instead of fading grey
 //   glare    tools\patch_glare.js, main cache: the ~1216 wet-ground shaders (g_txWaterMap): the headlights' highlight
@@ -102,6 +105,7 @@ const planar = require('./patch_water_planar.js');
 const hits = require('./patch_refl_hits.js');
 const smoke = require('./patch_smoke.js');
 const smokeps = require('./patch_smoke_ps.js');
+const sun = require('./patch_water_sun.js');
 const gbuffer = require('./patch_gbuffer.js');
 const objssr = require('./patch_object_ssr.js');
 const glare = require('./patch_glare.js');
@@ -117,8 +121,8 @@ const R = (...p) => path.join(W, 'replacements', ...p);
 // builds them from the player's shader.pak (same folder names), else replacements\; our own helpers always come from R()
 const SETS = process.env.SR_SETS_DIR || path.join(W, 'replacements');
 const S = (...p) => path.join(SETS, ...p);
-const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokemore', 'smokeshade', 'sssr', 'headglow', 'contact'];
-// what install and build take without a list: every module but these five, which stay selectable by name
+const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'watersun', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokemore', 'smokeshade', 'sssr', 'headglow', 'contact'];
+// what install and build take without a list: every module but these six, which stay selectable by name
 //   reflections  the per-material march alone: sssr took its place (the DLL's reflection pass, with that march only
 //                where the pass has nothing), and normalize refuses the two together
 //   glare        the lower cap on the headlights' highlight on wet ground: off since the reflections were reworked
@@ -126,8 +130,9 @@ const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'f
 //   fogsun       the fog's sun shafts: off by default after 1.0.1 (they show over the truck and other things close
 //                to the camera; up to 1.0.1 the fog module alone brought them)
 //   smokemore    the smoke glow on eight more particle shaders: not looked at in the game yet
+//   watersun     the sun's highlight out in the sun's shadow on water: never seen to change anything in the game
 // The fill light and the photo grade, defaults too, live in initial.pak and boot.pak (the installer's cards)
-const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun' && m !== 'smokemore');
+const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun' && m !== 'smokemore' && m !== 'watersun');
 
 // known names in ALL's order, "shadows" (older notes and commands) as crisp + blocker, gtao with gi (the bounce light is
 // measured by the GTAO pass); throws on an unknown name
@@ -141,7 +146,7 @@ function normalize(list)
         else throw new Error('unknown module ' + m + ' (known: ' + ALL.join(', ') + ')');
     }
     if (want.has('gi') || want.has('aofar')) want.add('gtao');
-    if (want.has('crestglow')) want.add('water');
+    if (want.has('crestglow') || want.has('watersun')) want.add('water');
     if (want.has('sssr') && want.has('reflections')) throw new Error('modules sssr and reflections are alternatives (both replace the object cubemap sample): pick one');
     if (want.has('revec') && want.has('crisp')) throw new Error('modules revec and crisp are alternatives (both replace the sun shadow filter): pick one');
     if (want.has('seam') && !want.has('revec')) throw new Error('module seam (the cascade seam dither) is built on revec: add revec');
@@ -305,7 +310,14 @@ function build(orig, modules)
             const helper = { ssr: fs.readFileSync(path.join(wd, 'ssr.cso')), ssr5: fs.readFileSync(path.join(wd, 'ssr_t5.cso')), blend: fs.readFileSync(path.join(wd, 'blend.cso')), absorb: fs.readFileSync(path.join(wd, 'absorb.cso')),
                 planar: fs.readFileSync(path.join(wd, 'ssr_planar.cso')),
                 glow: modules.includes('crestglow') ? fs.readFileSync(path.join(W, 'replacements', 'water', 'blend_glow.cso')) : null };
-            let glowHits = 0;
+            let glowHits = 0, sunHits = 0;
+            // watersun: the sun's highlight out in the sun's shadow, in the variants drawn with the shadow map
+            const sunShade = (r) =>
+            {
+                const u = r.blob && modules.includes('watersun') ? sun.patchWaterSun(r.blob) : null;
+                if (u && u.blob) { sunHits++; return u; }
+                return r;
+            };
             parsed.blobs.forEach((bl, i) =>
             {
                 const own = inflated.subarray(bl.off, bl.off + bl.size), h = pak.hex8(pak.crc32(own));
@@ -320,6 +332,7 @@ function build(orig, modules)
                     if (g && g.blob) { r = g; glowHits++; }
                     else if (water && r.blob) r = mix.patchBlend(r.blob, helper.blend);
                     if (tint && r.blob) r = mix.patchAbsorb(r.blob, helper.absorb);
+                    if (water) r = sunShade(r);
                 }
                 else
                 {
@@ -333,11 +346,13 @@ function build(orig, modules)
                     // (tools\patch_water_clear.js; the rivers get it in their absorb helper)
                     const k = r.blob ? clear.patchClear(r.blob) : null;
                     if (k && k.blob) r = k;
+                    r = sunShade(r);
                 }
                 if (r.blob) { repl.set(i, r.blob); waterHits++; }
                 else console.log('note: water shader ' + i + ' left as it was: ' + r.reason);
             });
             if (helper.glow) console.log('crest glow: ' + glowHits + ' river shaders (those with the sun shadow map)');
+            if (sunHits) console.log('sun highlight in shadow: ' + sunHits + ' water shaders (those with the sun shadow map)');
         }
         // the lakes' reflection image (module water): the engine's own pass, whose result the planar water shaders read
         // at t4, finds what stands in the water at every resolution (tools\patch_refl_hits.js). No other module

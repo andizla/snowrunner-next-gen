@@ -182,6 +182,7 @@ namespace SnowRunnerNextGen
                 Does, "Rivers, mud, lakes, seas and the puddles on the roads reflect what is on screen: banks, trees and trucks, not just the sky. The water's own colour gives way to the reflection at shallow angles, as with real water.",
                 Notice, "Mirrored banks and trees in calm water, trucks in the road puddles.",
                 Costs, "Small, and only where water is on screen.",
+                Choices, "Sun glitter in shade: the game leaves a share of the sun's glitter on water that lies in the sun's shadow, so a glitter path can run on under a cliff or a bridge. Off in shadow puts it out where the water's own shadow test says the sun is hidden, in the 64 lake and 8 river shaders drawn with the sun's shadow map. Off by default and experimental: where it was tried, the game's test said the water was lit and nothing changed.",
                 Know, "Needs SnowRunner Shadows for the scene's picture. What is off screen falls back to the game's own reflection.");
 
             d["puddles"] = E(

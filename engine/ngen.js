@@ -884,7 +884,7 @@ async function apply(g, state, sel, adopt, leave)
         keepShaderOriginal(g, state, now, adopt);
         const gone = ownDump ? [] : await prepare(state, shader);
         // the sun shafts are a build of the fog, the wider smoke glow one of the smoke glow: without those they go too
-        const build = shader.filter((m) => !gone.includes(m) && !(m === 'fogsun' && gone.includes('fog')) && !(m === 'smokemore' && gone.includes('smoke')));
+        const build = shader.filter((m) => !gone.includes(m) && !(m === 'fogsun' && gone.includes('fog')) && !(m === 'smokemore' && gone.includes('smoke')) && !(m === 'watersun' && gone.includes('water')));
         if (build.length)
         {
             step('Building shader.pak with ' + build.length + ' modules (about a minute)');

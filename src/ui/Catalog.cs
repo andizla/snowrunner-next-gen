@@ -96,9 +96,12 @@ namespace SnowRunnerNextGen
             // a build of the reflection pass's reader, so the march-only method goes without it
             list.Add(M("headglow", "REFLECTIONS", "Headlights in reflections", true,
                 "At night, paint that finds nothing on screen to reflect shows the warm light of the headlights.", "objrefl"));
-            list.Add(M("water", "WATER", "Water reflections", true,
+            Module water = M("water", "WATER", "Water reflections", true,
                 "Banks, trees and trucks mirrored in rivers, mud, lakes, seas and puddles, not just the sky; the water's colour gives way to the reflection at shallow angles.",
-                "shadows"));
+                "shadows");
+            // the sun's highlight out where the water's own shadow test hides the sun (module watersun): off unless picked
+            water.Options.Add(new OptionSet("Sun glitter in shade", new[] { "the game's", "off in shadow" }, new[] { "", "watersun" }, 0));
+            list.Add(water);
             list.Add(M("puddles", "REFLECTIONS", "Wet ground reflections", true,
                 "Wet mud and glossy ground mirror the scene around them: sharp in shiny patches, soft on rough mud.", "shadows"));
             list.Add(M("rivertint", "WATER", "River depth colour", true, "Deeper water tints teal or brown from its own colour instead of fading grey."));

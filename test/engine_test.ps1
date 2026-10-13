@@ -179,6 +179,18 @@ Check 'more smoke: shader.pak is another build' ((Hash (Join-Path $paks 'shader.
 $r = Apply $everything
 Check 'more smoke off again: the default build byte for byte' ((Hash (Join-Path $paks 'shader.pak')) -eq $shaderDefault) 'True'
 
+'the sun''s glitter off in the sun''s shadow on water (off in the default set)'
+$withSun = @($default | ForEach-Object { $_; if ($_ -eq 'crestglow') { 'watersun' } })
+$glitter = [ordered]@{}
+foreach ($k in $everything.Keys) { $glitter[$k] = $everything[$k] }
+$glitter['shader'] = $withSun
+$r = Apply $glitter
+Check 'water sun: done' (Last $r) 'done'
+Check 'water sun: status lists the module after the crest glow' ((Status).shader.modules -join ',') ($withSun -join ',')
+Check 'water sun: shader.pak is another build' ((Hash (Join-Path $paks 'shader.pak')) -ne $shaderDefault) 'True'
+$r = Apply $everything
+Check 'water sun off again: the default build byte for byte' ((Hash (Join-Path $paks 'shader.pak')) -eq $shaderDefault) 'True'
+
 'the scenery set with its two extras (off in the default set)'
 $sharedPlain = Hash (Join-Path $paks 'shared.pak')
 $far = [ordered]@{}

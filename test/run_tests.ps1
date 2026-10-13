@@ -93,6 +93,12 @@ try {
   $s = & $selection
   Check 'selection: more kinds of smoke picked' ((@($s['shader']) -contains 'smoke') -and (@($s['shader']) -contains 'smokemore')) 'True'
   $cards['smoke'].Choice[0] = 0
+  Check 'sun glitter in shade: the game''s by default' ("$(& $keyOf 'water')") ''
+  Check 'selection: the water without the glitter build' ((@($s['shader']) -contains 'water') -and -not (@($s['shader']) -contains 'watersun')) 'True'
+  $cards['water'].Choice[0] = 1
+  $s = & $selection
+  Check 'selection: the glitter off in shadow picked' ((@($s['shader']) -contains 'water') -and (@($s['shader']) -contains 'watersun')) 'True'
+  $cards['water'].Choice[0] = 0
   $cards['fog'].ToggleByUser()
   # the weather: the rows that are on, as the tool's comma list
   $s = & $selection
