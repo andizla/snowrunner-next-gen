@@ -129,6 +129,14 @@ namespace SnowRunnerNextGen
             // off by default until it has been looked at in the game: more land to draw on the snow maps
             weather.Options.Add(new OptionSet("Far land", new[] { "on", "off" }, new[] { "land", "" }, 1));
             list.Add(weather);
+            // the map days, in the level paks: a row for each region, the key of a row that is on is its name and the
+            // selection joins them into the tool's comma list. Off by default until it has been looked at in the game
+            Module maps = M("maps", "ATMOSPHERE", "Map days", false,
+                "Three regions have no days of their own and show another region's. Maine shows two snow regions': snow in the air and winter light on a map without snow. This gives Maine Michigan's days, weather and sky; British Columbia and Austria have a row each.");
+            maps.Options.Add(new OptionSet("Maine", new[] { "Michigan's days", "the game's" }, new[] { "maine", "" }, 0));
+            maps.Options.Add(new OptionSet("British Columbia", new[] { "North Carolina's days", "the game's" }, new[] { "bc", "" }, 1));
+            maps.Options.Add(new OptionSet("Austria", new[] { "both maps alike", "the game's" }, new[] { "austria", "" }, 1));
+            list.Add(maps);
             list.Add(M("smoke", "ATMOSPHERE", "Smoke glow", true, "Exhaust and other smoke glows when the sun is behind it."));
             list.Add(M("smokeshade", "ATMOSPHERE", "Smoke shape and softer edges", true,
                 "Smoke and dust puffs get a lit side and a shaded side, and sprites fade more softly where they meet the ground."));

@@ -50,6 +50,8 @@ namespace SnowRunnerNextGen
         public string Cubes = "vanilla";          // the reflection cubes, the fourth part of boot.pak: the same states
         public string Skies = "vanilla";          // the winter skies, the fifth part of boot.pak: the same states
         public string Logos = "vanilla";          // the Next Gen logos in gfx.pak: the same states
+        public string Maps = "vanilla";           // the map days in the level paks: the same states
+        public string MapsRows;                   // its rows as a comma list (maine, bc, austria)
         public readonly List<string> Orphaned = new List<string>();   // paks that hold our changes while their kept originals are gone
         public readonly List<string> Outdated = new List<string>();   // installed parts this installer carries in another build: Apply updates them
 
@@ -58,7 +60,7 @@ namespace SnowRunnerNextGen
             get
             {
                 return Shader == "ours" || Dll == "ours" || Scenery == "nature" || Scenery == "all" || Grass == "ours" || Fill == "ours" || Stars == "ours" || Weather == "ours" || Debris == "ours"
-                    || Grade == "ours" || Particles == "ours" || Sky == "ours" || Cubes == "ours" || Skies == "ours" || Logos == "ours";
+                    || Grade == "ours" || Particles == "ours" || Sky == "ours" || Cubes == "ours" || Skies == "ours" || Logos == "ours" || Maps == "ours";
             }
         }
 
@@ -98,6 +100,9 @@ namespace SnowRunnerNextGen
             s.Cubes = Text(Part(d, "cubes"), "state") ?? "missing";
             s.Skies = Text(Part(d, "skies"), "state") ?? "missing";
             s.Logos = Text(Part(d, "logos"), "state") ?? "missing";
+            Dictionary<string, object> maps = Part(d, "maps");
+            s.Maps = Text(maps, "state") ?? "missing";
+            s.MapsRows = Text(maps, "rows");
             IEnumerable orphaned = d.ContainsKey("orphaned") ? d["orphaned"] as IEnumerable : null;
             if (orphaned != null && !(orphaned is string)) foreach (object f in orphaned) if (f != null) s.Orphaned.Add(f.ToString());
             IEnumerable outdated = d.ContainsKey("outdated") ? d["outdated"] as IEnumerable : null;

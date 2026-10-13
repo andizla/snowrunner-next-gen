@@ -25,7 +25,8 @@
 //              "grade": null | "1" | "0.5", "particles": null | "1", "sky": null | "1", "cubes": null | "1", "skies": null | "1", "stars": null | "3" | "2",
 //              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen, land),
 //              "debris": null | "4" | "8" (the drops factor of the debris and splashes),
-//              "logos": null | "1" }
+//              "logos": null | "1",
+//              "maps": null | "maine,bc" (a comma list of maine, bc, austria: the level paks, see level_states.js) }
 // config.json next to this file: { "tools": <folder>, "dll": <hid.dll to install> }. A dev build may add "devGame" and
 //   "devState" (that game folder's state lives in devState) and "dump" and "sets" (folders that already hold the game's
 //   shaders and the sets made from them, so prepare.js is not run); NGEN_STATE_ROOT moves the state folders (tests)
@@ -235,7 +236,7 @@ function movedState(g, own, keeps)
 
 // every pak a tool may write is named here: a tool left to its own default would reach for the Steam install
 const toolEnv = (g, state) => Object.assign({}, process.env,
-    { SR_SHADER_PAK: g.shader, SR_SHARED_PAK: g.shared, SR_INITIAL_PAK: g.initial, SR_BOOT_PAK: g.boot, SR_GFX_PAK: g.gfx, SR_STATE_DIR: state, LOD_GRASS: 'leave',
+    { SR_SHADER_PAK: g.shader, SR_SHARED_PAK: g.shared, SR_INITIAL_PAK: g.initial, SR_BOOT_PAK: g.boot, SR_GFX_PAK: g.gfx, SR_PAKS_DIR: g.paks, SR_STATE_DIR: state, LOD_GRASS: 'leave',
         SR_BIN_DIR: g.bin || '' },   // where SnowRunner.exe is: the shader build puts SnowRunner Shadows' stock twins table there
     ownDump || { SR_DUMP_DIR: path.join(state, 'dump'), SR_SETS_DIR: path.join(state, 'sets') });
 
@@ -508,8 +509,8 @@ async function readPaks(g, state)
     const lod = fs.existsSync(g.shared) ? JSON.parse(await answer('lod_patch.js', ['status-json'], env)) : { state: 'missing', hide: 'off', shadows: 'off' };
     const scenery = lod.state, sceneryHide = lod.hide, sceneryShadows = lod.shadows;
     const { grass, fill, stars, weather, debris, initialPak } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
-    const sky = await readSky(g, env), cubes = await readCubes(g, env), skies = await readSkies(g, env), logos = await readLogos(g, env);
-    return { shader, scenery, sceneryHide, sceneryShadows, grass, fill, stars, weather, debris, initialPak, grade, particles, sky, cubes, skies, logos };
+    const sky = await readSky(g, env), cubes = await readCubes(g, env), skies = await readSkies(g, env), logos = await readLogos(g, env), maps = await readMaps(g, env);
+    return { shader, scenery, sceneryHide, sceneryShadows, grass, fill, stars, weather, debris, initialPak, grade, particles, sky, cubes, skies, logos, maps };
 }
 // initial.pak: the grass, the fill light, the stars, the weather and the debris, five parts of one build, each { state, factor }
 // (the weather: { state, parts }, a comma list); initialPak is the file's own state (ours also when it holds none of
@@ -555,6 +556,20 @@ async function readSkies(g, env)
 {
     const said = fs.existsSync(g.boot) ? await answer('lut_grade.js', ['skies-status'], env) : 'missing';
     return { state: said === 'skies' ? 'ours' : said === 'none' ? 'vanilla' : said };
+}
+// the map days in the level paks ({ state, rows, part, changed }): ours with the rows that are in as a comma list,
+// vanilla, changed (a level file that names neither the game's states nor ours) or missing (no level pak of the rows
+// is there); part: a row was written halfway; changed: the rows another tool wrote
+const MAP_ROWS = ['maine', 'bc', 'austria'];
+const MAP_WORDS = { maine: 'Maine', bc: 'British Columbia', austria: 'Austria' };
+const mapsList = (spec) => MAP_ROWS.filter((r) => String(spec || '').split(',').map((s) => s.trim()).includes(r)).join(',');
+const mapWords = (rows) => namesOf(rows.split(',').map((r) => MAP_WORDS[r]));
+async function readMaps(g, env)
+{
+    const said = JSON.parse(await answer('level_states.js', ['status'], env));
+    const rows = MAP_ROWS.filter((r) => said[r] === 'ours' || said[r] === 'part').join(','), changed = MAP_ROWS.filter((r) => said[r] === 'changed').join(',');
+    const state = rows ? 'ours' : MAP_ROWS.every((r) => said[r] === 'missing') ? 'missing' : changed ? 'changed' : 'vanilla';
+    return { state, rows, part: MAP_ROWS.some((r) => said[r] === 'part'), changed };
 }
 // the Next Gen logos in gfx.pak ({ state }): ours, vanilla, changed, missing
 async function readLogos(g, env)
@@ -830,6 +845,8 @@ async function apply(g, state, sel, adopt, leave)
     const particles = !!sel.particles, sky = !!sel.sky, cubes = !!sel.cubes, skies = !!sel.skies, logos = !!sel.logos;
     const weather = sel.weather ? weatherList(sel.weather) : null;
     if (sel.weather && (!weather || !/^[a-z,]+$/.test(String(sel.weather)))) throw new EngineError('usage', 'weather parts ' + sel.weather);
+    const maps = sel.maps ? mapsList(sel.maps) : null;
+    if (sel.maps && (!maps || !/^[a-z,]+$/.test(String(sel.maps)))) throw new EngineError('usage', 'map rows ' + sel.maps);
     if (!sel.shadows && shader.some((m) => NEED_DLL.includes(m)))
         warn('Bounce light and the reflections read the scene from SnowRunner Shadows: without it they change nothing.');
     if (sel.shadows && g.flat)
@@ -1029,6 +1046,17 @@ async function apply(g, state, sel, adopt, leave)
     else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is, so the Next Gen logo was left out.');
     else { step('Putting the Next Gen logo in (gfx.pak, 700 MB)'); await must('gfx_logos.js', ['install'], env); }
 
+    // the map days (the level paks): a few names in the player's own files, written in place and back the same way
+    if (now.maps.state === 'missing') { if (maps) warn('No level file of Maine, British Columbia or Austria is in this game folder: the map days were left out.'); }
+    else if ((maps || '') !== now.maps.rows || now.maps.part)
+    {
+        step(maps ? 'Giving ' + mapWords(maps) + ' the new days (the level files)' : 'Putting the maps\' own days back (the level files)');
+        await must('level_states.js', maps ? ['install', maps] : ['restore'], env);
+    }
+    else if (maps) emit({ type: 'log', text: 'the level files already have the days of ' + mapWords(maps) });
+    const mapsLeft = maps ? mapsList(now.maps.changed).split(',').filter((r) => r && maps.split(',').includes(r)).join(',') : '';
+    if (mapsLeft) warn('The level files of ' + mapWords(mapsLeft) + ' were changed by something else: left as they are, so the map days were left out there.');
+
     await leaveNote(g, state);
     g.touched = false;
     writeJson(path.join(state, 'nextgen.json'), { selection: sel, parts: PARTS, date: stamp() });
@@ -1076,6 +1104,7 @@ async function restore(g, state, adopt, leave)
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
     if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }
     else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is.');
+    if (now.maps.state === 'ours') { step('Putting the maps\' own days back (the level files)'); await must('level_states.js', ['restore'], env); }
     await leaveNote(g, state);
     g.touched = false;
     writeJson(path.join(state, 'nextgen.json'), { selection: null, date: stamp() });

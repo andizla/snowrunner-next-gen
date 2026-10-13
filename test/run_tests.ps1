@@ -49,10 +49,10 @@ try {
   function Ticked { ($list.Cards | Where-Object { $_.On } | ForEach-Object { $_.Module.Id }) -join ' ' }
   function Note { $bar.GetType().GetField('note', $flags).GetValue($bar) }
 
-  # on by default: every card but Bounce light, Headlight glare cap, Winter skies, Volumetric fog, Scenery detail and Grass reach
+  # on by default: every card but Bounce light, Headlight glare cap, Winter skies, Volumetric fog, Map days, Scenery detail and Grass reach
   $defaults = 'shadows edges blocker contact gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow cubes weather smoke smokeshade particles debris sky stars tonemap bloom grade logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '26 of 32 selected'
+  Check 'count' (Note) '26 of 33 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
@@ -94,6 +94,7 @@ try {
   $cards['weather'].Choice[5] = 1
   $s = & $selection
   Check 'selection: the fireflies leave the list' ($s['weather']) 'shadows,showers,evening,horizon,far,pollen'
+  Check 'selection: no map days by default' ([string]$s['maps']) ''
   foreach ($row in 0..6) { $cards['weather'].Choice[$row] = 1 }
   $s = & $selection
   Check 'selection: every row off sends no weather' ("$($s['weather'])") ''
@@ -110,9 +111,9 @@ try {
   Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint cubes weather smoke smokeshade particles debris sky stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Wide occlusion and Bounce light need GTAO: unticked them too.'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($false))
-  Check 'clear' (Note) '0 of 32 selected'
+  Check 'clear' (Note) '0 of 33 selected'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($true))
-  Check 'select all' (Note) '32 of 32 selected'
+  Check 'select all' (Note) '33 of 33 selected'
   foreach ($c in $list.Cards) { $c.Reset() }
   Check 'defaults again' (Ticked) $defaults
 
@@ -140,10 +141,10 @@ try {
   $has.Debris = 'ours'; $has.DebrisFactor = '4'; $has.Cubes = 'ours'
   $viewType.GetField('installed', $flags).SetValue($view, $has)
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: the default set as installed' (Note) "26 of 32 selected  $([char]0xB7)  as installed"
+  Check 'bar: the default set as installed' (Note) "26 of 33 selected  $([char]0xB7)  as installed"
   $has.Outdated.Add('shader')
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: a newer build of an installed part' (Note) "26 of 32 selected  $([char]0xB7)  Apply to update the game to this version"
+  Check 'bar: a newer build of an installed part' (Note) "26 of 33 selected  $([char]0xB7)  Apply to update the game to this version"
   $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($has))
   Check 'header: says that Apply updates the game' ($said -match 'Note: this installer has a newer build of what is installed: Apply updates the game$') 'True'
   $viewType.GetField('installed', $flags).SetValue($view, $null)

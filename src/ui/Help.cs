@@ -300,6 +300,13 @@ namespace SnowRunnerNextGen
                 Choices, "Reach: 3x or 2x the game's fade distances.",
                 Know, "It changes initial.pak, a file that other mods change too.");
 
+            d["maps"] = E(
+                Does, "Each map's level file names the day states it cycles through and its sky file. Three regions have none of their own and name another region's. Maine: its first map names Yukon's and its second Alaska's, two snow regions, so Maine gets their snowfall at dusk and at night and their light. This gives both maps Michigan's days, weather and sky. British Columbia: its maps name Michigan's, and the row gives them North Carolina's, which the game itself gives Washington, the region next to it. Austria: its first map names another region's days than its second, and the row gives the first the second's.",
+                Notice, "On Maine: no snow in the air, and the light, weather and sky of an autumn forest map.",
+                Costs, "Nothing.",
+                Choices, "A row for each region. Maine is on with the card. British Columbia and Austria are off: they are a matter of taste and have not been compared in the game.",
+                Know, "Off by default until it has been looked at in the game. It changes a few names in your own level files (level_us_06_01.pak and the like), in place, and Restore writes the game's names back, after which the files are as they were, byte for byte. A level file that another mod changed is left as it is. A game update or the store's file check brings the game's names back: Apply again. It can only name days the game ships: a map cannot have days, cubes or skies of its own yet.");
+
             d["logos"] = E(
                 Does, "Adds NEXT GEN under the game's logo wherever the interface shows it: on the title screen, the first loading screen, the main menu, the pause menu and the map.",
                 Notice, "The mod's name under the SnowRunner logo, so you can tell at a glance that it is installed.",
