@@ -87,6 +87,12 @@ try {
   $s = & $selection
   Check 'selection: the sun shafts picked' ((@($s['shader']) -contains 'fog') -and (@($s['shader']) -contains 'fogsun')) 'True'
   $cards['fog'].Choice[0] = 0
+  Check 'more kinds of smoke: off by default' ("$(& $keyOf 'smoke')") ''
+  Check 'selection: the smoke glow without the eight more' ((@($s['shader']) -contains 'smoke') -and -not (@($s['shader']) -contains 'smokemore')) 'True'
+  $cards['smoke'].Choice[0] = 1
+  $s = & $selection
+  Check 'selection: more kinds of smoke picked' ((@($s['shader']) -contains 'smoke') -and (@($s['shader']) -contains 'smokemore')) 'True'
+  $cards['smoke'].Choice[0] = 0
   $cards['fog'].ToggleByUser()
   # the weather: the rows that are on, as the tool's comma list
   $s = & $selection

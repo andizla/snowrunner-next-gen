@@ -251,6 +251,10 @@ namespace SnowRunnerNextGen
                         if (s.Shader == "ours" || s.Shader == "stock") card.On = s.Modules.Contains("fog");
                         if (card.On) Pick(card, 0, s.Modules.Contains("fogsun") ? "fogsun" : "");
                         break;
+                    case "smoke":
+                        if (s.Shader == "ours" || s.Shader == "stock") card.On = s.Modules.Contains("smoke");
+                        if (card.On) Pick(card, 0, s.Modules.Contains("smokemore") ? "smokemore" : "");
+                        break;
                     case "scenery":
                         card.On = s.Scenery == "nature" || s.Scenery == "all";
                         if (card.On) { Pick(card, 0, s.Scenery); Pick(card, 1, s.SceneryHide == "off" ? "" : s.SceneryHide); Pick(card, 2, s.SceneryShadows == "off" ? "" : s.SceneryShadows); }
@@ -359,7 +363,11 @@ namespace SnowRunnerNextGen
                         shader.Add("fog");
                         if (Key(card, 0).Length > 0) shader.Add(Key(card, 0));
                         break;
-                    case "scenery":                                    // the set, and its two extras when picked
+                    case "smoke":                                      // with more kinds of smoke picked, their build as well
+                        shader.Add("smoke");
+                        if (Key(card, 0).Length > 0) shader.Add(Key(card, 0));
+                        break;
+                    case "scenery":                                   // the set, and its two extras when picked
                         scenery = Key(card, 0);
                         if (Key(card, 1).Length > 0) sceneryHide = Key(card, 1);
                         if (Key(card, 2).Length > 0) sceneryShadows = Key(card, 2);

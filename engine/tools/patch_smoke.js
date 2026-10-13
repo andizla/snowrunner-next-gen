@@ -18,8 +18,10 @@
 // particles some other way (a combined light output without the decode, a sun output computed otherwise) are left as
 // they are, with the reason in the report. With the helper built at SMOKE_GLOW=0 the factor is the literal 1 and the
 // glow the literal 0, so every patched shader computes exactly what the stock one did (the proof build).
-// Library: patchSmoke(blob[, helper]) -> { blob, note } or { reason }; targets() -> the hashes in dump\.
-// usage: node patch_smoke.js [outDir]    the set built on the stock shaders (default replacements\smoke\set)
+// Eight shaders keep the decoded light map in the temp's x, z and w ("mul rL.xzw, rL.xxzw, l(6, 0, 6, 6)"): the same
+// family, taken only with wide (the bundle's module smokemore), so a build without it stays byte for byte what it was.
+// Library: patchSmoke(blob[, helper[, wide]]) -> { blob, note } or { reason }; targets() -> the hashes in dump\.
+// usage: node patch_smoke.js [outDir] [wide]    the set built on the stock shaders (default replacements\smoke\set)
 const fs = require('fs'), path = require('path');
 const { chunks, walk, operands } = require('./dxbc_shex.js');
 const { helperBody, replaceRange } = require('./shadow_filter_patch.js');
@@ -57,19 +59,20 @@ function outputs(b)
     return out;
 }
 
-function patchSmoke(b, helper = fs.readFileSync(HELPER))
+function patchSmoke(b, helper = fs.readFileSync(HELPER), wide = false)
 {
     const w = walk(b);
     const L = w.insts.map((x, i) => ({ x, i, o: operands(b, x) }));
     let cb1 = false, cb2 = null, pos = null, six = null;
     const sun = [];
+    const lanes = wide ? [7, 13] : [7];   // the light map decode's write mask: xyz, with wide xzw as well
     for (const e of L)
     {
         const { x, o } = e;
         if (x.op === OP.dcl_constantbuffer && o[0] && o[0].type === 8) { if (o[0].idx[0] === 1) cb1 = true; if (o[0].idx[0] === 2) cb2 = e; }
         if (x.op === OP.dp4 && !pos && o[0] && o[0].type === 2 && isTemp(o[1]) && o[1].sel === 0xe4 && isCb(o[2], 1, 2)) pos = e;
-        if (x.op === OP.mul && o.length === 3 && isTemp(o[0]) && isTemp(o[1]) && o[0].idx[0] === o[1].idx[0] && (o[0].sel & 15) === 7 && o[2].type === 4 && o[2].imm.length === 4 &&
-            [0, 1, 2].every((k) => Math.abs(f32(o[2].imm[k]) - 6) < 1e-6)) { if (six) return { reason: 'two light map decodes' }; six = e; }
+        if (x.op === OP.mul && o.length === 3 && isTemp(o[0]) && isTemp(o[1]) && o[0].idx[0] === o[1].idx[0] && lanes.includes(o[0].sel & 15) && o[2].type === 4 && o[2].imm.length === 4 &&
+            [0, 1, 2, 3].every((k) => !(o[0].sel & (1 << k)) || Math.abs(f32(o[2].imm[k]) - 6) < 1e-6)) { if (six) return { reason: 'two light map decodes' }; six = e; }
         if (o.some((p) => isCb(p, 2, SUN_COLOUR))) sun.push(e);
     }
     if (!cb1 || !cb2) return { reason: 'no cb1 or cb2' };
@@ -84,7 +87,7 @@ function patchSmoke(b, helper = fs.readFileSync(HELPER))
     let e, family, insert, keep = true;
     if (sun.length === 0 && six)
     {
-        e = six; family = 'light map';
+        e = six; family = (e.o[0].sel & 15) === 7 ? 'light map' : 'light map in x, z and w';
         insert = (P) => Buffer.concat([P, ...h.body, inst(OP.mul, tokens(b, e.o[0]), tempSwz(e.o[0].idx[0], 0xe4), F)]);   // after the decode
     }
     else if (sun.length === 1 && (sun[0].x.op === OP.mad && sun[0].o.length === 4 || sun[0].x.op === OP.mul && sun[0].o.length === 3))
@@ -169,12 +172,12 @@ if (require.main === module)
     const outDir = process.argv[2] || path.join(W, 'replacements', 'smoke', 'set');
     fs.mkdirSync(outDir, { recursive: true });
     for (const f of fs.readdirSync(outDir)) if (f.endsWith('.shader')) fs.unlinkSync(path.join(outDir, f));
-    const helper = fs.readFileSync(HELPER);
+    const helper = fs.readFileSync(HELPER), wide = process.argv[3] === 'wide';
     const report = { targets: 0, patched: 0, families: {}, skipped: {}, notes: {} };
     for (const hash of targets())
     {
         report.targets++;
-        const r = patchSmoke(fs.readFileSync(path.join(DUMP, '0x' + hash + '.cso')), helper);
+        const r = patchSmoke(fs.readFileSync(path.join(DUMP, '0x' + hash + '.cso')), helper, wide);
         if (!r.blob) { report.skipped[r.reason] = (report.skipped[r.reason] || 0) + 1; continue; }
         fs.writeFileSync(path.join(outDir, '0x' + hash + '.shader'), r.blob);
         report.notes[hash] = r.note;

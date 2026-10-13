@@ -51,6 +51,8 @@
 //            mirrored ray hits something on screen (paint, glass, chrome), the cubemap elsewhere
 //   smoke    tools\patch_smoke.js + smoke\smoke_glow.cso: the particle vertex shaders (exhaust, dust, steam, smoke):
 //            sunlight scattered forward through a puff, so smoke between the eye and the sun glows; in DEFAULT
+//   smokemore the same glow on eight more of those vertex shaders, whose light map decode sits in other lanes of its
+//            register (patch_smoke.js with wide): 170 of the 205 instead of 162; a build of smoke, off by default
 //   smokeshade tools\patch_smoke_ps.js + smoke\smoke_shade.cso: the particle sprite pixel shaders: the 80 lit, blended
 //            puffs without a normal map of their own get a lit side, a shaded side, lighter tops and denser cores
 //            (a pseudo-normal from the puff's alpha), and the 110 that fade against the depth fade over twice the
@@ -115,16 +117,17 @@ const R = (...p) => path.join(W, 'replacements', ...p);
 // builds them from the player's shader.pak (same folder names), else replacements\; our own helpers always come from R()
 const SETS = process.env.SR_SETS_DIR || path.join(W, 'replacements');
 const S = (...p) => path.join(SETS, ...p);
-const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokeshade', 'sssr', 'headglow', 'contact'];
-// what install and build take without a list: every module but these four, which stay selectable by name
+const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokemore', 'smokeshade', 'sssr', 'headglow', 'contact'];
+// what install and build take without a list: every module but these five, which stay selectable by name
 //   reflections  the per-material march alone: sssr took its place (the DLL's reflection pass, with that march only
 //                where the pass has nothing), and normalize refuses the two together
 //   glare        the lower cap on the headlights' highlight on wet ground: off since the reflections were reworked
 //   crisp        revec took its place (with it the shadow resolution default is 1x, SnowRunner Shadows' ini Factor=1)
 //   fogsun       the fog's sun shafts: off by default after 1.0.1 (they show over the truck and other things close
 //                to the camera; up to 1.0.1 the fog module alone brought them)
+//   smokemore    the smoke glow on eight more particle shaders: not looked at in the game yet
 // The fill light and the photo grade, defaults too, live in initial.pak and boot.pak (the installer's cards)
-const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun');
+const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun' && m !== 'smokemore');
 
 // known names in ALL's order, "shadows" (older notes and commands) as crisp + blocker, gtao with gi (the bounce light is
 // measured by the GTAO pass); throws on an unknown name
@@ -144,6 +147,7 @@ function normalize(list)
     if (want.has('seam') && !want.has('revec')) throw new Error('module seam (the cascade seam dither) is built on revec: add revec');
     if (want.has('headglow') && !want.has('sssr')) throw new Error('module headglow (the headlights in reflections) is a build of the reflection pass\'s reader: add sssr');
     if (want.has('fogsun') && !want.has('fog')) throw new Error('module fogsun (the sun shafts) is a build of the fog: add fog');
+    if (want.has('smokemore') && !want.has('smoke')) throw new Error('module smokemore (the glow on eight more smoke shaders) is a build of the smoke glow: add smoke');
     return ALL.filter((m) => want.has(m));
 }
 // the GTAO build to install: GTAO_VARIANT names a folder in replacements\ssao_builds (default gtao_hq, the released one;
@@ -255,7 +259,7 @@ function build(orig, modules)
 {
     const { main, hdr } = plan(modules);
     const water = modules.includes('water'), tint = modules.includes('rivertint'), river = water || tint;
-    const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact');
+    const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), glowWide = modules.includes('smokemore'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact');
     let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, lakeHits = 0, lakePlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, checked = 0;
     const z = pak.parseZip(orig);
     // whether any module touches the main cache (the check of the untouched entries at the end asks the same)
@@ -438,7 +442,7 @@ function build(orig, modules)
                 const own = inflated.subarray(bl.off, bl.off + bl.size);
                 if (!set.has(pak.hex8(pak.crc32(own)))) return;
                 smokePlanned++;
-                const r = smoke.patchSmoke(repl.get(i) || Buffer.from(own), helper);
+                const r = smoke.patchSmoke(repl.get(i) || Buffer.from(own), helper, glowWide);
                 if (r.blob) { repl.set(i, r.blob); smokeHits++; }
             });
         }

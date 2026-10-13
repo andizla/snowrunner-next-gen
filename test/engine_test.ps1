@@ -167,6 +167,18 @@ Check 'sun shafts: shader.pak is another build' ((Hash (Join-Path $paks 'shader.
 $r = Apply $everything
 Check 'sun shafts off again: the default build byte for byte' ((Hash (Join-Path $paks 'shader.pak')) -eq $shaderDefault) 'True'
 
+'the smoke glow on eight more particle shaders (off in the default set)'
+$withMore = @($default | ForEach-Object { $_; if ($_ -eq 'smoke') { 'smokemore' } })
+$more = [ordered]@{}
+foreach ($k in $everything.Keys) { $more[$k] = $everything[$k] }
+$more['shader'] = $withMore
+$r = Apply $more
+Check 'more smoke: done' (Last $r) 'done'
+Check 'more smoke: status lists the module after the smoke glow' ((Status).shader.modules -join ',') ($withMore -join ',')
+Check 'more smoke: shader.pak is another build' ((Hash (Join-Path $paks 'shader.pak')) -ne $shaderDefault) 'True'
+$r = Apply $everything
+Check 'more smoke off again: the default build byte for byte' ((Hash (Join-Path $paks 'shader.pak')) -eq $shaderDefault) 'True'
+
 'the scenery set with its two extras (off in the default set)'
 $sharedPlain = Hash (Join-Path $paks 'shared.pak')
 $far = [ordered]@{}

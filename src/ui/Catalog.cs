@@ -138,7 +138,10 @@ namespace SnowRunnerNextGen
             maps.Options.Add(new OptionSet("British Columbia", new[] { "North Carolina's days", "the game's" }, new[] { "bc", "" }, 1));
             maps.Options.Add(new OptionSet("Austria", new[] { "both maps alike", "the game's" }, new[] { "austria", "" }, 1));
             list.Add(maps);
-            list.Add(M("smoke", "ATMOSPHERE", "Smoke glow", true, "Exhaust and other smoke glows when the sun is behind it."));
+            Module smoke = M("smoke", "ATMOSPHERE", "Smoke glow", true, "Exhaust and other smoke glows when the sun is behind it.");
+            // the glow on eight more particle shaders (module smokemore): off unless picked
+            smoke.Options.Add(new OptionSet("More kinds of smoke", new[] { "off", "on" }, new[] { "", "smokemore" }, 0));
+            list.Add(smoke);
             list.Add(M("smokeshade", "ATMOSPHERE", "Smoke shape and softer edges", true,
                 "Smoke and dust puffs get a lit side and a shaded side, and sprites fade more softly where they meet the ground."));
             // the particle sprites at twice the size, into boot.pak beside the photo grade

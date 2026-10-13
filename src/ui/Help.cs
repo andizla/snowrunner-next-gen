@@ -221,7 +221,8 @@ namespace SnowRunnerNextGen
             d["smoke"] = E(
                 Does, "Exhaust, smoke, dust and steam glow when the sun is behind them, the way real smoke lights up against the sun.",
                 Notice, "Exhaust and dust clouds lighting up when you look toward a low sun.",
-                Costs, "Tiny.");
+                Costs, "Tiny.",
+                Choices, "The glow reaches 162 of the game's 205 particle shaders. More kinds of smoke adds eight that light their puffs the same way; it is off by default because it has not been looked at in the game yet.");
 
             d["smokeshade"] = E(
                 Does, "The game lights each smoke or dust puff as one flat colour. This gives the 80 lit puff sprites shape pixel by pixel: a lit side towards the sun, a shaded far side, lighter tops and slightly darker dense cores. The 110 sprites that fade where they cut into the ground or a truck now fade over twice the distance, so the hard line where a puff meets a surface is gone.",
