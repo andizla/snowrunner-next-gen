@@ -23,7 +23,7 @@
 //              by distance) and "sceneryShadows": null | "plants" | "all" (each of those casts its shadow at any distance),
 //              "grass": null | "3" | "2", "fill": null | "0.7" | "0.55" | "0.85",
 //              "grade": null | "1" | "0.5", "particles": null | "1", "sky": null | "1", "cubes": null | "1", "skies": null | "1", "stars": null | "3" | "2",
-//              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen),
+//              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen, land),
 //              "debris": null | "4" | "8" (the drops factor of the debris and splashes),
 //              "logos": null | "1" }
 // config.json next to this file: { "tools": <folder>, "dll": <hid.dll to install> }. A dev build may add "devGame" and
@@ -522,9 +522,9 @@ async function readInitial(g, env)
     return { grass: part(init.grass), fill: part(init.fill), stars: part(init.stars), weather, debris: part(init.debris), initialPak: init.state };   // ours (with factor), vanilla, changed, missing
 }
 // the weather's parts as a comma list in the tool's order, for one comparison
-const WEATHER_PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen'];
+const WEATHER_PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen', 'land'];
 const weatherList = (spec) => WEATHER_PARTS.filter((p) => String(spec || '').split(',').map((s) => s.trim()).includes(p)).join(',');
-const WEATHER_WORDS = { shadows: 'cloud shadows', showers: 'showers that swell and ease', evening: 'evening drizzle', horizon: 'horizon clouds', far: 'rain and snow drawn farther', fireflies: 'fireflies', pollen: 'pollen' };
+const WEATHER_WORDS = { shadows: 'cloud shadows', showers: 'showers that swell and ease', evening: 'evening drizzle', horizon: 'horizon clouds', far: 'rain and snow drawn farther', fireflies: 'fireflies', pollen: 'pollen', land: 'land drawn as far as the fog' };
 // the photo grade: the daytime colour LUTs in boot.pak ({ state, strength })
 async function readGrade(g, env)
 {

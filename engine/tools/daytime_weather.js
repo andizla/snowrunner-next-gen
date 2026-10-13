@@ -19,6 +19,9 @@
 //   fireflies  fireflies at night in the regions with rain in their day states (where the night has no weather of its
 //            own; with the evening part their nights take the fireflies and the drizzle keeps to dusk and dawn)
 //   pollen   pollen drifting in the clear day states of the same regions
+//   land     the land drawn as far as the distant fog reaches. A state hides the terrain past TerrainHideDist, and many
+//            hide it nearer than their distant fog ends (<DistantFog EndDistance>), so in clear air the land stops
+//            short. There TerrainHideDist goes up to the fog's end, LAND_MAX at most. Off by default
 //   Fireflies and pollen are weather types of the game's later engine (Expeditions: fireflies drawn to 90 m at an
 //   intensity of 0.0005 to 0.001, pollen to 64 m at 0.01 to 0.05, its own 4-frame sprite). Here they are two new files
 //   in classes\weather, with SnowRunner's own firefly sprite (boot.pak, sfx/particles_firefly__d_a, one frame).
@@ -32,7 +35,8 @@ const path = require('path');
 const DAYTIME_ENTRY = /classes[\\/]daytimes[\\/]([^\\/]+)\.xml$/i;
 const SKY_ENTRY = /classes[\\/]skies[\\/](sky_[^\\/]+)\.xml$/i;
 const WEATHER_ENTRY = /classes[\\/]weather[\\/]([^\\/]+)\.xml$/i;
-const PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen'];
+const PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen', 'land'];
+const LAND_MAX = 3000;   // metres: the farthest the land part lets a state draw its terrain
 const WEATHER_DEFAULT = 'shadows,showers,evening,horizon,far,fireflies,pollen';
 const RAIN_SNOW = /^(light|heavy)_(rain|snow)(_|$)/i;
 const SHADOW_LINE = (map) => '<CloudShadowMap Map="env/shadow_clouds/cloud_shadow_0' + map + '.tga" Scale="6" Speed="2.0" Direction="(1.0; 0.5)"/>';
@@ -173,6 +177,17 @@ function weatherEdit(text, entryName, parts, ctx = { rainRegions: new Set() })
         {
             const next = insertBeforeClose(out, '</DayTimeState>', NEW_TYPES.pollen.line);
             if (next !== out) { out = next; notes.push('pollen'); kinds.add('pollen'); }
+        }
+        if (parts.has('land'))
+        {
+            const end = /<DistantFog\b[^>]*\bEndDistance\s*=\s*"([^"]+)"/.exec(out), reach = end ? Math.min(Number(end[1]), LAND_MAX) : 0;
+            out = out.replace(/\bTerrainHideDist(\s*=\s*)"([^"]+)"/, (all, eq, v) =>
+            {
+                if (!(reach > Number(v))) return all;
+                notes.push('land to ' + fmt(reach) + ' m (was ' + v + ')');
+                kinds.add('land');
+                return 'TerrainHideDist' + eq + '"' + fmt(reach) + '"';
+            });
         }
     }
     else if (sky && parts.has('horizon'))
