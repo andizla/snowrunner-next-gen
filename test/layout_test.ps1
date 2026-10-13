@@ -13,7 +13,7 @@
 # usage (after build.ps1): powershell -NoProfile -ExecutionPolicy Bypass -File test\layout_test.ps1
 # -Engine <folder>: test that engine instead (a package's engine\ with its own node.exe)
 # -Originals <folder>: where shader.pak.orig is
-param([string]$Engine = '', [string]$Originals = 'C:\Games\SnowRunner-shaders\pak_backup')
+param([string]$Engine = '', [string]$Originals = $(if ($env:SR_ORIGINALS) { $env:SR_ORIGINALS } else { 'C:\Games\SnowRunner-shaders\pak_backup' }))
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ngen = if ($Engine) { Join-Path $Engine 'ngen.js' } else { Join-Path $root 'out\engine\ngen.js' }

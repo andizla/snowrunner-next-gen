@@ -20,7 +20,7 @@ const clean = Object.assign({}, process.env);
 for (const k of Object.keys(clean)) if (/^SR_|^NODE_OPTIONS$|^TRACE_FILE$/.test(k)) delete clean[k];
 
 // 0. the player's side: a state folder that holds the original shader.pak, and what the packaged prepare.js makes there
-const state = path.join(OUT, 'state'), original = path.join(DEV, 'pak_backup', 'shader.pak.orig');
+const state = path.join(OUT, 'state'), original = path.join(process.env.SR_ORIGINALS || path.join(DEV, 'pak_backup'), 'shader.pak.orig');   // SR_ORIGINALS: where the game's original paks are kept (tools\chain.ps1 sets it)
 fs.mkdirSync(state);
 fs.copyFileSync(original, path.join(state, 'shader.pak.orig'));
 const t0 = Date.now();
@@ -79,7 +79,17 @@ const ownPak = path.join(OUT, 'shader.pak');
 fs.copyFileSync(original, ownPak);
 const pakA = path.join(OUT, 'default_dev.pak'), pakB = path.join(OUT, 'default_package.pak');
 const t1 = Date.now();
-const saidA = execFileSync(process.execPath, [path.join(DEV, 'tools', 'fidelity_bundle.js'), 'build', pakA, MODULES], { env: clean, stdio: ['ignore', 'pipe', 'inherit'] }).toString();
+// when the working tree's own pak_backup is empty (the originals then live with the installer, SR_ORIGINALS), its tool
+// gets a state folder of its own with the original in it
+const devState = path.join(OUT, 'state_dev');
+let devEnv = clean;
+if (!fs.existsSync(path.join(DEV, 'pak_backup', 'shader.pak.orig')))
+{
+    fs.mkdirSync(devState, { recursive: true });
+    fs.copyFileSync(original, path.join(devState, 'shader.pak.orig'));
+    devEnv = Object.assign({}, clean, { SR_STATE_DIR: devState });
+}
+const saidA = execFileSync(process.execPath, [path.join(DEV, 'tools', 'fidelity_bundle.js'), 'build', pakA, MODULES], { env: devEnv, stdio: ['ignore', 'pipe', 'inherit'] }).toString();
 const saidB = execFileSync(pkgNode, [path.join(pkgTools, 'fidelity_bundle.js'), 'build', pakB, MODULES],
     { env: Object.assign({}, clean, { SR_SHADER_PAK: ownPak, SR_STATE_DIR: state, SR_DUMP_DIR: dumpB, SR_SETS_DIR: path.join(state, 'sets') }), stdio: ['ignore', 'pipe', 'inherit'] }).toString();
 const a = sha(pakA), b = sha(pakB), as = sha(pakA + '.stock'), bs = sha(pakB + '.stock');

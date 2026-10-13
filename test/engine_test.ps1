@@ -11,7 +11,7 @@
 # usage (after build.ps1): powershell -NoProfile -ExecutionPolicy Bypass -File test\engine_test.ps1
 # -Engine <folder>: test that engine instead (a package's engine\ with its own node.exe, see package_test.ps1)
 # -Originals <folder>: where shader.pak.orig, shared.pak.orig, initial.pak.orig, boot.pak.orig and gfx.pak.orig are
-param([string]$Engine = '', [string]$Originals = 'C:\Games\SnowRunner-shaders\pak_backup')
+param([string]$Engine = '', [string]$Originals = $(if ($env:SR_ORIGINALS) { $env:SR_ORIGINALS } else { 'C:\Games\SnowRunner-shaders\pak_backup' }))
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ngen = if ($Engine) { Join-Path $Engine 'ngen.js' } else { Join-Path $root 'out\engine\ngen.js' }
@@ -133,7 +133,10 @@ $everything = [ordered]@{ shader = $default; shadows = [ordered]@{ factor = '1';
 $r = Apply $everything
 Check 'every part: done' (Last $r) 'done'
 Check 'every part: status' (Summary (Status)) ('ours [' + ($default -join ',') + '] dll ours 1/1 scenery all grass ours3 fill ours0.7 grade ours1 particles ours stars ours3 sky ours logos ours weather oursshadows,showers,evening,horizon,far,fireflies,pollen debris ours4 cubes ours skies ours')
-Check 'map days: the tool on stand-in level files' ([string](& $node (Join-Path $PSScriptRoot 'level_states_test.js') | Select-Object -Last 1)) 'all passed'
+# the tool of the engine under test, run from a copy of the test in TEMP: a packaged engine reads nothing of the working tree
+$levelTest = Join-Path $env:TEMP 'ngen_level_states_test.js'
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'level_states_test.js') -Destination $levelTest -Force
+Check 'map days: the tool on stand-in level files' ([string](& $node $levelTest (Join-Path (Split-Path -Parent $ngen) 'tools') | Select-Object -Last 1)) 'all passed'
 Check 'every part: boot.pak holds the grade, the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 144'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'

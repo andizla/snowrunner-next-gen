@@ -6,7 +6,7 @@ const fs = require('fs'), os = require('os'), path = require('path'), zlib = req
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ngen-levels-'));
 process.env.SR_PAKS_DIR = dir;
-const tool = require('../engine/tools/level_states.js');
+const tool = require(process.argv[2] ? path.join(process.argv[2], 'level_states.js') : '../engine/tools/level_states.js');   // an engine's tools folder, or the working tree's
 
 // a level file's head: a version word, a flag word, the length, a check value, then the names
 function levelData(level, region, sky)

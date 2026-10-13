@@ -6,7 +6,7 @@
 # usage (after package.ps1): powershell -NoProfile -ExecutionPolicy Bypass -File test\paths_test.ps1
 # -Package <folder>: the package to test (default out\package\SnowRunnerNextGen)
 # -Originals <folder>: where shader.pak.orig, shared.pak.orig, initial.pak.orig, boot.pak.orig and gfx.pak.orig are
-param([string]$Package = '', [string]$Originals = 'C:\Games\SnowRunner-shaders\pak_backup')
+param([string]$Package = '', [string]$Originals = $(if ($env:SR_ORIGINALS) { $env:SR_ORIGINALS } else { 'C:\Games\SnowRunner-shaders\pak_backup' }))
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 if (-not $Package) { $Package = Join-Path $root 'out\package\SnowRunnerNextGen' }
