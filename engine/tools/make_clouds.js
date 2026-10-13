@@ -11,8 +11,9 @@
 // the game's bands do. The colour is the texel's luminance over the brightest cloud's, so a state's tint works on it
 // as on the game's. The header and the tail come from the stock texture, so size, mips and format are the game's.
 // usage: node make_clouds.js band <panorama.hdr> <out.pct> --header <stock.pct> --from <deg> --to <deg>
-//            [--coverage <0..1>] [--white] [--yaw <degrees>] [--preview]
-//        --from and --to: the elevation of the band's lower and upper edge; --white: plain white colour;
+//            [--coverage <0..1>] [--shade <0..1>] [--white] [--yaw <degrees>] [--preview]
+//        --from and --to: the elevation of the band's lower and upper edge; --shade: the clouds' mean grey (the stock
+//        band's, weighted by its alpha); --white: plain white colour;
 //        --preview writes <out>.png, the band over a mid grey
 'use strict';
 const fs = require('fs'), zlib = require('zlib');
@@ -62,7 +63,7 @@ function readBand(p, w, h, from, to, yaw)
     return { lum, cloud };
 }
 // the band as RGBA8: the alpha a soft step over the cloudiness whose foot is found so the mean alpha is `coverage`
-function renderBand(band, w, h, coverage, white)
+function renderBand(band, w, h, coverage, white, shade = 0)
 {
     const env = new Float32Array(h);
     for (let j = 0; j < h; j++) { const t = (j + 0.5) / h; env[j] = smooth(0, EDGE, t) * smooth(0, EDGE, 1 - t); }
@@ -75,17 +76,22 @@ function renderBand(band, w, h, coverage, white)
     const foot = (lo + hi) / 2, alpha = new Float32Array(w * h), bright = [];
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = j * w + i; alpha[k] = alphaAt(k, j, foot); if (alpha[k] > 0.8 && (i & 3) === 0 && (j & 3) === 0) bright.push(band.lum[k]); }
     bright.sort((a, b) => a - b);
-    const top = bright.length ? bright[Math.floor(bright.length * 0.97)] : 1, rgba = new Uint8Array(w * h * 4);
+    const top = bright.length ? bright[Math.floor(bright.length * 0.97)] : 1, rgba = new Uint8Array(w * h * 4), grey = new Float32Array(w * h);
+    // the clouds' grey, and its mean weighted by the alpha: with a shade given the grey is scaled so that this mean
+    // lands on it (the stock band's: a state's tint and strength are set for that brightness)
+    let sum = 0, weight = 0;
+    for (let k = 0; k < w * h; k++) { grey[k] = srgb(Math.max(0, Math.min(1, band.lum[k] / top))); sum += grey[k] * alpha[k]; weight += alpha[k]; }
+    const scale = shade > 0 && sum > 0 ? shade / (sum / weight) : 1;
     for (let j = 0; j < h; j++)
         for (let i = 0; i < w; i++)
         {
             // the alpha softened over its eight neighbours: no single hard texels at a cloud's edge
             let a = 0, n = 0;
             for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const y = j + dy; if (y < 0 || y >= h) continue; a += alpha[y * w + (i + dx + w) % w]; n++; }
-            const k = j * w + i, g = white ? 255 : Math.round(srgb(Math.max(0, Math.min(1, band.lum[k] / top))) * 255);
+            const k = j * w + i, g = white ? 255 : Math.round(Math.max(0, Math.min(1, grey[k] * scale)) * 255);
             rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = g; rgba[k * 4 + 3] = Math.round(a / n * 255);
         }
-    return { rgba, foot, mean: meanAlpha(foot) };
+    return { rgba, foot, mean: meanAlpha(foot), shade: sum > 0 ? sum / weight * scale : 0 };
 }
 // the next mip (a 2 x 2 box; a dimension of 4 stays) and a picture as BC7 blocks
 function halve(pic, w, h)
@@ -144,7 +150,7 @@ if (require.main === module)
             removeSun(p);   // the sun and its glare are as white as a cloud: out with them before the clouds are told from the sky
             const from = Number(opt('from')), to = Number(opt('to')), coverage = Number(opt('coverage') || 0.3), yaw = Number(opt('yaw') || 0);
             if (!(to > from && from >= -10 && to <= 90)) throw new Error('--from and --to: the band\'s lower and upper elevation in degrees');
-            const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'));
+            const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'), Number(opt('shade') || 0));
             const parts = [stock.subarray(0, head)];
             let pic = r.rgba, pw = w, ph = h;
             for (let m = 0; m < mips; m++) { parts.push(blocks(pic, pw, ph)); if (m < mips - 1) { pic = halve(pic, pw, ph); pw = Math.max(pw >> 1, 4); ph = Math.max(ph >> 1, 4); } }
@@ -164,7 +170,7 @@ if (require.main === module)
                     }
                 png(args[2].replace(/\.pct$/i, '') + '.png', pwv, phv, rgb);
             }
-            console.log('built ' + args[2] + ' from ' + args[1].split(/[\\/]/).pop() + ': ' + w + ' x ' + h + ', ' + mips + ' mips, elevation ' + from + ' to ' + to + ', mean alpha ' + r.mean.toFixed(3) + ' (the step\'s foot at ' + r.foot.toFixed(3) + ')' + (args.includes('--white') ? ', white' : '') + ', yaw ' + yaw);
+            console.log('built ' + args[2] + ' from ' + args[1].split(/[\\/]/).pop() + ': ' + w + ' x ' + h + ', ' + mips + ' mips, elevation ' + from + ' to ' + to + ', mean alpha ' + r.mean.toFixed(3) + ' (the step\'s foot at ' + r.foot.toFixed(3) + '), clouds\' grey ' + r.shade.toFixed(2) + (args.includes('--white') ? ', white' : '') + ', yaw ' + yaw);
         }
         else console.log('usage: node make_clouds.js band <panorama.hdr> <out.pct> --header <stock.pct> --from <deg> --to <deg> [--coverage <0..1>] [--white] [--yaw <degrees>] [--preview]');
     }
