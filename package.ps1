@@ -56,7 +56,7 @@ else {
 
 # the tools: the entry points the engine runs and everything they require, found from their require('./x.js') lines
 $toolDir = Join-Path $root 'engine\tools'
-$entries = 'fidelity_bundle.js', 'pak_shader_patch.js', 'lod_patch.js', 'lut_grade.js', 'gfx_logos.js', 'extract.js', 'shadow_filter_patch.js', 'patch_ambient.js', 'patch_fog.js', 'patch_fog_sun.js', 'patch_bloom_knee.js'
+$entries = 'fidelity_bundle.js', 'pak_shader_patch.js', 'lod_patch.js', 'lut_grade.js', 'gfx_logos.js', 'level_states.js', 'extract.js', 'shadow_filter_patch.js', 'patch_ambient.js', 'patch_fog.js', 'patch_fog_sun.js', 'patch_bloom_knee.js'
 $closure = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 $queue = [System.Collections.Generic.Queue[string]]::new()
 foreach ($e in $entries) { $queue.Enqueue($e) }

@@ -415,20 +415,96 @@ function writePct(file, faces, stockFile)
 // HORIZON_FADE of the height, then to 0 (the stock sky_01_ru_03_day fades over its lowest 11 %). The layers are drawn
 // times their DiffuseMultiplier (4 to 8 by day), so the texture itself is darker than a cube: SKY_TEX_MEAN
 const HORIZON_FADE = 0.11, SKY_TEX_MEAN = 0.45;   // the stock Kola day skies: 0.42 and 0.47
-function renderSky(p, exposure, yaw, w, h)
+// look: { fade: the share of the height the alpha fades over at the bottom (0: opaque), grey: luminance only (the
+// game's grey cloud skies, which a state tints) }
+function renderSky(p, exposure, yaw, w, h, look = { fade: HORIZON_FADE, grey: false })
 {
     const rgba = new Uint8Array(w * h * 4), out = [0, 0, 0];
     for (let j = 0; j < h; j++)
     {
-        const v = (j + 0.5) / h / 2, fade = (h - 1 - j) / (h * HORIZON_FADE), alpha = Math.max(0, Math.min(255, Math.round(fade * 255)));
+        const v = (j + 0.5) / h / 2, fade = look.fade > 0 ? (h - 1 - j) / (h * look.fade) : 1, alpha = Math.max(0, Math.min(255, Math.round(fade * 255)));
         for (let i = 0; i < w; i++)
         {
             sample(p, (i + 0.5) / w - yaw / 360, v, out);
             const o = (j * w + i) * 4;
             rgba[o] = encode(out[0], exposure); rgba[o + 1] = encode(out[1], exposure); rgba[o + 2] = encode(out[2], exposure); rgba[o + 3] = alpha;
+            if (look.grey) rgba[o] = rgba[o + 1] = rgba[o + 2] = Math.round(0.2126 * rgba[o] + 0.7152 * rgba[o + 1] + 0.0722 * rgba[o + 2]);
         }
     }
     return rgba;
+}
+// the mean sRGB colour (0..1) of a sky texture at an exposure: the panorama's upper half, every row the same weight
+// as in the texture, from 256 x 64 samples
+function texColour(p, exposure)
+{
+    const out = [0, 0, 0], sum = [0, 0, 0];
+    for (let j = 0; j < 64; j++)
+        for (let i = 0; i < 256; i++)
+        {
+            sample(p, (i + 0.5) / 256, (j + 0.5) / 128, out);
+            for (let c = 0; c < 3; c++) sum[c] += encode(out[c], exposure) / 255;
+        }
+    return sum.map((s) => s / (256 * 64));
+}
+// the sun taken out of a panorama: the game draws its own sun, and a sky layer may turn. The brightest spot of the
+// upper half is the sun when it stands far above the sky's median; around it, out to where the glare has come down to
+// SUN_GLARE times the median (SUN_MAX degrees at most), the texels take the sky colour of their own row. Returns the
+// radius in degrees, 0 when the sky has no sun to take out
+const SUN_GLARE = 2.5, SUN_MAX = 28;
+function removeSun(p)
+{
+    const lumAt = (i) => 0.2126 * p.data[i] + 0.7152 * p.data[i + 1] + 0.0722 * p.data[i + 2], half = p.h >> 1, lums = [];
+    let best = -1, bx = 0, by = 0;
+    for (let y = 0; y < half; y += 4)
+        for (let x = 0; x < p.w; x += 4) { const l = lumAt((y * p.w + x) * 3); lums.push(l); if (l > best) { best = l; bx = x; by = y; } }
+    lums.sort((a, b) => a - b);
+    const median = lums[lums.length >> 1];
+    if (!(best > 20 * median)) return 0;
+    const dirOf = (u, v) => { const phi = u * 2 * Math.PI, theta = v * Math.PI; return [Math.sin(theta) * Math.sin(phi), Math.cos(theta), Math.sin(theta) * Math.cos(phi)]; };
+    const uvOf = (d) => [((Math.atan2(d[0], d[2]) / (2 * Math.PI)) % 1 + 1) % 1, Math.acos(Math.max(-1, Math.min(1, d[1]))) / Math.PI];
+    const sun = dirOf((bx + 0.5) / p.w, (by + 0.5) / p.h), up = Math.abs(sun[1]) > 0.99 ? [1, 0, 0] : [0, 1, 0];
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], unit = (a) => { const n = Math.hypot(a[0], a[1], a[2]); return [a[0] / n, a[1] / n, a[2] / n]; };
+    const e1 = unit(cross(sun, up)), e2 = cross(sun, e1), out = [0, 0, 0], SECTORS = 96;
+    const ringAt = (deg, k) =>
+    {
+        const r = deg * Math.PI / 180, f = (k / SECTORS) * 2 * Math.PI, d = [0, 1, 2].map((c) => Math.cos(r) * sun[c] + Math.sin(r) * (Math.cos(f) * e1[c] + Math.sin(f) * e2[c]));
+        const [u, v] = uvOf(d);
+        sample(p, u, Math.min(v, 0.5), out);   // below the horizon a pure sky holds nothing of its own: the horizon's row stands in
+        return [out[0], out[1], out[2]];
+    };
+    // the radius: the first ring whose median luminance is down to the glare level
+    let radius = SUN_MAX;
+    for (let deg = 3; deg <= SUN_MAX; deg++)
+    {
+        const ring = [];
+        for (let k = 0; k < SECTORS; k++) { const c = ringAt(deg, k); ring.push(0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]); }
+        ring.sort((a, b) => a - b);
+        if (ring[SECTORS >> 1] <= SUN_GLARE * median) { radius = deg; break; }
+    }
+    // inside the radius a texel takes its row's own sky, the median of the row's texels away from the sun, and from
+    // there out to twice the radius it blends back into the picture: the sky keeps its rise from the horizon, the glare goes
+    const outer = Math.min(70, radius * 2), cosOut = Math.cos(outer * Math.PI / 180), cosIn = Math.cos(radius * Math.PI / 180), rows = Math.ceil((outer + 1) / 180 * p.h);
+    for (let y = Math.max(0, by - rows); y <= Math.min(p.h - 1, by + rows); y++)
+    {
+        let far = [];
+        for (let x = 0; x < p.w; x += 8)
+        {
+            const d = dirOf((x + 0.5) / p.w, (y + 0.5) / p.h), o = (y * p.w + x) * 3;
+            if (d[0] * sun[0] + d[1] * sun[1] + d[2] * sun[2] <= cosOut) far.push([lumAt(o), o]);
+        }
+        if (far.length < 16) { far = []; for (let x = 0; x < p.w; x += 8) far.push([lumAt((y * p.w + x) * 3), (y * p.w + x) * 3]); }
+        far.sort((a, b) => a[0] - b[0]);
+        const m = far[far.length >> 1][1], sky = [p.data[m], p.data[m + 1], p.data[m + 2]];
+        for (let x = 0; x < p.w; x++)
+        {
+            const d = dirOf((x + 0.5) / p.w, (y + 0.5) / p.h), dot = d[0] * sun[0] + d[1] * sun[1] + d[2] * sun[2];
+            if (dot <= cosOut) continue;
+            const t = Math.min(1, (dot - cosOut) / (cosIn - cosOut)), w = t * t * (3 - 2 * t), o = (y * p.w + x) * 3;
+            for (let c = 0; c < 3; c++) p.data[o + c] += (sky[c] - p.data[o + c]) * w;
+        }
+    }
+    p.sun = { dir: sun, radius, outer };   // where it was and how far the fill reaches, for a caller that cuts clouds out
+    return radius;
 }
 // the texture's mip sizes as the game stores them: each dimension halves, a level is at least 4 x 4 (one block)
 const mipDims = (w, h, mips) => Array.from({ length: mips }, (_, k) => [Math.max(w >> k, 4), Math.max(h >> k, 4)]);
@@ -464,13 +540,14 @@ function encodeRect(pic, w, h)
     return out;
 }
 // the .pct of a sky texture: the stock file's header (its size and mip count read from it), the blocks, the stock tail
-function writeSkyPct(file, p, exposure, yaw, stockFile)
+function writeSkyPct(file, p, exposure, yaw, stockFile, look)
 {
     const stock = fs.readFileSync(stockFile);
     const w = stock.readUInt32LE(0x10), h = stock.readUInt32LE(0x14), mips = stock.readUInt32LE(0x30);
     const dims = mipDims(w, h, mips), dataLen = dims.reduce((s, [mw, mh]) => s + mw * mh, 0), head = stock.length - dataLen - TAIL;
     if (head < 48 || head > 256 || stock.readUInt32LE(stock.length - 4) !== stock.length) throw new Error(stockFile + ': not a BC7 texture of ' + w + ' x ' + h + ' with ' + mips + ' mips (' + stock.length + ' bytes)');
-    let pic = renderSky(p, exposure, yaw, w, h), pw = w, ph = h;
+    let pic = renderSky(p, exposure, yaw, w, h, look), pw = w, ph = h;
+    if (look && look.preview) { const pv = renderSky(p, exposure, yaw, 1024, 256, look), rgb = new Uint8Array(1024 * 256 * 3); for (let i = 0; i < 1024 * 256; i++) { rgb[i * 3] = pv[i * 4]; rgb[i * 3 + 1] = pv[i * 4 + 1]; rgb[i * 3 + 2] = pv[i * 4 + 2]; } png(look.preview, 1024, 256, rgb); }
     const parts = [stock.subarray(0, head)];
     for (let m = 0; m < mips; m++)
     {
@@ -601,11 +678,24 @@ if (require.main === module)
         }
         else if (cmd === 'sky' && args[1] && args[2] && opt('header'))
         {
-            const p = readHdr(args[1]);
+            // --no-sun takes the panorama's sun out; --tex-rgb r,g,b white-balances and exposes the picture until the
+            // texture's own mean colour lands on it (the stock texture's, so a state's tint works on it as before);
+            // --fade x sets the share of the height the alpha fades over at the bottom (0: opaque); --grey writes the
+            // luminance alone; --preview writes <out>.png, 1024 x 256
+            const p = readHdr(args[1]), sunRadius = args.includes('--no-sun') ? removeSun(p) : 0;
             capOf(p);
-            const exposure = opt('exposure') ? Number(opt('exposure')) : exposureFor(p, Number(opt('sky-mean') || SKY_TEX_MEAN), yaw);
-            const t = writeSkyPct(args[2], p, exposure, yaw, opt('header'));
-            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): ' + t.w + ' x ' + t.h + ', ' + t.mips + ' mips, exposure ' + exposure.toFixed(4) + ', white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
+            const want = opt('tex-rgb') === null ? null : opt('tex-rgb').split(',').map(Number);
+            if (want && !(want.length === 3 && want.every((v) => v > 0 && v < 1))) throw new Error('--tex-rgb takes three values between 0 and 1');
+            let exposure = opt('exposure') ? Number(opt('exposure')) : exposureFor(p, Number(opt('sky-mean') || SKY_TEX_MEAN), yaw);
+            for (let k = 0; want && k < 12; k++)
+            {
+                const now = texColour(p, exposure), t = want.map((c, i) => linear(c) / Math.max(1e-6, linear(now[i])));
+                for (let i = 0; i < p.data.length; i += 3) { p.data[i] *= t[0]; p.data[i + 1] *= t[1]; p.data[i + 2] *= t[2]; }
+                capOf(p);
+            }
+            const look = { fade: opt('fade') === null ? HORIZON_FADE : Number(opt('fade')), grey: args.includes('--grey'), preview: args.includes('--preview') ? args[2].replace(/\.pct$/i, '') + '.png' : null };
+            const t = writeSkyPct(args[2], p, exposure, yaw, opt('header'), look);
+            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): ' + t.w + ' x ' + t.h + ', ' + t.mips + ' mips, exposure ' + exposure.toFixed(4) + ', mean ' + texColour(p, exposure).map((v) => v.toFixed(2)).join('/') + ', sun ' + (sunRadius ? 'taken out, ' + sunRadius + ' degrees' : 'left') + ', fade ' + look.fade + (look.grey ? ', grey' : '') + ', white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
         }
         else if (cmd === 'pak' && args[1] && args[2] && args.length > 3)
         {
@@ -617,4 +707,4 @@ if (require.main === module)
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
-module.exports = { readHdr, renderFaces, encodeBlock, encodeFace, writePct, faceDir, dirToFace, SIZE, MIPS };
+module.exports = { readHdr, renderFaces, encodeBlock, encodeFace, writePct, faceDir, dirToFace, removeSun, SIZE, MIPS };
