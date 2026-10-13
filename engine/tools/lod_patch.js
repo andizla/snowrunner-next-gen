@@ -803,7 +803,7 @@ function buildInitial(parts, label)
         if (p.parts.weather) has.push('the weather (' + p.parts.weather.split(',').map((k) => k + ' ' + (p.weatherCount[k] || 0)).join(', ') + ' files)');
         if (p.parts.debris) has.push('the debris and splashes in ' + (p.changed.debris || 0) + ' particle types (' + p.parts.debris + 'x drops)');
         if (p.photo.length) has.push('the sky alpha that boot.pak\'s photo night skies need (' + p.photo.join(', ') + ')');
-        if (p.winter && p.changed.winter) has.push('the winter cubes\' rule in ' + p.changed.winter + ' day, dusk and dawn states');
+        if (p.winter && p.changed.winter) has.push('the snow cubes\' rule in ' + p.changed.winter + ' day, dusk and dawn states');
         console.log(label + ': initial.pak now has ' + has.join(' and ') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
         // a chosen part that found nothing to change in this game version's files
         const none = [];

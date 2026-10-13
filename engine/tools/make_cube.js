@@ -10,8 +10,11 @@
 // mips and written as BC7 mode 6 (one subset, 7 bit endpoints with a shared low bit, 4 bit indices, refined by least
 // squares). The header and the tail come from a stock cube's file, so the game sees exactly what it ships with.
 // usage: node make_cube.js build <panorama.hdr> <out.pct> --header <stock.pct> [--exposure <x> | --sky-mean <0..1>]
-//            [--yaw <degrees>] [--preview]   writes the .pct and its .pct_header; --preview also <out>_faces.png (the
-//            six faces side by side) and <out>_pano.png (the cube unwrapped again, to check the orientation)
+//            [--sky-rgb <r,g,b>] [--ground-mean <0..1>] [--yaw <degrees>] [--preview]   writes the .pct and its
+//            .pct_header; --sky-rgb white-balances the picture to a mean sky colour (a dusk, dawn or night at the hue
+//            of the game's cube), --ground-mean exposes the ground half apart from the sky; --preview also
+//            <out>_faces.png (the six faces side by side) and <out>_pano.png (the cube unwrapped again, to check the
+//            orientation)
 //        node make_cube.js preview <panorama.hdr> <out.png> [--exposure <x> | --sky-mean <0..1>] [--yaw <degrees>]
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
@@ -124,28 +127,53 @@ function skyMedian(p, yaw)
     lum.sort((a, b) => a - b);
     return lum[lum.length >> 1];
 }
-// the mean sRGB luminance of the sky half at an exposure, from a fixed set of directions
-function skyMean(p, exposure, yaw)
+const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+const linear = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+// the ground gain: a factor on everything below the horizon, faded in over the first GROUND_FADE of elevation, as a
+// graduated filter over the lower half of a lens: it sets the ground half's brightness apart from the sky's
+const GROUND_FADE = 6 * Math.PI / 180;
+const groundFactor = (elevation, gain) => { if (elevation >= 0) return 1; const t = Math.min(1, -elevation / GROUND_FADE); return 1 + (gain - 1) * t * t * (3 - 2 * t); };
+// the mean sRGB colour (0..1) of the sky half at an exposure, from a fixed set of directions; with down, that of the
+// ground half under a ground gain
+function halfColour(p, exposure, yaw, down, gain)
 {
-    const out = [0, 0, 0];
-    let sum = 0, n = 0;
+    const out = [0, 0, 0], sum = [0, 0, 0];
+    let n = 0;
     for (let j = 0; j < 64; j++)
         for (let i = 0; i < 128; i++)
         {
-            const theta = (j + 0.5) / 64 * (Math.PI / 2), phi = (i + 0.5) / 128 * 2 * Math.PI;   // the upper hemisphere, equal solid angle weight
-            const w = Math.sin(theta), [u, v] = dirToUv(Math.sin(theta) * Math.sin(phi), Math.cos(theta), Math.sin(theta) * Math.cos(phi), yaw);
+            const theta = (j + 0.5) / 64 * (Math.PI / 2), phi = (i + 0.5) / 128 * 2 * Math.PI;   // a hemisphere from its pole, equal solid angle weight
+            const w = Math.sin(theta), k = down ? groundFactor(theta - Math.PI / 2, gain) : 1;
+            const [u, v] = dirToUv(Math.sin(theta) * Math.sin(phi), (down ? -1 : 1) * Math.cos(theta), Math.sin(theta) * Math.cos(phi), yaw);
             sample(p, u, v, out);
-            sum += w * (0.2126 * encode(out[0], exposure) + 0.7152 * encode(out[1], exposure) + 0.0722 * encode(out[2], exposure)) / 255;
+            for (let c = 0; c < 3; c++) sum[c] += w * encode(out[c] * k, exposure) / 255;
             n += w;
         }
-    return sum / n;
+    return sum.map((s) => s / n);
 }
+// the mean sRGB luminance of the sky half at an exposure
+const skyMean = (p, exposure, yaw) => lum(halfColour(p, exposure, yaw, false, 1));
 // the exposure that puts the sky half at the target (bisection in log space)
 function exposureFor(p, target, yaw)
 {
     let lo = -14, hi = 14;
     for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (skyMean(p, Math.pow(2, mid), yaw) < target) lo = mid; else hi = mid; }
     return Math.pow(2, (lo + hi) / 2);
+}
+// the ground gain that puts the ground half at the target (bisection in log space), and the gain laid into the picture
+function groundGainFor(p, exposure, yaw, target)
+{
+    let lo = -10, hi = 10;
+    for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (lum(halfColour(p, exposure, yaw, true, Math.pow(2, mid))) < target) lo = mid; else hi = mid; }
+    return Math.pow(2, (lo + hi) / 2);
+}
+function applyGround(p, gain)
+{
+    for (let j = 0; j < p.h; j++)
+    {
+        const k = groundFactor((0.5 - (j + 0.5) / p.h) * Math.PI, gain);
+        if (k !== 1) for (let i = j * p.w * 3, end = i + p.w * 3; i < end; i++) p.data[i] *= k;
+    }
 }
 
 // the six faces as RGBA8, SIZE x SIZE each, 3 x 3 samples per texel
@@ -459,21 +487,40 @@ if (require.main === module)
         if (opt('white') !== null) TONE.white = Number(opt('white'));
         // the cap: --cap N clamps the picture at N times the sky's median (10 by default; 0 for none)
         const capOf = (p) => { const n = opt('cap') === null ? 10 : Number(opt('cap')); TONE.cap = n > 0 ? n * skyMedian(p, yaw) : 0; };
+        // the grade of a cube. --sky-rgb r,g,b sets the sky half's mean colour (sRGB, 0..1) and with it its brightness:
+        // the picture's white balance moves until the sky half lands on it (a dusk, a dawn or a night at the hue of
+        // the game's own cube; with a dark target, a day picture graded to a night). --ground-mean x exposes the
+        // ground half apart from the sky, so that its mean luminance lands on x. Returns the exposure and the gain
+        const graded = (p) =>
+        {
+            const rgb = opt('sky-rgb') === null ? null : opt('sky-rgb').split(',').map(Number);
+            if (rgb && !(rgb.length === 3 && rgb.every((v) => v > 0 && v < 1))) throw new Error('--sky-rgb takes three values between 0 and 1');
+            const target = rgb ? lum(rgb) : Number(opt('sky-mean') || SKY_MEAN);
+            capOf(p);
+            let exposure = opt('exposure') ? Number(opt('exposure')) : exposureFor(p, target, yaw);
+            for (let k = 0; rgb && k < 6; k++)
+            {
+                const now = halfColour(p, exposure, yaw, false, 1), t = rgb.map((c, i) => linear(c) / Math.max(1e-6, linear(now[i]))), norm = lum(t);
+                for (let i = 0; i < p.data.length; i += 3) { p.data[i] *= t[0] / norm; p.data[i + 1] *= t[1] / norm; p.data[i + 2] *= t[2] / norm; }
+                capOf(p);
+                exposure = exposureFor(p, target, yaw);
+            }
+            const gain = opt('ground-mean') === null ? 1 : groundGainFor(p, exposure, yaw, Number(opt('ground-mean')));
+            if (gain !== 1) applyGround(p, gain);
+            return { exposure, gain };
+        };
+        const rgbText = (c) => c.map((v) => v.toFixed(2)).join('/');
         if (cmd === 'build' && args[1] && args[2] && opt('header'))
         {
-            const p = readHdr(args[1]);
-            capOf(p);
-            const exposure = opt('exposure') ? Number(opt('exposure')) : exposureFor(p, Number(opt('sky-mean') || SKY_MEAN), yaw);
+            const p = readHdr(args[1]), { exposure, gain } = graded(p);
             const faces = renderFaces(p, exposure, yaw);
             writePct(args[2], faces, opt('header'));
             if (args.includes('--preview')) { facesPng(args[2].replace(/\.pct$/i, '') + '_faces.png', faces); panoPng(args[2].replace(/\.pct$/i, '') + '_pano.png', faces); }
-            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): exposure ' + exposure.toFixed(4) + ', sky mean ' + skyMean(p, exposure, yaw).toFixed(3) + ', white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
+            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): exposure ' + exposure.toFixed(4) + ', sky mean ' + skyMean(p, exposure, yaw).toFixed(3) + ' (' + rgbText(halfColour(p, exposure, yaw, false, 1)) + '), ground ' + lum(halfColour(p, exposure, yaw, true, 1)).toFixed(3) + ' (' + rgbText(halfColour(p, exposure, yaw, true, 1)) + ', gain ' + gain.toFixed(3) + '), white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
         }
         else if (cmd === 'preview' && args[1] && args[2])
         {
-            const p = readHdr(args[1]), w = 1024, h = 512, rgb = new Uint8Array(w * h * 3), out = [0, 0, 0];
-            capOf(p);
-            const exposure = opt('exposure') ? Number(opt('exposure')) : exposureFor(p, Number(opt('sky-mean') || SKY_MEAN), yaw);
+            const p = readHdr(args[1]), { exposure } = graded(p), w = 1024, h = 512, rgb = new Uint8Array(w * h * 3), out = [0, 0, 0];
             for (let j = 0; j < h; j++)
                 for (let i = 0; i < w; i++)
                 {
@@ -498,7 +545,7 @@ if (require.main === module)
             for (const a of args.slice(3)) { const m = /^([^=]+)=(.+)$/.exec(a); if (!m) throw new Error('expected <entry name>=<file>: ' + a); map.set(m[1].toLowerCase(), m[2]); }
             console.log('wrote ' + args[2] + ' with ' + writeTestPak(args[1], args[2], map) + ' entries replaced');
         }
-        else console.log('usage: node make_cube.js build <panorama.hdr> <out.pct> --header <stock.pct> [--exposure <x> | --sky-mean <0..1>] [--white <w>] [--cap <n>] [--yaw <degrees>] [--preview] | preview <panorama.hdr> <out.png> [the same options] | pak <in.pak> <out.pak> <entry name>=<cube.pct> ...');
+        else console.log('usage: node make_cube.js build <panorama.hdr> <out.pct> --header <stock.pct> [--exposure <x> | --sky-mean <0..1>] [--sky-rgb <r,g,b>] [--ground-mean <0..1>] [--white <w>] [--cap <n>] [--yaw <degrees>] [--preview] | preview <panorama.hdr> <out.png> [the same options] | pak <in.pak> <out.pak> <entry name>=<cube.pct> ...');
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }

@@ -64,7 +64,7 @@ try {
   $s = & $selection
   Check 'selection: rebuilt edges, the seam dither, AO at half size' ((@($s['shader']) -contains 'revec') -and (@($s['shader']) -contains 'seam') -and ($s['shadows']['aoHalf'] -eq '1')) 'True'
   Check 'selection: the night sky, the stars at 3x and the logos' ('{0} {1} {2}' -f $s['sky'], $s['stars'], $s['logos']) '1 3 1'
-  Check 'selection: the bounce light and the winter cubes by default' ('{0} {1}' -f (@($s['shader']) -contains 'gi'), $s['cubes']) 'True 1'
+  Check 'selection: the bounce light and the reflection cubes by default' ('{0} {1}' -f (@($s['shader']) -contains 'gi'), $s['cubes']) 'True 1'
   $cards['edges'].Choice[0] = 1
   $s = & $selection
   Check 'selection: the 16-tap filter goes without the seam dither' ((@($s['shader']) -contains 'crisp') -and -not (@($s['shader']) -contains 'seam') -and -not (@($s['shader']) -contains 'revec')) 'True'

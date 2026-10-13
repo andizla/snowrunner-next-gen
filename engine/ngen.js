@@ -994,16 +994,16 @@ async function apply(g, state, sel, adopt, leave)
     else if (initialLeft) warn(SKY_NEEDS_INITIAL + ': the night sky was left out.');
     else { step('Putting the night sky in (boot.pak, 600 MB)'); await must('lut_grade.js', ['sky-install'], env); }
 
-    // the winter reflection cubes (boot.pak, the fourth part there)
-    if (now.cubes.state === 'missing') { if (cubes) warn('No boot.pak in this game folder: the winter reflection cubes were left out.'); }
+    // the reflection cubes (boot.pak, the fourth part there)
+    if (now.cubes.state === 'missing') { if (cubes) warn('No boot.pak in this game folder: the reflection cubes were left out.'); }
     else if (!cubes)
     {
         if (now.cubes.state === 'ours') { step('Putting the original reflection cubes back (boot.pak)'); await must('lut_grade.js', ['cubes-restore'], env); }
-        else if (now.cubes.state === 'changed' && last.cubes) warn(BOOT_CHANGED + ': left as it is, so the winter reflection cubes could not be taken out.');
+        else if (now.cubes.state === 'changed' && last.cubes) warn(BOOT_CHANGED + ': left as it is, so the reflection cubes could not be taken out.');
     }
-    else if (now.cubes.state === 'ours' && sameCode(notes, 'cubes')) emit({ type: 'log', text: 'boot.pak already has the winter reflection cubes' });
-    else if (now.cubes.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the winter reflection cubes were left out.');
-    else { step('Putting the winter reflection cubes in (boot.pak)'); await must('lut_grade.js', ['cubes-install'], env); }
+    else if (now.cubes.state === 'ours' && sameCode(notes, 'cubes')) emit({ type: 'log', text: 'boot.pak already has the reflection cubes' });
+    else if (now.cubes.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the reflection cubes were left out.');
+    else { step('Putting the reflection cubes in (boot.pak)'); await must('lut_grade.js', ['cubes-install'], env); }
 
     // the winter skies (boot.pak, the fifth part there)
     if (now.skies.state === 'missing') { if (skies) warn('No boot.pak in this game folder: the winter skies were left out.'); }

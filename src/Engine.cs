@@ -47,7 +47,7 @@ namespace SnowRunnerNextGen
         public string Debris = "vanilla";         // the debris and splashes, the fifth part of initial.pak: the same states
         public string DebrisFactor;               // its drops factor
         public string Sky = "vanilla";            // the night sky, the third part of boot.pak: the same states
-        public string Cubes = "vanilla";          // the winter reflection cubes, the fourth part of boot.pak: the same states
+        public string Cubes = "vanilla";          // the reflection cubes, the fourth part of boot.pak: the same states
         public string Skies = "vanilla";          // the winter skies, the fifth part of boot.pak: the same states
         public string Logos = "vanilla";          // the Next Gen logos in gfx.pak: the same states
         public readonly List<string> Orphaned = new List<string>();   // paks that hold our changes while their kept originals are gone

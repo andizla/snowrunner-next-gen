@@ -81,10 +81,20 @@ Licensed under the Apache License, Version 2.0. The licence text is in licenses\
 
 ## Poly Haven panoramas
 
-The winter reflection cubes (engine\replacements\cubes\pct) and the winter skies (engine\replacements\skies\pct) are made
-with engine\tools\make_cube.js from three panoramas published by Poly Haven (https://polyhaven.com) under CC0 1.0
-(public domain dedication): "Passendorf Snow" (passendorf_snow) and "Stierberg Sunrise" (stierberg_sunrise) by Grzegorz
-Wronkowski, and "Snow Field" (snow_field) by Sergej Majboroda.
+The reflection cubes (engine\replacements\cubes\pct) and the winter skies (engine\replacements\skies\pct) are made with
+engine\tools\make_cube.js from 21 panoramas published by Poly Haven (https://polyhaven.com) under CC0 1.0 (public
+domain dedication):
+
+- Grzegorz Wronkowski: "Passendorf Snow", "Stierberg Sunrise", "Horn-koppe Spring"
+- Sergej Majboroda: "Snow Field", "Rural Crossroads", "Winter Lake 01", "Birchwood"
+- Greg Zaal: "Eilenriede Park", "Moonlit Golf", "Kloppenheim 02", "Goegap", "Rogland Overcast", "Rogland Moonlit
+  Night", "Klippad Dawn 2"
+- Greg Zaal and Dimitrios Savva: "Belfast Sunset"
+- Dimitrios Savva and Jarod Guest: "Belfast Open Field"
+- Jarod Guest and Dario Barresi: "Aarfontein Dirt Road"
+- Dario Barresi: "Farm Road", "Bryanston Park Sunrise"
+- Savva Zakharov: "Smelting Tower 02"
+- Andreas Mischok: "Snowy Field"
 
 ## NASA Deep Star Maps
 

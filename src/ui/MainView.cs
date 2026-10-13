@@ -472,7 +472,7 @@ namespace SnowRunnerNextGen
             if (s.Stars == "ours") parts.Add("stars " + Number(s.StarsFactor) + "x");
             if (s.Weather == "ours") parts.Add("weather " + (s.WeatherParts ?? "").Replace(",", ", "));
             if (s.Debris == "ours") parts.Add("debris " + Number(s.DebrisFactor) + "x drops");
-            if (s.Cubes == "ours") parts.Add("winter cubes");
+            if (s.Cubes == "ours") parts.Add("reflection cubes");
             if (s.Skies == "ours") parts.Add("winter skies");
             if (s.Logos == "ours") parts.Add("logo");
             List<string> notes = new List<string>();

@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Winter cubes in the day states: which reflection cube a state names while boot.pak holds the winter cubes. Each
-// daytime state (initial.pak, [media]\...\classes\daytimes\*.xml) names a reflection cube,
+// The snow cubes in the day states: which reflection cube a state names while boot.pak holds our cubes. Each daytime
+// state (initial.pak, [media]\...\classes\daytimes\*.xml) names a reflection cube,
 // EnvMap="env/day_al_01__d_ggxrefl.tga", the painted sky that paint, glass and chrome mirror and that Sky ambient and
 // Bounce light read the sky's and the ground's colour from. The game shares its cubes between regions, and two of its
-// choices do not hold once the snow regions' cubes are photographs of snow (the Winter reflection cubes card,
-// lut_grade.js):
+// choices do not hold once the snow families' cubes (Alaska's and Scandinavia's) are photographs of snow (the
+// Reflection cubes card, lut_grade.js):
 // 1. Kola (ru_03) and Yukon (us_04) give their clear days 1 and 2 the Michigan summer cube (day_mich_01) and only day 3
 //    the Alaska snow cube (day_al_01), which Alaska and Amur use for all three. A clear day state (no variant letter)
 //    of a snow region (a region with snow in any of its states) that names a summer cube (mich, taim, mexico) takes the
 //    cube the region's other clear days use, or day_al_01 when they have none.
-// 2. Regions without snow name the snow cubes in a few states (Wisconsin's weather variants name day_al_02, North
-//    Carolina's dusk evn_al_01). Such a state takes the cube the region's other states of its kind use (clear days,
-//    weather variants, dusk, dawn, night), or the cube of that kind from the family of the region's clear days
+// 2. Regions without snow name the snow cubes in a few states (a weather variant of Wisconsin names day_al_02, North
+//    Carolina's dusk and dawn evn_al_01). Such a state takes the cube the region's other states of its kind use (clear
+//    days, weather variants, dusk, dawn, night), or the cube of that kind from the family of the region's clear days
 //    (day_taim_01 gives evn_taim_01).
 // Not a part of its own but a fact of the game folder, like the photo night skies' sky alpha: lod_patch.js makes the
 // edit in every build of initial.pak while boot.pak holds the winter cube, and takes it out again when the stock cube
@@ -24,6 +24,7 @@ const { zipEntries } = require('./sky_stars.js');
 const DAYTIME_ENTRY = /classes[\\/]daytimes[\\/]([^\\/]+)\.xml$/i;
 const SUMMER_CUBE = /^env[\\/]day_(?:a_)?(?:mich|taim|mexico)_\d+__d_ggxrefl\.tga$/i;
 const SNOW_CUBE = 'env/day_al_01__d_ggxrefl.tga';
+const SNOW_FAMILY = /^env\/[a-z_]+_(?:al|scand)_\d+__d_ggxrefl\.tga$/;   // the cubes that show snow: Alaska's and Scandinavia's
 const CUBE_PCT = 'env_day_al_01__d_ggxrefl.pct';   // the entry in boot.pak the winter cube replaces
 const CUBES = process.env.SR_CUBES_DIR || path.join(__dirname, '..', 'replacements', 'cubes', 'pct');
 // how the game names a family's cube of a kind: day_a_taim_01, evn_taim_01, morning_taim_02, mrn_scand_01, nght_scand_01
@@ -58,7 +59,7 @@ function setCubes()
     return new Set(fs.readdirSync(CUBES).filter((f) => /^env_.*__d_ggxrefl\.pct$/i.test(f)).map((f) => 'env/' + f.slice(4, -4).toLowerCase() + '.tga'));
 }
 // what the whole pak tells: the snow regions; for each the cube its clear days use (the most common one that is not a
-// summer cube); for each region and kind of state the cube most of them name, the set's own left out; every cube
+// summer cube); for each region and kind of state the cube most of them name, the snow families' left out; every cube
 // named. entries: [{ name, text }] of the daytime files
 function cubeContext(entries)
 {
@@ -72,7 +73,7 @@ function cubeContext(entries)
         const r = rootTag(text), env = r && attr(text.slice(r.start, r.end), 'EnvMap');
         if (!env) continue;
         named.add(norm(env));
-        if (!replaced.has(norm(env))) count(own, s.region + ' ' + kindOf(s), env);
+        if (!SNOW_FAMILY.test(norm(env))) count(own, s.region + ' ' + kindOf(s), env);
         if (kindOf(s) === 'clear' && !SUMMER_CUBE.test(env)) count(clear, s.region, env);
     }
     const most = (counts) => [...counts].sort((a, b) => b[1] - a[1])[0][0];
@@ -89,7 +90,7 @@ function ownKindCube(ctx, region, kind)
     const family = /^env\/day_(?:a_)?([a-z]+)_\d+__/.exec(norm(ctx.ownCube.get(region + ' clear') || ''));
     if (!family) return null;
     const cube = new RegExp('^env/' + KIND_CUBE[kind] + '_' + family[1] + '_\\d+__d_ggxrefl\\.tga$');
-    return [...ctx.named].filter((n) => cube.test(n) && !ctx.replaced.has(n)).sort()[0] || null;
+    return [...ctx.named].filter((n) => cube.test(n)).sort()[0] || null;
 }
 // the edit of one entry: { out, notes }, out === text when nothing changed
 function cubeEdit(text, entryName, ctx)
@@ -103,7 +104,7 @@ function cubeEdit(text, entryName, ctx)
     {
         let next = null;
         if (snow) { if (kind === 'clear' && SUMMER_CUBE.test(value)) next = ctx.clearCube.get(s.region) || SNOW_CUBE; }
-        else if (ctx.replaced.has(norm(value))) next = ownKindCube(ctx, s.region, kind);
+        else if (SNOW_FAMILY.test(norm(value)) && ctx.replaced.has(norm(value))) next = ownKindCube(ctx, s.region, kind);
         if (!next || norm(next) === norm(value)) return all;
         const short = (v) => v.replace(/^env[\\/]/, '').replace(/__d_ggxrefl\.tga$/, '');
         notes.push('cube ' + short(value) + ' -> ' + short(next));

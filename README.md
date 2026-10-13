@@ -29,7 +29,7 @@ Reflections and water
 - River depth colour: deeper water tints teal or brown from its own colour.
 - Sun glow through waves: river waves light up against a low sun.
 - Headlight glare cap: tamer headlight shine on wet ground. Off by default.
-- Winter reflection cubes: the snow regions' painted sky cubes, which paint and chrome mirror and the ambient light reads, made anew from winter panoramas.
+- Reflection cubes: the painted sky cubes that paint and chrome mirror and the ambient light reads, made anew from photographs for every region and hour.
 
 Atmosphere and image
 

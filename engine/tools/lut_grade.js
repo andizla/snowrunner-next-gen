@@ -23,9 +23,9 @@
 // replacements\sky\pct, written the way the particle set is. The photo skies need their sky alpha raised in
 // initial.pak: lod_patch.js does that in every build once boot.pak holds them, so `lod_patch.js initial-refresh`
 // follows a sky-install or sky-restore.
-// A fourth part is the reflection cubes: four of the snow regions' cubes (env_day_al_01, the clear days; env_day_al_02,
-// the weather variants; env_evn_al_01 and env_morning_al_01, dusk and dawn) made anew from winter panoramas by make_cube.js, SR_CUBES_DIR, default replacements\cubes\pct,
-// written the way the particle set is.
+// A fourth part is the reflection cubes: 25 of the 26 cubes the daytime states name (the Michigan, Taymyr, Mexico,
+// Alaska and Scandinavia families and default_day; the garage keeps the game's) made anew from panoramas by
+// make_cube.js, SR_CUBES_DIR, default replacements\cubes\pct, written the way the particle set is.
 // A fifth part is the winter skies: Kola's two clear-day sky textures (env_sky_01_ru_03_day, env_sky_02_ru_03_day, the
 // sphere_sky layer of its sky) from the same panorama, SR_SKIES_DIR, default replacements\skies\pct, written the same way.
 // usage: node lut_grade.js status | list [strength] | install [strength] | restore | adopt | build <file> [strength]
@@ -308,7 +308,7 @@ function buildBoot(parts, label, adopted = false)
         const count = (type) => [...p.jobs.values()].filter((j) => j.type === type).length;
         if (p.particles) has.push(count('particle') + ' particle files at twice the size');
         if (p.sky) has.push('the night sky (' + count('sky') + ' files: the star map and the photo skies)');
-        if (p.cubes) has.push('the winter reflection cubes (' + count('cube') + ' files)');
+        if (p.cubes) has.push('the reflection cubes (' + count('cube') + ' files)');
         if (p.skies) has.push('the winter skies (' + count('wsky') + ' files)');
         console.log(label + ': boot.pak now has ' + has.join(' and ') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
     }
