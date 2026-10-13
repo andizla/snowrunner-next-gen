@@ -68,6 +68,12 @@ Licensed under the Apache License, Version 2.0. The licence text is in licenses\
 - The rebuilt shadow edges (Shadow edges, written fresh from the papers): Macedo and Apolinário, "Revectorization-Based
   Shadow Mapping" (Graphics Interface 2016); Bondarev, "Shadow Map Silhouette Revectorization" (I3D 2014).
 
+## SnowRunnerTools
+
+The load list tool (engine\tools\load_list.js) reads and writes the game's pak.load_list in the layout worked out in
+SnowRunnerTools by chase-000, https://github.com/chase-000/SnowRunnerTools (MIT licence). None of its code is
+included; the tool is written fresh.
+
 ## Game-derived content
 
 - engine\replacements\particles: the game's own particle textures, upscaled to twice their size by the author with

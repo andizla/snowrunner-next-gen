@@ -1,157 +1,160 @@
-// pak.load_list, the first entry of initial.pak, boot.pak and gfx.pak: everything the pak loads and what each thing waits
-// for. The game knows a class file (a truck, a daytime state, a sky) only when this list names it, so a file added to
-// the pak needs a line here. Read from the game's own lists (2026-10-13); three of them come back byte for byte.
-//   head     u32 1, u8 1, u32 N, u32 3
-//   types    N bytes: 1 and 5 for two entries without a name, then one per record: 1 a stage, 2 a file
-//   11 bytes 06 01 00 00 00 00 01 01 00 00 00, the same in every list
-//   waits    N - 1 lists, one per record and one for the list's end: u32 count, u8 listed, and when listed count x u32.
-//            A number names the record it waits for, counted from 1. A file waits for the stage before its run of
-//            files (a class file for "TEMPLATES load"), the stage after a run for every file of the run, a stage
-//            after a stage for that stage, the end for the last record. The first record alone is not listed (count 1)
-//   11 bytes 01 00 00 00 00 02 00 00 00 01 01, the same in every list
-//   records  N - 2 times: u32 n, u32 m, n + m bytes of 01, the name, and for a file its loader and its pak
-//            (a stage: n 1, m 2; a file: n 3, m 2). Names are u32 length and text: "<media>\classes\daytimes\x.xml",
-//            "cls_loader", "initial.pak"; "CLASSES load" for a stage
-//   end      u32 0, u32 2, 01 01
-// The class files stand together, in the byte order of their names. check holds initial.pak's rules: boot.pak's and
-// gfx.pak's lists read and write back the same, but their textures wait in another pattern, which check reports.
-// The level paks' lists hold records this does not read (parse throws on them).
-// Not proven in the game yet: whether a class file added here and to the pak is then known to the game.
-// Library: parse(buffer) -> list; serialise(list) -> buffer; check(list) -> the rules it breaks ([] when sound);
-//          addClassFile(list, name[, pak]) -> the record index it took (the list is changed in place)
+// pak.load_list, the first entry of every pak: everything the pak loads, in order, and what each thing waits for. The
+// game knows a class file (a truck, a daytime state, a sky) only when this list names it, so a file added to a pak
+// needs an entry here. Seen in the game on 2026-10-13: daytime states added to initial.pak and named in its list were
+// loaded by a level that asks for them; without the entries the same level crashed.
+// The layout follows the reading in SnowRunnerTools by chase-000 (https://github.com/chase-000/SnowRunnerTools, MIT
+// licence). No code of it is here.
+//   head     i32 1, u8 1, i32 count, i32 3, u8 1
+//   types    count bytes, one per entry: 5 the start (first), 1 a stage, 2 an asset, 6 the end (last)
+//   u8 1
+//   waits    per entry: i32 n, u8 1, n x i32. The numbers name the entries it waits for, counted from 0, ascending.
+//            The start waits for nothing. An asset waits for one entry: the stage before its run (a class file
+//            always) or an asset of the run (a texture's faces for its header). A stage after assets waits for those
+//            of them nothing else waits for, a stage after a stage for that stage, the end likewise
+//   u8 1
+//   strings  per entry: i32 s, i32 2, s + 2 bytes of 01, then s strings (u32 length and text). The start and the end
+//            have none, a stage one ("CLASSES load"), an asset three ("<media>\classes\daytimes\x.xml", "cls_loader",
+//            "initial.pak") or four (a texture of a level or a garage: a JSON text last, naming its base)
+// Only initial.pak holds class files. They stand together, in the byte order of their names.
+// Library: parse(buffer) -> { entries: [{ type, deps, strings }] }; serialise(list) -> buffer;
+//          check(list) -> the rules it breaks ([] when sound); runs(list) -> the runs of assets between stages;
+//          addClassFile(list, name[, pak]) -> the entry number it took (the list is changed in place)
 // usage: node load_list.js check <pak.load_list>                 reads it, writes it back in memory, checks the rules
 //        node load_list.js add <in> <out> <class file> [...]     the list with those class files added
 const fs = require('fs');
 
-const HEAD = Buffer.from([1, 0, 0, 0, 1]), THREE = Buffer.from([3, 0, 0, 0]);
-const FIXED_1 = Buffer.from('0601000000000101000000', 'hex'), FIXED_2 = Buffer.from('0100000000020000000101', 'hex');
-const STAGE = 1, FILE = 2;
-const GROUP = { [STAGE]: { n: 1, m: 2 }, [FILE]: { n: 3, m: 2 } };
+const START = 5, STAGE = 1, ASSET = 2, END = 6;
 const CLASS = 'cls_loader';
 
 function parse(b)
 {
-    if (b.length < 13 || !b.subarray(0, 5).equals(HEAD) || !b.subarray(9, 13).equals(THREE)) throw new Error('not a load list this tool knows (the head differs)');
-    const N = b.readUInt32LE(5);
-    if (N < 3 || 13 + N + 11 > b.length) throw new Error('the load list is shorter than its count says');
-    const types = [...b.subarray(13, 13 + N)];
-    let o = 13 + N;
+    let o = 0;
     const need = (n) => { if (o + n > b.length) throw new Error('the load list ends inside an entry (at ' + o + ')'); };
-    const fixed = (f, what) => { need(f.length); if (!b.subarray(o, o + f.length).equals(f)) throw new Error('the load list differs from the known form (' + what + ', at ' + o + ')'); o += f.length; };
+    const differs = (what, at) => new Error('the load list differs from the known form (' + what + ', at ' + at + ')');
     const u32 = () => { need(4); const v = b.readUInt32LE(o); o += 4; return v; };
-    const str = () => { const l = u32(); need(l); const s = b.toString('latin1', o, o + l); o += l; return s; };
-    const group = () => { const n = u32(), m = u32(); need(n + m); const f = [...b.subarray(o, o + n + m)]; o += n + m; return { n, m, f }; };
-    fixed(FIXED_1, 'before the waits');
-    const waits = [];
-    for (let i = 0; i < N - 1; i++)
+    const one = (what) => { need(1); if (b[o++] !== 1) throw differs(what, o - 1); };
+    const is = (v, what) => { if (u32() !== v) throw differs(what, o - 4); };
+    is(1, 'the head'); one('the head');
+    const count = u32();
+    is(3, 'the head'); one('the head');
+    need(count);
+    const entries = [...b.subarray(o, o + count)].map((type) => ({ type, deps: [], strings: [] }));
+    o += count;
+    one('before the waits');
+    for (const e of entries)
     {
-        const count = u32(); need(1);
-        const listed = b[o++];
-        if (listed > 1) throw new Error('the load list differs from the known form (a wait list, at ' + (o - 1) + ')');
-        if (!listed) { waits.push({ unlisted: count }); continue; }
-        need(4 * count);
-        const l = []; for (let k = 0; k < count; k++) l.push(u32());
-        waits.push(l);
+        const n = u32();
+        one('a wait list'); need(4 * n);
+        for (let k = 0; k < n; k++) e.deps.push(u32());
     }
-    fixed(FIXED_2, 'before the records');
-    const records = [];
-    for (let i = 0; i < N - 2; i++)
+    one('before the strings');
+    for (const e of entries)
     {
-        const g = group(), name = str(), file = types[i + 2] === FILE;
-        records.push({ group: g, name, loader: file ? str() : null, pak: file ? str() : null });
+        const s = u32();
+        is(2, 'the strings of an entry'); need(s + 2);
+        for (let k = 0; k < s + 2; k++) one('the strings of an entry');
+        for (let k = 0; k < s; k++) { const l = u32(); need(l); e.strings.push(b.toString('latin1', o, o + l)); o += l; }
     }
-    const end = group();
     if (o !== b.length) throw new Error('the load list goes on after its last entry (' + (b.length - o) + ' bytes)');
-    return { types, waits, records, end };
+    return { entries };
 }
 
 function serialise(list)
 {
-    const u32 = (v) => { const x = Buffer.alloc(4); x.writeUInt32LE(v >>> 0); return x; };
-    const str = (s) => Buffer.concat([u32(s.length), Buffer.from(s, 'latin1')]);
-    const group = (g) => Buffer.concat([u32(g.n), u32(g.m), Buffer.from(g.f)]);
-    const out = [HEAD, u32(list.types.length), THREE, Buffer.from(list.types), FIXED_1];
-    for (const w of list.waits) out.push(Array.isArray(w) ? Buffer.concat([u32(w.length), Buffer.from([1]), ...w.map(u32)]) : Buffer.concat([u32(w.unlisted), Buffer.from([0])]));
-    out.push(FIXED_2);
-    for (const r of list.records)
+    const e = list.entries;
+    let size = 16 + e.length;   // the head, the types and the two single bytes
+    for (const x of e) size += 15 + 4 * x.deps.length + x.strings.reduce((a, s) => a + 5 + s.length, 0);
+    const b = Buffer.alloc(size);
+    let o = 0;
+    const u8 = (v) => { b[o++] = v; }, u32 = (v) => { b.writeUInt32LE(v, o); o += 4; };
+    u32(1); u8(1); u32(e.length); u32(3); u8(1);
+    for (const x of e) u8(x.type);
+    u8(1);
+    for (const x of e) { u32(x.deps.length); u8(1); for (const d of x.deps) u32(d); }
+    u8(1);
+    for (const x of e)
     {
-        out.push(group(r.group), str(r.name));
-        if (r.loader !== null) out.push(str(r.loader), str(r.pak));
+        u32(x.strings.length); u32(2);
+        b.fill(1, o, o + x.strings.length + 2); o += x.strings.length + 2;
+        for (const s of x.strings) { u32(s.length); o += b.write(s, o, 'latin1'); }
     }
-    out.push(group(list.end));
-    return Buffer.concat(out);
+    return b;
 }
 
-// the runs of files between two stages: [{ loaders, from, to }] (record indices, both ends in)
+// the runs of assets between two stages: [{ loaders, from, to }] (entry numbers, both ends in)
 function runs(list)
 {
     const out = [];
-    list.records.forEach((r, i) =>
+    list.entries.forEach((x, i) =>
     {
-        if (r.loader === null) return;
+        if (x.type !== ASSET) return;
         const last = out[out.length - 1];
-        if (last && last.to === i - 1) { last.to = i; last.loaders.add(r.loader); } else out.push({ loaders: new Set([r.loader]), from: i, to: i });
+        if (last && last.to === i - 1) { last.to = i; last.loaders.add(x.strings[1]); } else out.push({ loaders: new Set([x.strings[1]]), from: i, to: i });
     });
     return out;
 }
-const classRun = (list) => runs(list).find((g) => g.loaders.size === 1 && g.loaders.has(CLASS));
+const classRuns = (list) => runs(list).filter((g) => g.loaders.size === 1 && g.loaders.has(CLASS));
 
 // what the game's own lists keep to; a list that breaks one of these is not one to hand the game
 function check(list)
 {
-    const bad = [], K = list.records.length;
-    if (list.types.length !== K + 2 || list.waits.length !== K + 1) return ['the counts of types, waits and records do not fit'];
-    if (list.types[0] !== 1 || list.types[1] !== 5) bad.push('the two leading types are not 1 and 5');
-    if (Array.isArray(list.waits[0]) || list.waits[0].unlisted !== 1) bad.push('the first record lists what it waits for');
-    const end = list.waits[K];
-    if (!Array.isArray(end) || end.length !== 1 || end[0] !== K) bad.push('the end does not wait for the last record');
-    if (list.end.n !== 0 || list.end.m !== 2 || list.end.f.join('') !== '11') bad.push('the closing entry is not 0, 2, 01 01');
+    const bad = [], e = list.entries, last = e.length - 1;
+    if (last < 1 || e[0].type !== START || e[last].type !== END) return ['the list does not begin with its start and end with its end'];
     const names = new Set();
-    list.records.forEach((r, i) =>
+    let since = 0;   // the last entry before this one that is no asset
+    const waited = new Set();   // the assets after it that another asset waits for
+    e.forEach((x, i) =>
     {
-        const t = list.types[i + 2], g = GROUP[t];
-        if (!g) { bad.push('record ' + i + ' has type ' + t); return; }
-        if (r.group.n !== g.n || r.group.m !== g.m || r.group.f.some((v) => v !== 1)) bad.push('record ' + i + ' (' + r.name + ') has another shape than its type');
-        if ((t === FILE) !== (r.loader !== null)) bad.push('record ' + i + ' (' + r.name + ') has a loader and is no file, or the other way round');
-        const w = list.waits[i];
-        if (i && (!Array.isArray(w) || !w.length || w.some((v) => v < 1 || v > i))) bad.push('record ' + i + ' (' + r.name + ') waits for nothing or for something after it');
-        const key = r.name + '|' + r.loader;   // a texture stands there twice, once per loader
-        if (names.has(key)) bad.push(r.name + ' is named twice');
-        names.add(key);
+        const what = 'entry ' + i + (x.strings.length ? ' (' + x.strings[0] + ')' : '');
+        const inner = i > 0 && i < last, asset = x.type === ASSET;
+        if (inner && !asset && x.type !== STAGE) { bad.push(what + ' has type ' + x.type); return; }
+        if (!(asset ? [3, 4] : [inner ? 1 : 0]).includes(x.strings.length)) bad.push(what + ' has ' + x.strings.length + ' strings');
+        if (x.deps.some((d, k) => d >= i || (k && d <= x.deps[k - 1]))) bad.push(what + ' waits for an entry after it, or its numbers are out of order');
+        if (i === 0) { if (x.deps.length) bad.push('the start waits for something'); return; }
+        if (asset)
+        {
+            if (x.deps.length !== 1 || x.deps[0] < since) bad.push(what + ' waits for something other than the stage before its run or an asset of the run');
+            else if (x.deps[0] > since) waited.add(x.deps[0]);
+            const key = x.strings[0] + '|' + x.strings[1];   // a texture stands there twice, once per loader
+            if (names.has(key)) bad.push(x.strings[0] + ' is named twice');
+            names.add(key);
+            return;
+        }
+        // a stage or the end: after assets it waits for those nothing else waits for, otherwise for the entry before it
+        const want = [];
+        for (let k = since + 1; k < i; k++) if (!waited.has(k)) want.push(k);
+        if (!want.length) want.push(i - 1);
+        if (x.deps.length !== want.length || x.deps.some((d, k) => d !== want[k])) bad.push(what + (i - 1 > since ? ' does not wait for exactly the assets before it that nothing else waits for' : ' does not wait for the entry before it'));
+        since = i; waited.clear();
     });
-    for (const g of runs(list))
+    for (const g of classRuns(list))
     {
-        // every file waits for the record before the run; the record after it waits for all of them, in order
         for (let i = g.from; i <= g.to; i++)
         {
-            const w = list.waits[i];
-            if (g.from && (!Array.isArray(w) || w.length !== 1 || w[0] !== g.from)) bad.push(list.records[i].name + ' does not wait for the stage before its run');
+            if (e[i].deps[0] !== g.from - 1) bad.push(e[i].strings[0] + ' does not wait for the stage before the class files');
+            if (i > g.from && !(e[i - 1].strings[0] < e[i].strings[0])) bad.push(e[i].strings[0] + ' is out of order');
         }
-        const after = list.waits[g.to + 1];
-        if (!(Array.isArray(after) && after.length === g.to - g.from + 1 && after.every((v, k) => v === g.from + 1 + k))) bad.push('the entry after the files ending with ' + list.records[g.to].name + ' does not wait for exactly them');
     }
-    const c = classRun(list);
-    if (c) for (let i = c.from + 1; i <= c.to; i++) if (!(list.records[i - 1].name < list.records[i].name)) bad.push(list.records[i].name + ' is out of order');
     return bad.slice(0, 20);
 }
 
-// a class file added where its name belongs among the class files; returns its record index
+// a class file added where its name belongs among the class files; returns its entry number
 function addClassFile(list, name, pak = 'initial.pak')
 {
     if (!/^[\x20-\x7e]+$/.test(name)) throw new Error('a load list name is plain text: ' + name);
-    if (list.records.some((r) => r.name === name)) throw new Error(name + ' is in the load list already');
-    const g = classRun(list);
-    if (!g) throw new Error('the load list has no run of class files');
+    const e = list.entries;
+    if (e.some((x) => x.strings[0] === name)) throw new Error(name + ' is in the load list already');
+    const found = classRuns(list);
+    if (found.length !== 1) throw new Error(found.length ? 'the load list has several runs of class files' : 'the load list has no run of class files');
+    const g = found[0];
     let q = g.from;
-    while (q <= g.to && list.records[q].name < name) q++;
-    // the records from q on move up by one, and with them the numbers that name them
-    list.waits = list.waits.map((w) => (Array.isArray(w) ? w.map((v) => (v >= q + 1 ? v + 1 : v)) : w));
-    const stage = list.waits[g.to + 1];   // the stage after the run waits for the new file as well
-    const at = stage.findIndex((v) => v > q + 1);
-    stage.splice(at < 0 ? stage.length : at, 0, q + 1);
-    list.waits.splice(q, 0, [g.from]);    // like every class file, it waits for the record before the run
-    list.records.splice(q, 0, { group: { n: GROUP[FILE].n, m: GROUP[FILE].m, f: [1, 1, 1, 1, 1] }, name, loader: CLASS, pak });
-    list.types.splice(q + 2, 0, FILE);
+    while (q <= g.to && e[q].strings[0] < name) q++;
+    // the entries from q on move up by one, and with them the numbers that name them
+    for (const x of e) x.deps = x.deps.map((d) => (d >= q ? d + 1 : d));
+    const stage = e[g.to + 1].deps;   // the stage after the run waits for the new file as well
+    const at = stage.findIndex((d) => d > q);
+    stage.splice(at < 0 ? stage.length : at, 0, q);
+    e.splice(q, 0, { type: ASSET, deps: [g.from - 1], strings: [name, CLASS, pak] });   // like every class file, it waits for the stage before the run
     return q;
 }
 
@@ -164,7 +167,9 @@ if (require.main === module)
     {
         const b = fs.readFileSync(file), list = parse(b), bad = check(list);
         if (!serialise(list).equals(b)) bad.unshift('written back it is not the same file');
-        console.log(JSON.stringify({ entries: list.types.length, records: list.records.length, runs: runs(list).map((g) => [...g.loaders].join('+') + ' ' + (g.to - g.from + 1)), sound: !bad.length, bad }));
+        const assets = {};
+        for (const x of list.entries) if (x.type === ASSET) assets[x.strings[1]] = (assets[x.strings[1]] || 0) + 1;
+        console.log(JSON.stringify({ entries: list.entries.length, stages: list.entries.filter((x) => x.type === STAGE).length, assets, sound: !bad.length, bad }));
         process.exit(bad.length ? 1 : 0);
     }
     else if (cmd === 'add' && file && out && names.length)
@@ -174,7 +179,7 @@ if (require.main === module)
         const bad = check(list);
         if (bad.length) { console.error('the list would break its own rules: ' + bad.join('; ')); process.exit(1); }
         fs.writeFileSync(out, serialise(list));
-        console.log(JSON.stringify({ entries: list.types.length, added: took }));
+        console.log(JSON.stringify({ entries: list.entries.length, added: took }));
     }
     else { console.error('usage: node load_list.js check <pak.load_list> | add <in> <out> <class file> [...]'); process.exit(2); }
 }
