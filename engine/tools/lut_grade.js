@@ -276,6 +276,9 @@ function buildBoot(parts, label, adopted = false)
     if (!parts.grade && !parts.particles && !parts.sky && !parts.cubes && !parts.skies)
     {
         if (st !== 'ours') return;
+        // the kept original against the hash noted for it: a backup damaged on disk does not go into the game
+        const kept = readNote().origCdSha256;
+        if (kept && cdHash(ORIG) !== kept) throw new Error('the kept boot.pak.orig is not the file it was when it was kept: boot.pak left as it is');
         // the note keeps the last build's parts (adopt reads them)
         try { fs.copyFileSync(ORIG, tmp); swapIn(tmp, BOOT); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
         if (cdHash(BOOT) !== cdHash(ORIG)) throw new Error('boot.pak does not match its backup after the copy');

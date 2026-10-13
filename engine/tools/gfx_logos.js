@@ -171,7 +171,9 @@ function restore()
 {
     const st = state();
     if (st !== 'ours') { if (st === 'changed') console.log('logos: gfx.pak changed by something else: left alone'); return; }
-    const tmp = GFX + '.tmp';
+    const tmp = GFX + '.tmp', kept = readNote().origCdSha256;
+    // the kept original against the hash noted for it: a backup damaged on disk does not go into the game
+    if (kept && cdHash(ORIG) !== kept) throw new Error('the kept gfx.pak.orig is not the file it was when it was kept: gfx.pak left as it is');
     // the note keeps the last build (adopt reads it)
     try { fs.copyFileSync(ORIG, tmp); swapIn(tmp, GFX); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
     if (cdHash(GFX) !== cdHash(ORIG)) throw new Error('gfx.pak does not match its backup after the copy');

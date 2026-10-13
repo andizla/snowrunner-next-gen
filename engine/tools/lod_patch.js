@@ -775,6 +775,9 @@ function buildInitial(parts, label)
     if (!parts.grass && !parts.fill && !parts.stars && !parts.weather && !parts.debris && !photoSkies(BOOT).size && !winterCubes(BOOT))
     {
         if (now.state !== 'ours') return;
+        // the kept original against the hash noted for it: a backup damaged on disk does not go into the game
+        const kept = readGrassNote().origCdSha256;
+        if (kept && cdHash(INITIAL_ORIG) !== kept) throw new Error('the kept initial.pak.orig is not the file it was when it was kept: initial.pak left as it is');
         try { fs.copyFileSync(INITIAL_ORIG, tmp); swapIn(tmp, INITIAL); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
         if (cdHash(INITIAL) !== cdHash(INITIAL_ORIG)) throw new Error('initial.pak does not match its backup after the copy');
         console.log(label + ': the original initial.pak is back');
@@ -1090,9 +1093,11 @@ if (require.main === module)
             if (st === 'vanilla') { console.log('shared.pak is already the original'); return; }
             // neither the original nor this tool's build: a game update's new file or another tool's change would be lost
             if (st === 'changed') { console.log('scenery detail: shared.pak is neither the original nor this tool\'s build (another tool or a game update): left alone'); return; }
-            const tmp = PAK + '.tmp';
+            const tmp = PAK + '.tmp', kept = readNote().origCdSha256;
+            // the kept original against the hash noted for it: a backup damaged on disk does not go into the game
+            if (kept && cdHash(ORIG) !== kept) throw new Error('the kept shared.pak.orig is not the file it was when it was kept: shared.pak left as it is');
             try { fs.copyFileSync(ORIG, tmp); swapIn(tmp, PAK); } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
-            if (cdHash(PAK) !== (readNote().origCdSha256 || cdHash(ORIG))) throw new Error('shared.pak does not match the backup after the copy');
+            if (cdHash(PAK) !== (kept || cdHash(ORIG))) throw new Error('shared.pak does not match the backup after the copy');
             console.log('scenery detail: vanilla');
         }
         else console.log('usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup | build <file> [nature|all] | grass-status | grass-build <file> [factor] | grass-install [factor] | grass-restore | fill-status | fill-install [factor] | fill-restore | stars-status | stars-install [factor] | stars-restore | weather-status | weather-install [parts] | weather-restore | debris-status | debris-install [drops] | debris-restore | initial-status | initial-restore | initial-refresh | initial-adopt | initial-build <file> [grass=<f>] [fill=<f>] [stars=<f>] [weather=<parts>] [debris=<drops>]');

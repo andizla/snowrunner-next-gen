@@ -136,7 +136,8 @@ Check 'every part: status' (Summary (Status)) ('ours [' + ($default -join ',') +
 # the tool of the engine under test, run from a copy of the test in TEMP: a packaged engine reads nothing of the working tree
 $levelTest = Join-Path $env:TEMP 'ngen_level_states_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'level_states_test.js') -Destination $levelTest -Force
-Check 'map days: the tool on stand-in level files' ([string](& $node $levelTest (Join-Path (Split-Path -Parent $ngen) 'tools') | Select-Object -Last 1)) 'all passed'
+$levelTools = if ($Engine) { Join-Path $Engine 'tools' } else { Join-Path $root 'engine\tools' }   # the dev engine's tools are the working tree's
+Check 'map days: the tool on stand-in level files' ([string](& $node $levelTest $levelTools | Select-Object -Last 1)) 'all passed'
 Check 'every part: boot.pak holds the grade, the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 144'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'

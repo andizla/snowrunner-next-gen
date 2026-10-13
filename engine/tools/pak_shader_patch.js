@@ -309,7 +309,15 @@ if (cmd === 'selftest') {
   console.log('installed ' + arg + ': ' + r.found + ' of ' + r.files + ' replacements matched, ' + r.slots + ' of ' + r.blobs + ' blobs replaced; shader.pak ' + r.out.length + ' bytes');
 } else if (cmd === 'restore') {
   if (!fs.existsSync(ORIG)) throw new Error('no backup to restore');
-  writeSwap(PAK, fs.readFileSync(ORIG));
+  const kept = fs.readFileSync(ORIG);
+  // the kept original against the sha256 noted when the shader sets were made from it (prepared.json, where the
+  // installer keeps one): a backup damaged on disk does not go into the game. A note older than the kept file says
+  // nothing about it (the original was kept anew since) and is passed over
+  const prepared = path.join(STATE_DIR, 'prepared.json');
+  let noted = null;
+  try { if (fs.statSync(prepared).mtimeMs >= fs.statSync(ORIG).mtimeMs) noted = JSON.parse(fs.readFileSync(prepared, 'utf8')).orig || null; } catch (e) { noted = null; }
+  if (noted && sha256(kept) !== noted) throw new Error('the kept shader.pak.orig is not the file it was when it was kept: shader.pak left as it is');
+  writeSwap(PAK, kept);
   if (fs.existsSync(NOTE)) writeNote({ variant: null, date: localStamp() });
   console.log('shader.pak restored from the backup');
 } else console.log('usage: selftest [pak] | status | install <blob.cso|variant> | install-set <folder|replacements subfolder> | restore');
