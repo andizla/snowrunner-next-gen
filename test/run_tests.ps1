@@ -90,12 +90,12 @@ try {
   $cards['fog'].ToggleByUser()
   # the weather: the rows that are on, as the tool's comma list
   $s = & $selection
-  Check 'selection: the weather, all seven parts by default' ($s['weather']) 'shadows,showers,evening,horizon,far,fireflies,pollen'
+  Check 'selection: the weather, eight parts by default, the far land not' ($s['weather']) 'shadows,showers,evening,horizon,far,fireflies,pollen,drift'
   $cards['weather'].Choice[5] = 1
   $s = & $selection
-  Check 'selection: the fireflies leave the list' ($s['weather']) 'shadows,showers,evening,horizon,far,pollen'
+  Check 'selection: the fireflies leave the list' ($s['weather']) 'shadows,showers,evening,horizon,far,pollen,drift'
   Check 'selection: no map days by default' ([string]$s['maps']) ''
-  foreach ($row in 0..6) { $cards['weather'].Choice[$row] = 1 }
+  foreach ($row in 0..8) { $cards['weather'].Choice[$row] = 1 }
   $s = & $selection
   Check 'selection: every row off sends no weather' ("$($s['weather'])") ''
   foreach ($row in 0..6) { $cards['weather'].Choice[$row] = 0 }
@@ -137,7 +137,7 @@ try {
   $has.Dll = 'ours'; $has.DllCurrent = $true; $has.Factor = '1'; $has.SlopeBias = '1'; $has.AoHalf = '1'
   $has.Fill = 'ours'; $has.FillFactor = '0.7'; $has.Grade = 'ours'; $has.GradeStrength = '1'; $has.Particles = 'ours'
   $has.Stars = 'ours'; $has.StarsFactor = '3'; $has.Sky = 'ours'; $has.Logos = 'ours'
-  $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,far,fireflies,pollen'
+  $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift'
   $has.Debris = 'ours'; $has.DebrisFactor = '4'; $has.Cubes = 'ours'
   $viewType.GetField('installed', $flags).SetValue($view, $has)
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())

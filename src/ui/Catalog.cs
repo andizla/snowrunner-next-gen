@@ -126,6 +126,7 @@ namespace SnowRunnerNextGen
             weather.Options.Add(new OptionSet("Far rain and snow", new[] { "on", "off" }, new[] { "far", "" }, 0));
             weather.Options.Add(new OptionSet("Fireflies", new[] { "on", "off" }, new[] { "fireflies", "" }, 0));
             weather.Options.Add(new OptionSet("Pollen", new[] { "on", "off" }, new[] { "pollen", "" }, 0));
+            weather.Options.Add(new OptionSet("Drifting clouds", new[] { "on", "off" }, new[] { "drift", "" }, 0));
             // off by default until it has been looked at in the game: more land to draw on the snow maps
             weather.Options.Add(new OptionSet("Far land", new[] { "on", "off" }, new[] { "land", "" }, 1));
             list.Add(weather);

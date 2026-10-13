@@ -19,6 +19,7 @@
 //   fireflies  fireflies at night in the regions with rain in their day states (where the night has no weather of its
 //            own; with the evening part their nights take the fireflies and the drizzle keeps to dusk and dawn)
 //   pollen   pollen drifting in the clear day states of the same regions
+//   drift    the clouds the game holds still turn slowly (the sky files: see driftEdit)
 //   land     the land drawn as far as the distant fog reaches. A state hides the terrain past TerrainHideDist, and many
 //            hide it nearer than their distant fog ends (<DistantFog EndDistance>), so in clear air the land stops
 //            short. There TerrainHideDist goes up to the fog's end, LAND_MAX at most. Off by default
@@ -35,9 +36,9 @@ const path = require('path');
 const DAYTIME_ENTRY = /classes[\\/]daytimes[\\/]([^\\/]+)\.xml$/i;
 const SKY_ENTRY = /classes[\\/]skies[\\/](sky_[^\\/]+)\.xml$/i;
 const WEATHER_ENTRY = /classes[\\/]weather[\\/]([^\\/]+)\.xml$/i;
-const PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen', 'land'];
+const PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen', 'drift', 'land'];
 const LAND_MAX = 3000;   // metres: the farthest the land part lets a state draw its terrain
-const WEATHER_DEFAULT = 'shadows,showers,evening,horizon,far,fireflies,pollen';
+const WEATHER_DEFAULT = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift';
 const RAIN_SNOW = /^(light|heavy)_(rain|snow)(_|$)/i;
 const SHADOW_LINE = (map) => '<CloudShadowMap Map="env/shadow_clouds/cloud_shadow_0' + map + '.tga" Scale="6" Speed="2.0" Direction="(1.0; 0.5)"/>';
 const fmt = (v) => v.toFixed(3).replace(/\.?0+$/, '');
@@ -131,6 +132,39 @@ function horizonEdit(text, fileRegion, notes)
     return text.slice(0, block.index) + block[1] + nl + out.join(nl) + nl + '\t' + block[3] + text.slice(block.index + block[0].length);
 }
 
+// drift: a cloud picture the game holds still turns slowly. A sky's layers turn at their AngularSpeed, a state's
+// override or the layer's own; in most states the near band of clouds and some of the sky domes stand at 0 while the
+// bands behind them move. Where a layer of clouds or sky shows a cloud picture at speed 0 and at a strength above 0,
+// the setting takes the frame's DRIFT speed (the game's own speeds run from 0.1 to 0.9). Left still: the stars, sun,
+// moon and ground frames, and the pictures that belong to a place in the sky (aurora, Milky Way, rainbow, the sun's
+// glow, a painted sunset)
+const DRIFT = { sphere_sky: '0.06', clouds_near: '0.15', clouds_mid: '0.2', clouds_rear: '0.2' };
+const CLOUD_PICTURE = /^env[\\/](?:cloud_|sky_)/i;
+const STAYS = /^env[\\/](?:cloud_01_ru_03|cloud_01_us_11|cloud_01_ru_08|cloud_01_us_09|cloud_02_ru_08|cloud_05a_us_02|cloud_us_02_0044|cloud_us_02_0049|cloud_04_ru_02_day_to_night|cloud_04_ru_02_day_01a|cloud_08_us_02|sky_0[12]_ru_03_day|sky_test)/i;
+function driftEdit(text, notes)
+{
+    const attr = (tag, name) => { const m = new RegExp('\\b' + name + '\\s*=\\s*"([^"]*)"').exec(tag); return m ? m[1] : null; };
+    let count = 0;
+    const out = text.replace(/<!--[\s\S]*?-->|<Cloud\b[^>]*\/>|<Cloud\b[^>]*>[\s\S]*?<\/Cloud>/g, (layer) =>
+    {
+        if (layer.startsWith('<!--')) return layer;
+        const base = /<Cloud\b[^>]*>/.exec(layer)[0], speed = DRIFT[attr(base, 'Frame') || ''];
+        if (!speed) return layer;
+        const baseSpeed = Number(attr(base, 'AngularSpeed') || 0), baseMap = attr(base, 'DiffuseMap') || '';
+        const turn = (tag) =>
+        {
+            const own = attr(tag, 'AngularSpeed'), map = attr(tag, 'DiffuseMap'), shown = map === null ? baseMap : map;
+            if ((own !== null ? Number(own) : baseSpeed) !== 0 || !CLOUD_PICTURE.test(shown) || STAYS.test(shown)) return tag;
+            if (/\bDiffuseMultiplier\s*=\s*"[^"]*\)\s*x\s*0(?:\.0*)?\s*"/.test(tag)) return tag;   // drawn at strength 0: not there
+            count++;
+            return own !== null ? tag.replace(/\bAngularSpeed\s*=\s*"[^"]*"/, 'AngularSpeed="' + speed + '"') : tag.replace(/\s*(\/?>)$/, ' AngularSpeed="' + speed + '"$1');
+        };
+        return /<DayTimeOverride\b/.test(layer) ? layer.replace(/<DayTimeOverride\b[^>]*>/g, turn) : layer.replace(base, turn(base));
+    });
+    if (count) notes.push(count + ' still cloud settings now turn');
+    return out;
+}
+
 // the edit of one entry: { out, notes, kinds }, out === text when nothing changed. parts: weatherSpec()'s Set; ctx:
 // weatherContext()'s answer (the evening part needs it)
 function weatherEdit(text, entryName, parts, ctx = { rainRegions: new Set() })
@@ -190,11 +224,19 @@ function weatherEdit(text, entryName, parts, ctx = { rainRegions: new Set() })
             });
         }
     }
-    else if (sky && parts.has('horizon'))
+    else if (sky)
     {
-        const region = /^sky_(.+)$/i.exec(sky[1])[1].toLowerCase();
-        const next = horizonEdit(out, region, notes);
-        if (next !== out) { out = next; kinds.add('horizon'); }
+        if (parts.has('horizon'))
+        {
+            const region = /^sky_(.+)$/i.exec(sky[1])[1].toLowerCase();
+            const next = horizonEdit(out, region, notes);
+            if (next !== out) { out = next; kinds.add('horizon'); }
+        }
+        if (parts.has('drift'))
+        {
+            const next = driftEdit(out, notes);
+            if (next !== out) { out = next; kinds.add('drift'); }
+        }
     }
     else if (def && parts.has('far') && RAIN_SNOW.test(def[1]))
     {
