@@ -136,12 +136,13 @@ namespace SnowRunnerNextGen
             // the map days, in the level paks: a row for each region, the key of a row that is on is its name and the
             // selection joins them into the tool's comma list. Off by default until it has been looked at in the game
             Module maps = M("maps", "ATMOSPHERE", "Map days", false,
-                "Three regions have no days of their own and show another region's. Maine shows two snow regions': snow in the air and winter light on a map without snow. This gives Maine Michigan's days, weather and sky; British Columbia and Austria have a row each.");
-            // the third value: a set of states and a sky under Maine's own number (initial.pak holds it), a copy of
-            // Michigan's to begin with
-            maps.Options.Add(new OptionSet("Maine", new[] { "Michigan's days", "the game's", "days of its own" }, new[] { "maine", "", "maineown" }, 0));
-            maps.Options.Add(new OptionSet("British Columbia", new[] { "North Carolina's days", "the game's" }, new[] { "bc", "" }, 1));
-            maps.Options.Add(new OptionSet("Austria", new[] { "both maps alike", "the game's" }, new[] { "austria", "" }, 1));
+                "Four regions have no days of their own and show another region's. Maine shows two snow regions': snow in the air and winter light on a map without snow. This gives Maine Michigan's days, weather and sky; British Columbia, Austria and Washington have a row each.");
+            // the third value of each row: days chosen map by map (level_states.js has the choices); Maine's are sets of
+            // its own that initial.pak holds
+            maps.Options.Add(new OptionSet("Maine", new[] { "Michigan's days", "the game's", "map by map" }, new[] { "maine", "", "maineown" }, 0));
+            maps.Options.Add(new OptionSet("British Columbia", new[] { "North Carolina's days", "the game's", "map by map" }, new[] { "bc", "", "bcown" }, 1));
+            maps.Options.Add(new OptionSet("Austria", new[] { "both maps alike", "the game's", "map by map" }, new[] { "austria", "", "austriaown" }, 1));
+            maps.Options.Add(new OptionSet("Washington", new[] { "Michigan's autumn", "the game's", "map by map" }, new[] { "washington", "", "washingtonown" }, 1));
             list.Add(maps);
             Module smoke = M("smoke", "ATMOSPHERE", "Smoke glow", true, "Exhaust and other smoke glows when the sun is behind it.");
             // the glow on eight more particle shaders (module smokemore): off unless picked

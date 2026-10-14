@@ -26,8 +26,9 @@
 //              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen, drift, land),
 //              "debris": null | "4" | "8" (the drops factor of the debris and splashes),
 //              "logos": null | "1",
-//              "maps": null | "maine,bc" (a comma list of maine or maineown, bc, austria: the level paks, see level_states.js;
-//              maineown gives Maine days of its own, which initial.pak then holds) }
+//              "maps": null | "maine,bc" (a comma list of maine, bc, austria, washington, each also with own behind it
+//              for days chosen map by map: the level paks, see level_states.js; Maine's are sets of its own, which
+//              initial.pak then holds) }
 // config.json next to this file: { "tools": <folder>, "dll": <hid.dll to install> }. A dev build may add "devGame" and
 //   "devState" (that game folder's state lives in devState) and "dump" and "sets" (folders that already hold the game's
 //   shaders and the sets made from them, so prepare.js is not run); NGEN_STATE_ROOT moves the state folders (tests)
@@ -561,10 +562,11 @@ async function readSkies(g, env)
 // the map days in the level paks ({ state, rows, part, changed }): ours with the rows that are in as a comma list,
 // vanilla, changed (a level file that names neither the game's states nor ours) or missing (no level pak of the rows
 // is there); part: a row was written halfway; changed: the rows another tool wrote
-const MAP_ROWS = ['maine', 'bc', 'austria'];
-// a row can be asked for with "own" behind it (maineown): days of the region's own, which initial.pak then holds
-const MAP_NAMES = ['maine', 'maineown', 'bc', 'austria'];
-const MAP_WORDS = { maine: 'Maine', maineown: 'Maine (days of its own)', bc: 'British Columbia', austria: 'Austria' };
+const MAP_ROWS = ['maine', 'bc', 'austria', 'washington'];
+// a row can be asked for with "own" behind it (maineown): days chosen map by map; Maine's are sets of its own, which
+// initial.pak then holds
+const MAP_NAMES = ['maine', 'maineown', 'bc', 'bcown', 'austria', 'austriaown', 'washington', 'washingtonown'];
+const MAP_WORDS = { maine: 'Maine', maineown: 'Maine (map by map)', bc: 'British Columbia', bcown: 'British Columbia (map by map)', austria: 'Austria', austriaown: 'Austria (map by map)', washington: 'Washington', washingtonown: 'Washington (map by map)' };
 const mapsList = (spec) => MAP_NAMES.filter((r) => String(spec || '').split(',').map((s) => s.trim()).includes(r)).join(',');
 const mapWords = (rows) => namesOf(rows.split(',').map((r) => MAP_WORDS[r]));
 async function readMaps(g, env)
@@ -1050,12 +1052,12 @@ async function apply(g, state, sel, adopt, leave)
     else { step('Putting the Next Gen logo in (gfx.pak, 700 MB)'); await must('gfx_logos.js', ['install'], env); }
 
     // the map days (the level paks): a few names in the player's own files, written in place and back the same way
-    if (now.maps.state === 'missing') { if (maps) warn('No level file of Maine, British Columbia or Austria is in this game folder: the map days were left out.'); }
+    if (now.maps.state === 'missing') { if (maps) warn('No level file of Maine, British Columbia, Austria or Washington is in this game folder: the map days were left out.'); }
     else if ((maps || '') !== now.maps.rows || now.maps.part)
     {
         // days of a region's own sit in initial.pak: the tool puts them in before a level file names them and takes
         // them out when none does
-        const own = /own/.test((maps || '') + ',' + now.maps.rows);
+        const own = /maineown/.test((maps || '') + ',' + now.maps.rows);
         step(maps ? 'Giving ' + mapWords(maps) + ' the new days (the level files' + (own ? ', initial.pak' : '') + ')' : 'Putting the maps\' own days back (the level files' + (own ? ', initial.pak' : '') + ')');
         await must('level_states.js', maps ? ['install', maps] : ['restore'], env);
     }

@@ -12,28 +12,48 @@
 //   bc       British Columbia's two maps name Michigan's. They take North Carolina's, which the game gives
 //            Washington, the region next to it.
 //   austria  Austria's first map names ru_08's, its second North Carolina's. The first takes the second's.
-// A row can also have a set of its own (daytime_own.js): maineown gives Maine's maps the names of us_06, a region the
-// game ships no states for. lod_patch.js puts that set into initial.pak, as a copy of Michigan's to begin with, and a
-// level file names it only while initial.pak holds it: install sees to the order both ways. When a game update
-// replaces initial.pak while the level files name the set, the status says part and the next install mends it.
+// Each row also has a value map by map (the row's name with "own" behind it), chosen from the game's maps and the
+// wiki's seasons (Maine is spring, British Columbia and Austria summer):
+//   maineown    The Lowland (no more snow and ice than Michigan) takes us_91, Yellowrock National Forest (two to four
+//               times that) us_92: sets of Maine's own (daytime_own.js), Michigan's days as they are and Yukon's
+//               spring with flurries for its blizzards
+//   bcown       Duncan Bay, a bay hit by a flood, takes Wisconsin's summer with its heavy rain; North Peak National
+//               Park, mountains, North Carolina's
+//   austriaown  Unterfeld, fields and farms, takes Tennessee's summer; Foothills keeps the game's North Carolina
+// and a row of its own:
+//   washington  Washington is an autumn region whose three maps name North Carolina's summer. They take Michigan's
+//               autumn; map by map (washingtonown) Selten River Mountains takes Zurdania's, the game's mountain autumn
+// A set of its own is not in the game: lod_patch.js puts it into initial.pak, and a level file names it only while
+// initial.pak holds it: install sees to the order both ways. When a game update replaces initial.pak while a level
+// file names a set, the status says part and the next install mends it.
 // The change is made in the player's own file, in place: the names, and the zip's CRC of the entry in its local header
 // and in the directory. Nothing is kept for the way back: restore writes the game's names, which the table holds, and
 // the CRC comes out as it was. A level pak that is missing, whose file is compressed or whose names are neither the
 // game's nor ours is left as it is.
-// usage: node level_states.js status | list | install <rows, e.g. maine,bc or maineown,bc> | restore
+// usage: node level_states.js status | list | install <rows, e.g. maine,bc or maineown,bcown> | restore
 //        status: one line of JSON, { "maine": "ours" | "own" | "vanilla" | "part" | "changed" | "missing", ... }
 //        install: the rows named take our names, every other row the game's; restore: every row the game's
 //        SR_PAKS_DIR points at the folder with the level paks; install and restore with the game closed
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
-const { ownCodes } = require('./daytime_own.js');
+const { OWN_DAYS, ownCodes } = require('./daytime_own.js');
 
 const PAKS = process.env.SR_PAKS_DIR || 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client';
+// levels: { level: [the game's code, the row's code] }; own: { level: the code it takes map by map } (a level left
+// out keeps the row's code)
 const ROWS = {
-    maine: { title: 'Maine', days: 'Michigan\'s days, weather and sky', own: 'us_06', levels: { level_us_06_01: ['us_04', 'us_01'], level_us_06_02: ['us_02', 'us_01'] } },
-    bc: { title: 'British Columbia', days: 'North Carolina\'s days, weather and sky', levels: { level_us_10_01: ['us_01', 'us_12'], level_us_10_02: ['us_01', 'us_12'] } },
-    austria: { title: 'Austria', days: 'North Carolina\'s days, weather and sky on both maps', levels: { level_us_14_01: ['ru_08', 'us_12'] } },
+    maine: { title: 'Maine', days: 'Michigan\'s days, weather and sky', levels: { level_us_06_01: ['us_04', 'us_01'], level_us_06_02: ['us_02', 'us_01'] },
+        ownDays: 'days of its own on each map: Michigan\'s on The Lowland, Yukon\'s spring with flurries on Yellowrock', own: { level_us_06_01: 'us_91', level_us_06_02: 'us_92' } },
+    bc: { title: 'British Columbia', days: 'North Carolina\'s days, weather and sky', levels: { level_us_10_01: ['us_01', 'us_12'], level_us_10_02: ['us_01', 'us_12'] },
+        ownDays: 'Wisconsin\'s days on Duncan Bay and North Carolina\'s on North Peak', own: { level_us_10_01: 'us_03', level_us_10_02: 'us_12' } },
+    austria: { title: 'Austria', days: 'North Carolina\'s days, weather and sky on both maps', levels: { level_us_14_01: ['ru_08', 'us_12'] },
+        ownDays: 'Tennessee\'s days on Unterfeld (Foothills keeps North Carolina\'s)', own: { level_us_14_01: 'us_07' } },
+    washington: { title: 'Washington', days: 'Michigan\'s autumn days, weather and sky on all three maps', levels: { level_us_16_01: ['us_12', 'us_01'], level_us_16_02: ['us_12', 'us_01'], level_us_16_03: ['us_12', 'us_01'] },
+        ownDays: 'Michigan\'s days on the National Park and Solace Bay, Zurdania\'s on the Mountains', own: { level_us_16_02: 'ru_17' } },
 };
+// the code a level takes map by map, and the sets of its own a row needs in initial.pak
+const ownOf = (spec, level) => (spec.own && spec.own[level]) || spec.levels[level][1];
+const setsOf = (spec) => [...new Set(Object.keys(spec.levels).map((level) => ownOf(spec, level)).filter((c) => OWN_DAYS[c]))];
 const HEAD = 1024;   // bytes of data_for_ssl.bin that hold its names
 const NAME = /(?:night_to_day|day_to_night|night|day__\d[a-z]?|sky)_((?:ru|us|ca)_\d\d)(?=[;\x00])/g;
 
@@ -118,19 +138,27 @@ function levelState(file, from, to, own)
 // when no level is there
 function rowState(row, held = ownHeld())
 {
-    const spec = ROWS[row], states = Object.entries(spec.levels).map(([level, [from, to]]) => levelState(path.join(PAKS, level + '.pak'), from, to, spec.own)).filter((s) => s !== 'missing');
-    if (!states.length) return 'missing';
-    if (states.includes('changed')) return 'changed';
-    if (states.every((s) => s === 'own')) return held.includes(spec.own) ? 'own' : 'part';
-    return states.every((s) => s === 'ours') ? 'ours' : states.every((s) => s === 'vanilla') ? 'vanilla' : 'part';
+    const spec = ROWS[row], seen = [];
+    for (const [level, [from, to]] of Object.entries(spec.levels))
+    {
+        const codes = levelCodes(path.join(PAKS, level + '.pak'));
+        if (codes) seen.push({ codes, goals: { vanilla: from, ours: to, own: spec.own ? ownOf(spec, level) : null } });
+    }
+    if (!seen.length) return 'missing';
+    const names = (s, code) => code && s.codes.length >= 8 && s.codes.every((c) => c === code);
+    const all = (goal) => seen.every((s) => names(s, s.goals[goal]));
+    if (all('vanilla')) return 'vanilla';
+    if (all('ours')) return 'ours';
+    if (all('own')) return setsOf(spec).every((c) => held.includes(c)) ? 'own' : 'part';
+    return seen.every((s) => Object.values(s.goals).some((code) => names(s, code))) ? 'part' : 'changed';
 }
 const status = () => { const held = ownHeld(); return Object.fromEntries(Object.keys(ROWS).map((r) => [r, rowState(r, held)])); };
-// the own sets some level file names, in whole or in part: initial.pak has to keep these
+// the sets of its own some level file names, in whole or in part: initial.pak has to keep these
 function ownNamed()
 {
     const out = new Set();
-    for (const spec of Object.values(ROWS)) if (spec.own) for (const level of Object.keys(spec.levels)) if ((levelCodes(path.join(PAKS, level + '.pak')) || []).includes(spec.own)) out.add(spec.own);
-    return [...out];
+    for (const spec of Object.values(ROWS)) for (const level of Object.keys(spec.levels)) for (const c of levelCodes(path.join(PAKS, level + '.pak')) || []) if (OWN_DAYS[c]) out.add(c);
+    return Object.keys(OWN_DAYS).filter((c) => out.has(c));
 }
 
 // every region code in the head of a level's file becomes `code`; the entry's CRC follows in both of its places
@@ -159,25 +187,27 @@ function writeLevel(file, code)
 // go in (initial.pak is another tool's, or not this game folder's), the row takes the borrowed days instead
 function install(want)
 {
-    const l = lod(), asked = Object.keys(ROWS).filter((r) => want.includes(r + 'own')).map((r) => ROWS[r].own);
+    const l = lod(), asked = Object.keys(ROWS).filter((r) => want.includes(r + 'own')).flatMap((r) => setsOf(ROWS[r]));
     let held = ownHeld();
     if (l && asked.some((c) => !held.includes(c))) held = ownCodes(l.setDays([...new Set(held.concat(asked))].join(',')));
     for (const row of Object.keys(ROWS))
     {
-        const spec = ROWS[row], wantOwn = want.includes(row + 'own'), own = wantOwn && held.includes(spec.own), on = wantOwn || want.includes(row);
+        const spec = ROWS[row], wantOwn = want.includes(row + 'own'), own = wantOwn && setsOf(spec).every((c) => held.includes(c)), on = wantOwn || want.includes(row);
         const goal = own ? 'own' : on ? 'ours' : 'vanilla', done = [], left = [];
-        if (wantOwn && !own) console.log('warning: days of its own for ' + spec.title + ' need this tool\'s build of initial.pak, which is not there: ' + spec.title + ' takes ' + spec.days + ' instead');
+        if (wantOwn && !own) console.log('warning: ' + spec.title + '\'s days of its own need this tool\'s build of initial.pak, which is not there: ' + spec.title + ' takes ' + spec.days + ' instead');
         for (const [level, [from, to]] of Object.entries(spec.levels))
         {
-            const file = path.join(PAKS, level + '.pak'), state = levelState(file, from, to, spec.own);
-            if (state === 'missing') continue;
-            if (state === 'changed') { if (on) left.push(level); continue; }
-            if (state === goal) continue;
-            writeLevel(file, own ? spec.own : on ? to : from);
-            if (levelState(file, from, to, spec.own) !== goal) throw new Error(level + '.pak does not read back as written');
+            const file = path.join(PAKS, level + '.pak'), codes = levelCodes(file), mine = spec.own ? ownOf(spec, level) : null;
+            if (!codes) continue;
+            const target = goal === 'own' ? mine : goal === 'ours' ? to : from;
+            // a file is ours to write only when it names one of the row's choices throughout
+            if (!(codes.length >= 8 && [from, to, mine].some((code) => code && codes.every((c) => c === code)))) { if (on) left.push(level); continue; }
+            if (codes.every((c) => c === target)) continue;
+            writeLevel(file, target);
+            if (!(levelCodes(file) || []).every((c) => c === target)) throw new Error(level + '.pak does not read back as written');
             done.push(level);
         }
-        if (done.length) console.log('map days: ' + spec.title + (own ? ' now has days of its own, which begin as ' + spec.days : on ? ' now has ' + spec.days : ' has the game\'s own names again') + ' (' + done.join(', ') + ')');
+        if (done.length) console.log('map days: ' + spec.title + (own ? ' now has ' + spec.ownDays : on ? ' now has ' + spec.days : ' has the game\'s own names again') + ' (' + done.join(', ') + ')');
         if (left.length) console.log('map days: ' + left.join(', ') + ' changed by something else: left as it is');
     }
     if (l) l.setDays(ownNamed().join(','));
@@ -191,7 +221,7 @@ if (require.main === module)
         if (cmd === 'status') console.log(JSON.stringify(status()));
         else if (cmd === 'list')
             for (const row of Object.keys(ROWS))
-                for (const [level, [from, to]] of Object.entries(ROWS[row].levels)) console.log(row.padEnd(8) + level + '  ' + from + ' -> ' + to + (ROWS[row].own ? ' or ' + ROWS[row].own : '') + '  ' + levelState(path.join(PAKS, level + '.pak'), from, to, ROWS[row].own));
+                for (const [level, [from, to]] of Object.entries(ROWS[row].levels)) console.log(row.padEnd(8) + level + '  ' + from + ' -> ' + to + (ROWS[row].own ? ' or ' + ownOf(ROWS[row], level) : '') + '  ' + levelState(path.join(PAKS, level + '.pak'), from, to, ROWS[row].own ? ownOf(ROWS[row], level) : undefined));
         else if (cmd === 'install') install(rowSpec(arg));
         else if (cmd === 'restore') install([]);
         else console.log('usage: node level_states.js status | list | install <rows: ' + ROW_NAMES.join(',') + '> | restore');

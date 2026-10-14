@@ -65,13 +65,13 @@ const quiet = (fn) => { const log = console.log; console.log = () => {}; try { f
 
 try
 {
-    check('no level pak: every row missing', tool.status(), { maine: 'missing', bc: 'missing', austria: 'missing' });
+    check('no level pak: every row missing', tool.status(), { maine: 'missing', bc: 'missing', austria: 'missing', washington: 'missing' });
     const stock = { level_us_06_01: pak('level_us_06_01', 'us_04'), level_us_06_02: pak('level_us_06_02', 'us_02'), level_us_14_01: pak('level_us_14_01', 'ru_08') };
     for (const level of Object.keys(stock)) fs.writeFileSync(file(level), stock[level]);
-    check('the game\'s names: vanilla, British Columbia missing', tool.status(), { maine: 'vanilla', bc: 'missing', austria: 'vanilla' });
+    check('the game\'s names: vanilla, British Columbia missing', tool.status(), { maine: 'vanilla', bc: 'missing', austria: 'vanilla', washington: 'missing' });
 
     quiet(() => tool.install(tool.rowSpec('maine')));
-    check('install maine: its state, the others untouched', tool.status(), { maine: 'ours', bc: 'missing', austria: 'vanilla' });
+    check('install maine: its state, the others untouched', tool.status(), { maine: 'ours', bc: 'missing', austria: 'vanilla', washington: 'missing' });
     check('Maine map 1 names Michigan\'s states and sky', read('level_us_06_01').names, 'night_us_01 night_to_day_us_01 day__1_us_01;day__1a_us_01 day__2_us_01;day__2a_us_01 day__3_us_01;day__3a_us_01 day_to_night_us_01 sky_us_01');
     check('Maine map 2 too', /^night_us_01 .* sky_us_01$/.test(read('level_us_06_02').names) && !/us_02/.test(read('level_us_06_02').names), true);
     check('the zip CRC follows in both places', [read('level_us_06_01').crcOk, read('level_us_06_02').crcOk], [true, true]);
@@ -82,7 +82,7 @@ try
     check('Austria\'s file is byte for byte the stock', fs.readFileSync(file('level_us_14_01')).equals(stock.level_us_14_01), true);
 
     quiet(() => tool.install(tool.rowSpec('austria')));
-    check('install austria alone: Maine goes back, Austria comes in', tool.status(), { maine: 'vanilla', bc: 'missing', austria: 'ours' });
+    check('install austria alone: Maine goes back, Austria comes in', tool.status(), { maine: 'vanilla', bc: 'missing', austria: 'ours', washington: 'missing' });
     check('Maine map 1 is byte for byte the stock again', fs.readFileSync(file('level_us_06_01')).equals(stock.level_us_06_01), true);
     check('Austria map 1 names North Carolina\'s', /^night_us_12 .* sky_us_12$/.test(read('level_us_14_01').names), true);
 
@@ -103,12 +103,14 @@ try
     try { tool.rowSpec('maine,quebec'); } catch (err) { threw = err.message; }
     check('an unknown row is refused', /quebec/.test(threw), true);
 
-    // days of Maine's own: a stand-in initial.pak with a load list, Michigan's nine states and its sky
+    // Maine map by map: a stand-in initial.pak with a load list, and the nine states and the sky of Michigan and of
+    // Yukon, the sources of Maine's two sets, with weather where the game has it
     for (const level of Object.keys(stock)) fs.writeFileSync(file(level), stock[level]);
     const states = ['night', 'night_to_day', 'day__1', 'day__1a', 'day__2', 'day__2a', 'day__3', 'day__3a', 'day_to_night'];
-    const classes = states.map((s) => ({ name: '[media]\\classes\\daytimes\\' + s + '_us_01.xml', data: Buffer.from('<DayTimeState ColorLUT="lut/day_us_01__vol_uncmp.tga" Tag="' + s + '" />') }))
-        .concat([{ name: '[media]\\classes\\daytimes\\night_us_04.xml', data: Buffer.from('<DayTimeState />') },
-            { name: '[media]\\classes\\skies\\sky_us_01.xml', data: Buffer.from('<CombineSky><Cloud DiffuseMap="env/cloud_01_us_01__s_d_a.tga">' + states.map((s) => '<DayTimeOverride DayTime="' + s + '_us_01" />').join('') + '</Cloud></CombineSky>') }])
+    const weather = { us_01: { day__1a: 'light_rain', day__2a: 'heavy_rain' }, us_04: { day__1a: 'heavy_snow', day__2a: 'heavy_snow', night: 'heavy_snow', day_to_night: 'light_snow' } };
+    const state = (s, c) => '<DayTimeState ColorLUT="lut/day_' + c + '__vol_uncmp.tga" Tag="' + s + '">' + (weather[c][s] ? '<WeatherParticles Type="' + weather[c][s] + '" MinIntensity="0.5" MaxIntensity="1.2" />' : '') + '</DayTimeState>';
+    const classes = ['us_01', 'us_04'].flatMap((c) => states.map((s) => ({ name: '[media]\\classes\\daytimes\\' + s + '_' + c + '.xml', data: Buffer.from(state(s, c)) }))
+        .concat([{ name: '[media]\\classes\\skies\\sky_' + c + '.xml', data: Buffer.from('<CombineSky><Cloud DiffuseMap="env/cloud_01_' + c + '__s_d_a.tga">' + states.map((s) => '<DayTimeOverride DayTime="' + s + '_' + c + '" />').join('') + '</Cloud></CombineSky>') }]))
         .sort((a, b) => (a.name < b.name ? -1 : 1));
     const E = (type, deps, ...strings) => ({ type, deps, strings }), listed = (n) => n.replace('[media]', '<media>');
     const list = { entries: [E(5, []), E(1, [0], 'RES3_INIT load'), E(1, [1], 'TEMPLATES load'), ...classes.map((c) => E(2, [2], listed(c.name), 'cls_loader', 'initial.pak')),
@@ -116,14 +118,14 @@ try
     const initial = zip([{ name: 'pak.load_list', data: loadList.serialise(list) }, { name: '[ssl_cache]\\initial_debug.sslbundle', data: Buffer.from('a') }, { name: '[ssl_cache]\\initial_profile.sslbundle', data: Buffer.from('b') },
         { name: '[ssl_cache]\\initial_release.sslbundle', data: Buffer.from('c') }, { name: '[media]\\_templates\\environment.xml', data: Buffer.from('<e />') }, ...classes]);
     fs.writeFileSync(initialFile, initial);
-    // what initial.pak holds: its names, the text of every us_06 file by its short name, its load list
+    // what initial.pak holds: its names, the text of every file of Maine's sets by its short name, its load list
     function inside()
     {
         const fd = fs.openSync(initialFile, 'r');
         try
         {
             const z = lod.readZip(fd), text = {};
-            for (const e of z.entries) if (/us_06/.test(e.name)) text[e.name.split('\\').pop()] = lod.readEntry(fd, e).data.toString('latin1');
+            for (const e of z.entries) if (/us_9[12]\.xml$/.test(e.name)) text[e.name.split('\\').pop()] = lod.readEntry(fd, e).data.toString('latin1');
             return { names: z.entries.map((e) => e.name), text, list: loadList.parse(lod.readEntry(fd, z.entries[0]).data) };
         }
         finally { fs.closeSync(fd); }
@@ -137,12 +139,15 @@ try
     quiet(() => tool.install(tool.rowSpec('maineown')));
     let got = inside();
     check('own days: Maine reads as own', tool.status().maine, 'own');
-    check('own days: both maps name us_06, states and sky', ['level_us_06_01', 'level_us_06_02'].map((l) => /^night_us_06 .* sky_us_06$/.test(read(l).names) && !/us_0[124]/.test(read(l).names) && read(l).crcOk), [true, true]);
-    check('own days: initial.pak holds the nine states and the sky under us_06', Object.keys(got.text).sort(), states.map((s) => s + '_us_06.xml').concat(['sky_us_06.xml']).sort());
+    check('own days: The Lowland names us_91, Yellowrock us_92, states and sky', [/^night_us_91 .* sky_us_91$/.test(read('level_us_06_01').names), /^night_us_92 .* sky_us_92$/.test(read('level_us_06_02').names), read('level_us_06_01').crcOk && read('level_us_06_02').crcOk], [true, true, true]);
+    check('own days: initial.pak holds nine states and a sky for each map', Object.keys(got.text).sort(), ['us_91', 'us_92'].flatMap((c) => states.map((s) => s + '_' + c + '.xml').concat(['sky_' + c + '.xml'])).sort());
     check('own days: its directory is in name order from the fifth record', got.names.slice(4), got.names.slice(4).sort());
     check('own days: the load list names every new file and keeps the rules', [loadList.check(got.list), Object.keys(got.text).every((n) => got.list.entries.some((x) => x.strings[1] === 'cls_loader' && x.strings[0].endsWith('\\' + n)))], [[], true]);
-    check('own days: a state is the copy of Michigan\'s', got.text['day__1_us_06.xml'], '<DayTimeState ColorLUT="lut/day_us_01__vol_uncmp.tga" Tag="day__1" />');
-    check('own days: the sky names its own states and keeps Michigan\'s clouds', [/DayTime="night_us_06"/.test(got.text['sky_us_06.xml']), /DayTime="[a-z_0-9]*us_01"/.test(got.text['sky_us_06.xml']), /cloud_01_us_01/.test(got.text['sky_us_06.xml'])], [true, false, true]);
+    check('own days: The Lowland is Michigan\'s as it is, the rain too', [got.text['day__1_us_91.xml'], got.text['day__1a_us_91.xml'], got.text['day__2a_us_91.xml']], [state('day__1', 'us_01'), state('day__1a', 'us_01'), state('day__2a', 'us_01')]);
+    check('own days: Yellowrock\'s blizzards are flurries at 0.4 of the strength, its light snow stays', [got.text['night_us_92.xml'], got.text['day_to_night_us_92.xml']],
+        [state('night', 'us_04').replace('heavy_snow" MinIntensity="0.5" MaxIntensity="1.2"', 'light_snow" MinIntensity="0.2" MaxIntensity="0.48"'), state('day_to_night', 'us_04')]);
+    const sky91 = got.text['sky_us_91.xml'], sky92 = got.text['sky_us_92.xml'];
+    check('own days: each sky names its own states and keeps its source\'s clouds', [/DayTime="night_us_91"/.test(sky91), /DayTime="[a-z_0-9]*us_01"/.test(sky91), /cloud_01_us_01/.test(sky91), /DayTime="day__3a_us_92"/.test(sky92), /cloud_01_us_04/.test(sky92)], [true, false, true, true, true]);
     threw = '';
     try { quiet(() => lod.setDays(null)); } catch (err) { threw = err.message; }
     check('own days: they are not taken out of initial.pak while a level file names them', [/level file names/.test(threw), inside().names.length], [true, got.names.length]);
@@ -154,7 +159,7 @@ try
     fs.writeFileSync(initialFile, initial);   // a game update puts the game's initial.pak back under the level files
     check('own days: named without being in initial.pak reads as part', tool.status().maine, 'part');
     quiet(() => tool.install(tool.rowSpec('maineown')));
-    check('own days: the next install mends it', [tool.status().maine, Object.keys(inside().text).length], ['own', 10]);
+    check('own days: the next install mends it', [tool.status().maine, Object.keys(inside().text).length], ['own', 20]);
 
     quiet(() => tool.install([]));
     check('own days: restore leaves every level file and initial.pak byte for byte the stock', Object.keys(stock).map((l) => fs.readFileSync(file(l)).equals(stock[l])).concat([fs.readFileSync(initialFile).equals(initial)]), [true, true, true, true]);
@@ -163,6 +168,20 @@ try
     fs.writeFileSync(initialFile, foreign2);   // another tool's initial.pak
     quiet(() => tool.install(tool.rowSpec('maineown')));
     check('own days: with another tool\'s initial.pak Maine takes Michigan\'s days and initial.pak is left alone', [tool.status().maine, fs.readFileSync(initialFile).equals(foreign2)], ['ours', true]);
+
+    // British Columbia and Austria map by map: days the game ships, so initial.pak (here another tool's) plays no part
+    const bcStock = { level_us_10_01: pak('level_us_10_01', 'us_01'), level_us_10_02: pak('level_us_10_02', 'us_01'), level_us_16_01: pak('level_us_16_01', 'us_12'), level_us_16_02: pak('level_us_16_02', 'us_12'), level_us_16_03: pak('level_us_16_03', 'us_12') };
+    for (const level of Object.keys(bcStock)) fs.writeFileSync(file(level), bcStock[level]);
+    quiet(() => tool.install(tool.rowSpec('bcown,austriaown,washingtonown')));
+    check('map by map: Duncan Bay names Wisconsin\'s, North Peak North Carolina\'s, Unterfeld Tennessee\'s', ['level_us_10_01', 'level_us_10_02', 'level_us_14_01'].map((l) => read(l).names.split(' ').pop()), ['sky_us_03', 'sky_us_12', 'sky_us_07']);
+    check('map by map: Washington\'s National Park and Solace Bay name Michigan\'s, its Mountains Zurdania\'s', ['level_us_16_01', 'level_us_16_02', 'level_us_16_03'].map((l) => /^night_(\w+) .* sky_\1$/.exec(read(l).names)[1]), ['us_01', 'ru_17', 'us_01']);
+    check('map by map: those rows read as own, Maine as the game\'s again', tool.status(), { maine: 'vanilla', bc: 'own', austria: 'own', washington: 'own' });
+    quiet(() => tool.install(tool.rowSpec('washington')));
+    check('Washington: Michigan\'s autumn on all three maps', [tool.status().washington, ['level_us_16_01', 'level_us_16_02', 'level_us_16_03'].every((l) => /^night_us_01 .* sky_us_01$/.test(read(l).names))], ['ours', true]);
+    quiet(() => tool.install(tool.rowSpec('bc')));
+    check('map by map, then North Carolina\'s on both: British Columbia ours, Austria the game\'s', [tool.status().bc, read('level_us_10_01').names.split(' ').pop(), tool.status().austria], ['ours', 'sky_us_12', 'vanilla']);
+    quiet(() => tool.install([]));
+    check('map by map: restore leaves every level file byte for byte the stock', Object.keys(stock).map((l) => fs.readFileSync(file(l)).equals(stock[l])).concat(Object.keys(bcStock).map((l) => fs.readFileSync(file(l)).equals(bcStock[l]))), [true, true, true, true, true, true, true, true]);
 }
 finally { fs.rmSync(dir, { recursive: true, force: true }); }
 console.log(failed ? failed + ' FAILED' : 'all passed');

@@ -647,7 +647,7 @@ function scaleList(list, factor)
     return parts.map((s) => { const v = Number(s) * factor; return Number.isInteger(v) ? String(v) : v.toFixed(1); }).join(', ');
 }
 // parts: { grass: factor or null, fill: factor or null, stars: factor or null, weather: comma list or null, debris: drops
-// factor or null, days: the regions with days of their own, a comma list of codes such as us_06, or null }. photoWas:
+// factor or null, days: the regions with days of their own, a comma list of codes such as us_91, or null }. photoWas:
 // the photo skies an earlier build was made for (the note's starsPhoto, for initialAdopt); left out = what boot.pak holds
 // now. A job's parts: the parts whose edit changed that entry (an entry can take two: a day state the fill light and the
 // weather); its group is the first of them
@@ -738,9 +738,11 @@ function planInitial(file, parts, photoWas, winterWas)
             const { head, data } = readEntry(fd, first), list = loadList.parse(data), listed = new Set(list.entries.map((x) => x.strings[0])), notes = [];
             const before = loadList.check(list);
             if (before.length) throw new Error('initial.pak\'s load list is not in the form this tool knows (' + before[0] + '): days of their own cannot be added');
+            // a class is known by its file's name: no new file may take the name of one the pak has elsewhere
+            const bases = new Set(z.entries.map((e) => baseName(e.name).toLowerCase()));
             for (const code of ownCodes(days))
             {
-                const from = OWN_DAYS[code];
+                const from = OWN_DAYS[code].from;
                 let made = 0, sky = false;
                 for (const ent of z.entries)
                 {
@@ -762,6 +764,7 @@ function planInitial(file, parts, photoWas, winterWas)
                     }
                     else
                     {
+                        if (bases.has(baseName(name).toLowerCase())) throw new Error('initial.pak has a ' + baseName(name) + ' of its own: days of their own for ' + code + ' cannot be added');
                         adds.push({ name, data: out, comp: out, method: 0, crc: zlib.crc32(out), sorted: true });
                         grow += 30 + name.length + out.length + 46 + name.length;
                     }

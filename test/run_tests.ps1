@@ -113,7 +113,14 @@ try {
   Check 'selection: the map days on give Maine Michigan''s days' ([string]$s['maps']) 'maine'
   $cards['maps'].Choice[0] = 2
   $s = & $selection
-  Check 'selection: Maine with days of its own' ([string]$s['maps']) 'maineown'
+  Check 'selection: Maine map by map' ([string]$s['maps']) 'maineown'
+  foreach ($row in 1..3) { $cards['maps'].Choice[$row] = 2 }
+  $s = & $selection
+  Check 'selection: every row map by map' ([string]$s['maps']) 'maineown,bcown,austriaown,washingtonown'
+  $cards['maps'].Choice[3] = 0
+  $s = & $selection
+  Check 'selection: Washington with Michigan''s autumn' ([string]$s['maps']) 'maineown,bcown,austriaown,washington'
+  foreach ($row in 1..3) { $cards['maps'].Choice[$row] = 1 }
   $cards['maps'].Choice[0] = 1
   $s = & $selection
   Check 'selection: Maine with the game''s days and no other row sends no map days' ([string]$s['maps']) ''
