@@ -142,6 +142,10 @@ Check 'map days: the tool on stand-in level files' ([string](& $node $levelTest 
 $listTest = Join-Path $env:TEMP 'ngen_load_list_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'load_list_test.js') -Destination $listTest -Force
 Check 'load list: the tool on a made-up list' ([string](& $node $listTest $levelTools | Select-Object -Last 1)) 'all passed'
+# the start without the intro: the edits of the start-up movie on a made-up bundle
+$introTest = Join-Path $env:TEMP 'ngen_gfx_intro_test.js'
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'gfx_intro_test.js') -Destination $introTest -Force
+Check 'intro: the edits on a made-up bundle' ([string](& $node $introTest $levelTools | Select-Object -Last 1)) 'all passed'
 Check 'every part: boot.pak holds the grade, the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 144'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'
@@ -149,6 +153,16 @@ Check 'every part: the note in the game folder names the five paks' (Note) 'boot
 Check 'ini: the ambient occlusion pass at half size' ((Get-Content -LiteralPath (Join-Path $bin 'SnowRunnerShadows.ini')) -contains 'AOHalf=1') 'True'
 Check 'ini: the dump key is off' ((Get-Content -LiteralPath (Join-Path $bin 'SnowRunnerShadows.ini')) -contains 'KeyDump=0') 'True'
 Check 'every part: done without a note' ('{0} {1}' -f $r[$r.Count - 1].warnings, $r[$r.Count - 1].text) '0 Installed. Start the game to see it.'
+
+'start-up: the logo card''s row, the Next Gen splash without the intro, on and off again'
+$withIntro = [ordered]@{}; foreach ($k in $everything.Keys) { $withIntro[$k] = $everything[$k] }; $withIntro['logos'] = 'intro'
+$r = Apply $withIntro
+Check 'intro: done without a note' ('{0} {1}' -f $r[$r.Count - 1].warnings, $r[$r.Count - 1].type) '0 done'
+Check 'intro: the status says so' ([string](Status).logos.intro) '1'
+Check 'intro: gfx.pak holds the logos and the start-up movie' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 9'
+$r = Apply $everything
+Check 'intro off again: gfx.pak holds the logos alone' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
+Check 'intro off again: the status says so' ([string](Status).logos.intro) ''
 Check 'Bin has hid.dll, its ini and the stock twins' ((Test-Path (Join-Path $bin 'hid.dll')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'True'
 
 'the same selection again'

@@ -25,7 +25,7 @@
 //              "grade": null | "1" | "0.5", "particles": null | "1", "sky": null | "1", "cubes": null | "1", "skies": null | "1", "stars": null | "3" | "2",
 //              "weather": null | "shadows,showers" (a comma list of shadows, showers, evening, horizon, far, fireflies, pollen, drift, land),
 //              "debris": null | "4" | "8" (the drops factor of the debris and splashes),
-//              "logos": null | "1",
+//              "logos": null | "1" | "intro" (the logos, and the game starts on the Next Gen splash without its intro),
 //              "maps": null | "maine,bc" (a comma list of maine, bc, austria, washington, each also with own behind it
 //              for days chosen map by map: the level paks, see level_states.js; Maine's are sets of its own, which
 //              initial.pak then holds) }
@@ -580,7 +580,7 @@ async function readMaps(g, env)
 async function readLogos(g, env)
 {
     const said = fs.existsSync(g.gfx) ? await answer('gfx_logos.js', ['status'], env) : 'missing';
-    return { state: said === 'logos' ? 'ours' : said };
+    return { state: /^logos\b/.test(said) ? 'ours' : said, intro: said === 'logos intro' ? '1' : null };   // intro: the start without the intro is in
 }
 
 // ---- the note in the game folder
@@ -847,7 +847,7 @@ async function apply(g, state, sel, adopt, leave)
     if (debris && !(Number(debris) >= 1 && Number(debris) <= 16)) throw new EngineError('usage', 'debris drops factor ' + debris);
     const grade = sel.grade ? String(sel.grade) : null;
     if (grade && !(Number(grade) > 0 && Number(grade) <= 1)) throw new EngineError('usage', 'photo grade strength ' + grade);
-    const particles = !!sel.particles, sky = !!sel.sky, cubes = !!sel.cubes, skies = !!sel.skies, logos = !!sel.logos;
+    const particles = !!sel.particles, sky = !!sel.sky, cubes = !!sel.cubes, skies = !!sel.skies, logos = !!sel.logos, intro = sel.logos === 'intro';
     const weather = sel.weather ? weatherList(sel.weather) : null;
     if (sel.weather && (!weather || !/^[a-z,]+$/.test(String(sel.weather)))) throw new EngineError('usage', 'weather parts ' + sel.weather);
     const maps = sel.maps ? mapsList(sel.maps) : null;
@@ -1047,9 +1047,9 @@ async function apply(g, state, sel, adopt, leave)
         if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }
         else if (now.logos.state === 'changed' && last.logos) warn(GFX_CHANGED + ': left as it is, so the Next Gen logo could not be taken out.');
     }
-    else if (now.logos.state === 'ours' && sameCode(notes, 'logos')) emit({ type: 'log', text: 'gfx.pak already has the Next Gen logo' });
+    else if (now.logos.state === 'ours' && sameCode(notes, 'logos') && !!now.logos.intro === intro) emit({ type: 'log', text: 'gfx.pak already has the Next Gen logo' + (intro ? ' and the start without the intro' : '') });
     else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is, so the Next Gen logo was left out.');
-    else { step('Putting the Next Gen logo in (gfx.pak, 700 MB)'); await must('gfx_logos.js', ['install'], env); }
+    else { step('Putting the Next Gen logo in' + (intro ? ', and the start without the intro' : '') + ' (gfx.pak, 700 MB)'); await must('gfx_logos.js', intro ? ['install', 'intro'] : ['install'], env); }
 
     // the map days (the level paks): a few names in the player's own files, written in place and back the same way
     if (now.maps.state === 'missing') { if (maps) warn('No level file of Maine, British Columbia, Austria or Washington is in this game folder: the map days were left out.'); }

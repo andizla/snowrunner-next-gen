@@ -121,6 +121,13 @@ try {
   $s = & $selection
   Check 'selection: Washington with Michigan''s autumn' ([string]$s['maps']) 'maineown,bcown,austriaown,washington'
   foreach ($row in 1..3) { $cards['maps'].Choice[$row] = 1 }
+  # the logo card's start-up row: the game's intro by default, the Next Gen splash alone when picked
+  $s = & $selection
+  Check 'selection: the logos with the game''s intro by default' ([string]$s['logos']) '1'
+  $cards['logos'].Choice[0] = 1
+  $s = & $selection
+  Check 'selection: the Next Gen splash only' ([string]$s['logos']) 'intro'
+  $cards['logos'].Choice[0] = 0
   $cards['maps'].Choice[0] = 1
   $s = & $selection
   Check 'selection: Maine with the game''s days and no other row sends no map days' ([string]$s['maps']) ''

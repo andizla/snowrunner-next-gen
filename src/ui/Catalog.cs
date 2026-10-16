@@ -189,8 +189,12 @@ namespace SnowRunnerNextGen
             list.Add(grass);
 
             // NEXT GEN under the game's logo, in gfx.pak
-            list.Add(M("logos", "INTERFACE", "Next Gen logo", true,
-                "NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map."));
+            Module logos = M("logos", "INTERFACE", "Next Gen logo", true,
+                "NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map.");
+            // the start-up row: the game's warning and publisher logos, or straight to the Next Gen splash (about 16 s
+            // sooner at the title screen). Off by default until it has been looked at
+            logos.Options.Add(new OptionSet("Start-up", new[] { "the game's intro", "Next Gen splash only" }, new[] { "", "intro" }, 0));
+            list.Add(logos);
             return list;
         }
     }

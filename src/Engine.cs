@@ -50,6 +50,7 @@ namespace SnowRunnerNextGen
         public string Cubes = "vanilla";          // the reflection cubes, the fourth part of boot.pak: the same states
         public string Skies = "vanilla";          // the winter skies, the fifth part of boot.pak: the same states
         public string Logos = "vanilla";          // the Next Gen logos in gfx.pak: the same states
+        public bool LogosIntro;                   // with them, the start without the game's intro
         public string Maps = "vanilla";           // the map days in the level paks: the same states
         public string MapsRows;                   // its rows as a comma list (maine, bc, austria)
         public readonly List<string> Orphaned = new List<string>();   // paks that hold our changes while their kept originals are gone
@@ -100,6 +101,7 @@ namespace SnowRunnerNextGen
             s.Cubes = Text(Part(d, "cubes"), "state") ?? "missing";
             s.Skies = Text(Part(d, "skies"), "state") ?? "missing";
             s.Logos = Text(Part(d, "logos"), "state") ?? "missing";
+            s.LogosIntro = Text(Part(d, "logos"), "intro") == "1";
             Dictionary<string, object> maps = Part(d, "maps");
             s.Maps = Text(maps, "state") ?? "missing";
             s.MapsRows = Text(maps, "rows");

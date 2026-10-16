@@ -313,7 +313,8 @@ namespace SnowRunnerNextGen
                 Does, "Adds NEXT GEN under the game's logo wherever the interface shows it: on the title screen, the first loading screen, the main menu, the pause menu and the map.",
                 Notice, "The mod's name under the SnowRunner logo, so you can tell at a glance that it is installed.",
                 Costs, "Nothing in the game. The first Apply keeps a copy of gfx.pak, several hundred MB, so that Restore can put it back.",
-                Know, "It changes gfx.pak, the file of the interface. The title screen, the first loading screen and the main menu have a picture of their own for the logo, and those are replaced whole. On the pause menu and the map the logo shares a sheet with other pictures: there only the logo changes, so an interface mod's sheet keeps everything else, and a sheet with another layout is left as it is.");
+                Choices, "Start-up: the game's intro (its warning and the publisher logos, about 18 s), or the Next Gen splash only: the game goes straight to its first loading screen. Measured on 2026-10-17 with a warm disk cache: the title screen came 41 s after start with the intro and 24 to 25 s without. Off by default until it has been looked at.",
+                Know, "It changes gfx.pak, the file of the interface. The start-up row changes the game's start-up movie in the same file: two small edits to its script, and a game version whose movie differs keeps its intro (Apply says so). The title screen, the first loading screen and the main menu have a picture of their own for the logo, and those are replaced whole. On the pause menu and the map the logo shares a sheet with other pictures: there only the logo changes, so an interface mod's sheet keeps everything else, and a sheet with another layout is left as it is.");
 
             return d;
         }

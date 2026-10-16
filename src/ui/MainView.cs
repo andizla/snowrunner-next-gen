@@ -305,6 +305,7 @@ namespace SnowRunnerNextGen
                         break;
                     case "logos":
                         card.On = s.Logos == "ours";
+                        if (card.On) Pick(card, 0, s.LogosIntro ? "intro" : "");
                         break;
                     case "maps":
                         card.On = s.Maps == "ours";
@@ -404,7 +405,7 @@ namespace SnowRunnerNextGen
                         for (int row = 0; row < card.Module.Options.Count; row++) if (Key(card, row).Length > 0) on.Add(Key(card, row));
                         if (on.Count > 0) weather = string.Join(",", on.ToArray());
                         break;
-                    case "logos": logos = "1"; break;
+                    case "logos": logos = Key(card, 0).Length > 0 ? "intro" : "1"; break;   // the start-up row: the game's intro or the splash alone
                     case "maps":   // the rows that are on, as the tool's comma list; none on sends nothing
                         List<string> rowsOn = new List<string>();
                         for (int row = 0; row < card.Module.Options.Count; row++) if (Key(card, row).Length > 0) rowsOn.Add(Key(card, row));
@@ -448,7 +449,7 @@ namespace SnowRunnerNextGen
             string theirs = Signature(s.Shader == "ours" ? s.Modules : new List<string>(), s.Dll == "ours" ? s.Factor : null, s.Dll == "ours" ? s.SlopeBias : null, s.Dll == "ours" ? s.AoHalf : null,
                 s.Scenery == "nature" || s.Scenery == "all" ? Scenery(s.Scenery, s.SceneryHide == "off" ? null : s.SceneryHide, s.SceneryShadows == "off" ? null : s.SceneryShadows) : null,
                 s.Grass == "ours" ? s.GrassFactor : null, s.Fill == "ours" ? s.FillFactor : null,
-                s.Grade == "ours" ? s.GradeStrength : null, s.Particles == "ours" ? "1" : null, s.Stars == "ours" ? s.StarsFactor : null, s.Sky == "ours" ? "1" : null, s.Logos == "ours" ? "1" : null,
+                s.Grade == "ours" ? s.GradeStrength : null, s.Particles == "ours" ? "1" : null, s.Stars == "ours" ? s.StarsFactor : null, s.Sky == "ours" ? "1" : null, s.Logos == "ours" ? (s.LogosIntro ? "intro" : "1") : null,
                 s.Weather == "ours" ? s.WeatherParts : null, s.Debris == "ours" ? s.DebrisFactor : null, s.Cubes == "ours" ? "1" : null, s.Skies == "ours" ? "1" : null, s.Maps == "ours" ? s.MapsRows : null);
             return mine == theirs;
         }

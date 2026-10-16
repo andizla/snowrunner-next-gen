@@ -12,14 +12,17 @@
 // stays bit for bit, the game's or another interface mod's. A sheet of another size or format is left as it is.
 // gfx.pak is built from its original (pak_backup\gfx.pak.orig, kept at the first install; SR_STATE_DIR moves it) in
 // one pass, read back and checked before it replaces the file, like boot.pak in lut_grade.js.
-// usage: node gfx_logos.js status | list | install | restore | adopt | build <file>
-//        status: logos, vanilla, changed (another tool or a game update wrote gfx.pak since) or missing
+// With "intro" the build also starts the game without its intro, on the Next Gen splash (gfx_intro.js).
+// usage: node gfx_logos.js status | list [intro] | install [intro] | restore | adopt | build <file> [intro]
+//        status: logos (logos intro with the start without the intro), vanilla, changed (another tool or a game update
+//        wrote gfx.pak since) or missing
 //        adopt: a changed gfx.pak becomes the original, with whatever of the last build is still in it taken out
 //        SR_GFX_PAK and SR_LOGOS_DIR point at another gfx.pak and another set (default replacements\splash\pct);
 //        install, restore and adopt with the game closed
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const { readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt } = require('./lod_patch.js');
+const { patchIntro } = require('./gfx_intro.js');
 
 const GFX = process.env.SR_GFX_PAK || 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/gfx.pak';
 const STATE = process.env.SR_STATE_DIR || path.join(__dirname, '..', 'pak_backup');
@@ -67,16 +70,28 @@ function patchSheet(cur, ours, s)
     return next;
 }
 
-// the build of `file` with the logos: { z, jobs, size, left } (left: the sheets it could not take)
-function plan(file)
+// the build of `file` with the logos, and with `intro` the start without the intro (gfx_intro.js): { z, jobs, size,
+// left, intro } (left: the sheets it could not take; intro: whether the start-up movie took its edits)
+function plan(file, intro = false)
 {
     const files = logoFiles(), fd = fs.openSync(file, 'r');
     try
     {
         const z = readZip(fd), jobs = new Map(), left = [], seen = new Set();
-        let grow = 0;
+        let grow = 0, introIn = false;
         for (const ent of z.entries)
         {
+            if (intro && /(^|[\\/])gfxbundle\.gfxbundle$/i.test(ent.name))
+            {
+                if (ent.flags !== 0) throw new Error(ent.name + ': unexpected entry flags');
+                const { head, data } = readEntry(fd, ent), r = patchIntro(data);
+                if (r.found < r.all) { left.push('intro'); continue; }
+                introIn = true;
+                if (r.done === r.all && ent.method === 0) continue;
+                jobs.set(ent, { head, crc: zlib.crc32(r.data) >>> 0, usize: r.data.length, length: r.data.length, comp: r.data, next: r.data, method: 0, type: 'intro', group: 'logo', notes: ['the start without the intro'] });
+                grow += r.data.length - ent.csize;
+                continue;
+            }
             const name = baseName(ent.name), source = files.get(name);
             if (!source) continue;
             if (ent.flags !== 0) throw new Error(ent.name + ': unexpected entry flags');
@@ -89,8 +104,9 @@ function plan(file)
             grow += next.length - ent.csize;
         }
         for (const name of files.keys()) if (!seen.has(name)) throw new Error('gfx.pak has no ' + name);
+        if (intro && !introIn && !left.includes('intro')) left.push('intro');
         const end = z.cdOff + grow + z.cd.length + z.eocd.length;
-        return { z, jobs, left, size: z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end };
+        return { z, jobs, left, intro: introIn, size: z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end };
     }
     finally { fs.closeSync(fd); }
 }
@@ -134,11 +150,12 @@ function state()
     if (!fs.existsSync(ORIG)) return 'vanilla';
     return (note.origCdSha256 || cdHash(ORIG)) === cur ? 'vanilla' : 'changed';
 }
-const status = () => { const st = state(); return st === 'ours' ? 'logos' : st; };
+// 'logos', 'logos intro' (the start without the intro as well), or the state
+const status = () => { const st = state(); if (st !== 'ours') return st; const rec = built(readNote(), cdHash(GFX)); return rec && rec.intro ? 'logos intro' : 'logos'; };
 
-// gfx.pak built from its original with the logos. Refuses a file that is neither the original nor this tool's build,
-// unless an adopt has just made it the base
-function install(adopted = false)
+// gfx.pak built from its original with the logos, and with `intro` the start without the intro. Refuses a file that is
+// neither the original nor this tool's build, unless an adopt has just made it the base
+function install(adopted = false, intro = false)
 {
     const st = adopted ? 'ours' : state();
     if (st === 'missing') { console.log('logos: no gfx.pak, left alone'); return; }
@@ -150,19 +167,21 @@ function install(adopted = false)
         if (fileHash(keep) !== fileHash(GFX)) { fs.unlinkSync(keep); throw new Error('the gfx.pak copy differs'); }
         swapIn(keep, ORIG);
     }
-    const p = plan(ORIG), tmp = GFX + '.tmp';
+    const p = plan(ORIG, intro), tmp = GFX + '.tmp';
     let next;
     try
     {
         writePak(ORIG, tmp, p);
         const sampled = verify(tmp, p);
-        next = { origCdSha256: cdHash(ORIG), cdSha256: cdHash(tmp), size: p.size, date: stamp(), logos: true, set: setHash(), left: p.left };
+        next = { origCdSha256: cdHash(ORIG), cdSha256: cdHash(tmp), size: p.size, date: stamp(), logos: true, intro: p.intro, set: setHash(), left: p.left };
         writeJson(NOTE, withPending(readNote(), next));
         swapIn(tmp, GFX);
-        const sheets = [...p.jobs.values()].filter((j) => j.type === 'sheet').length;
+        const sheets = [...p.jobs.values()].filter((j) => j.type === 'sheet').length, sheetsLeft = p.left.filter((l) => l !== 'intro');
         console.log('logos: gfx.pak now has the Next Gen logo on the title screen, the loading screen and the main menu' + (sheets ? ' and in ' + sheets + ' of the 2 menu sheets' : '') +
-            (p.left.length ? ' (left as they are, another layout: ' + p.left.join(', ') + ')' : '') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
-        if (p.left.length) console.log('warning: the Next Gen logo is not in ' + p.left.join(' and ') + ': this game version lays ' + (p.left.length > 1 ? 'these sheets' : 'this sheet') + ' out another way');
+            (p.intro ? ', and the game starts with the Next Gen splash, without its intro' : '') +
+            (sheetsLeft.length ? ' (left as they are, another layout: ' + sheetsLeft.join(', ') + ')' : '') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
+        if (sheetsLeft.length) console.log('warning: the Next Gen logo is not in ' + sheetsLeft.join(' and ') + ': this game version lays ' + (sheetsLeft.length > 1 ? 'these sheets' : 'this sheet') + ' out another way');
+        if (p.left.includes('intro')) console.log('warning: the intro stays: this game version\'s start-up movie is not the one the edits were made for');
     }
     finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
     writeJson(NOTE, next);
@@ -192,7 +211,7 @@ function adopt()
     const note = readNote(), last = new Map();
     if (note.logos && fs.existsSync(ORIG))
     {
-        const p = plan(ORIG), fdo = fs.openSync(ORIG, 'r');
+        const p = plan(ORIG, !!note.intro), fdo = fs.openSync(ORIG, 'r');
         try { for (const [ent, job] of p.jobs) last.set(ent.name, { job, ent, orig: readEntry(fdo, ent) }); } finally { fs.closeSync(fdo); }
     }
     const fd = fs.openSync(GFX, 'r'), jobs = new Map();
@@ -236,7 +255,7 @@ function adopt()
     writeJson(NOTE, { origCdSha256: cdHash(ORIG), date: stamp() });
     if (!jobs.size) { console.log('logos: the current gfx.pak is the new original (none of this tool\'s logos were in it' + keptSay + ')'); return; }
     console.log('logos: the current gfx.pak is the new original (this tool\'s logos were still in it: left out of the original; the other changes kept' + keptSay + ')');
-    install(true);
+    install(true, !!note.intro);
 }
 
 module.exports = { plan, patchSheet, SHEETS, WHOLE, LOGOS };
@@ -248,18 +267,18 @@ if (require.main === module)
     {
         finishAdopt(ORIG);
         if (cmd === 'status') console.log(status());
-        else if (cmd === 'install') install();
+        else if (cmd === 'install') install(false, a1 === 'intro');
         else if (cmd === 'restore') restore();
         else if (cmd === 'adopt') adopt();
         else if (cmd === 'list' || (cmd === 'build' && a1))
         {
-            const from = cmd === 'build' && fs.existsSync(ORIG) ? ORIG : GFX, p = plan(from);
+            const from = cmd === 'build' && fs.existsSync(ORIG) ? ORIG : GFX, p = plan(from, process.argv.includes('intro'));
             for (const [ent, job] of p.jobs) console.log('  ' + baseName(ent.name).padEnd(30) + (job.type === 'sheet' ? ' the logo sprite\'s blocks' : ' replaced') + ', ' + ent.usize + ' -> ' + job.usize + ' bytes');
             if (p.left.length) console.log('  left as they are (another layout): ' + p.left.join(', '));
             if (cmd === 'list') console.log(p.jobs.size + ' entries would change in ' + from);
             else { writePak(from, a1, p); console.log('built ' + a1 + ' from ' + from + ', read back ok (' + verify(a1, p) + ' untouched entries sampled)'); }
         }
-        else console.log('usage: node gfx_logos.js status | list | install | restore | adopt | build <file>');
+        else console.log('usage: node gfx_logos.js status | list [intro] | install [intro] | restore | adopt | build <file> [intro]');
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
