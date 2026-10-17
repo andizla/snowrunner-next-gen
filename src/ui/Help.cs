@@ -77,7 +77,7 @@ namespace SnowRunnerNextGen
                 "Other mods", "When another mod (a texture pack, say) or a game update has changed one of those files since, Apply and Restore ask first. Take it as it is now as the original, and " + Header.AppName + " writes its changes over it; Restore then puts it back in that modded state, the other mod's changes included, not the game's own file. Or leave it out: the file and its modules stay as they are.",
                 "Before you start", "Close the game: its files cannot be changed while it runs.",
                 "When something goes wrong", "Every Apply and Restore is written to install.log in %LOCALAPPDATA%\\SnowRunnerNextGen: what the program found and each step it took. After a stop or a note, Show the log in the result window opens that folder. Send the file along when you report a problem.",
-                "Comparing in the game", "With SnowRunner Shadows installed: F8 switches every shader effect off and on, F4 the contact shadows, F5 the ambient occlusion pass between half and full size, F6 the reflection pass, F10 the bounce light, and F11 GTAO against the game's SSAO. The keys do nothing while Alt, Ctrl or Shift is held.");
+                "Comparing in the game", "With SnowRunner Shadows installed: F8 switches every shader effect off and on, F4 the contact shadows, F5 the ambient occlusion pass between half and full size, F6 the reflection pass, F9 the reflections on wet ground, F10 the bounce light, and F11 GTAO against the game's SSAO. The keys do nothing while Alt, Ctrl or Shift is held.");
             return t;
         }
 
