@@ -41,9 +41,12 @@
 //        boot.pak holds those builds; their sky alpha then follows in every build, with or without the stars part
 //        node lod_patch.js weather-status | weather-install [parts] | weather-restore   the weather (daytime_weather.js:
 //        cloud shadows on every map, showers, drizzle at dusk and night, the horizon clouds, rain and snow drawn farther;
-//        fireflies, pollen; the parts as one comma list, WEATHER_PARTS or all seven by default): a fourth part of the
+//        fireflies, pollen, drift, land; the parts as one comma list, WEATHER_PARTS or by default every part but land): a fourth part of the
 //        same build
-//        node lod_patch.js initial-status | initial-restore | initial-build <file> [grass=<f>] [fill=<f>] [stars=<f>] [weather=<parts>]   the parts:
+//        node lod_patch.js debris-status | debris-install [drops] | debris-restore   debris and splashes (particle_debris.js)
+//        node lod_patch.js days-set <codes|none>   the map sets of their own (daytime_own.js) that initial.pak holds
+//        node lod_patch.js initial-status | initial-restore | initial-build <file> [grass=<f>] [fill=<f>] [stars=<f>] [weather=<parts>]
+//        [debris=<drops>] [days=<codes>]   the parts:
 //        what is in initial.pak (JSON), the original back, a built copy anywhere (tests)
 //        node lod_patch.js initial-refresh   the parts that are in, built again (new rules, or boot.pak's photo skies changed)
 //        node lod_patch.js initial-adopt   another mod's (or a game update's) initial.pak becomes the original, with
@@ -1196,7 +1199,7 @@ if (require.main === module)
             if (cdHash(PAK) !== (kept || cdHash(ORIG))) throw new Error('shared.pak does not match the backup after the copy');
             console.log('scenery detail: vanilla');
         }
-        else console.log('usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup | build <file> [nature|all] | grass-status | grass-build <file> [factor] | grass-install [factor] | grass-restore | fill-status | fill-install [factor] | fill-restore | stars-status | stars-install [factor] | stars-restore | weather-status | weather-install [parts] | weather-restore | debris-status | debris-install [drops] | debris-restore | initial-status | initial-restore | initial-refresh | initial-adopt | initial-build <file> [grass=<f>] [fill=<f>] [stars=<f>] [weather=<parts>] [debris=<drops>]');
+        else console.log('usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup | build <file> [nature|all] | grass-status | grass-build <file> [factor] | grass-install [factor] | grass-restore | fill-status | fill-install [factor] | fill-restore | stars-status | stars-install [factor] | stars-restore | weather-status | weather-install [parts] | weather-restore | debris-status | debris-install [drops] | debris-restore | days-set <codes|none> | initial-status | initial-restore | initial-refresh | initial-adopt | initial-build <file> [grass=<f>] [fill=<f>] [stars=<f>] [weather=<parts>] [debris=<drops>] [days=<codes>]');
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }

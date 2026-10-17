@@ -5,7 +5,7 @@
 // regions have rain or snow in their variants, dusk and night weather only in the snow regions, and cloud shadows only on
 // ru_17 and us_18 (39 of 199 states); the five cloud shadow maps sit in boot.pak, so every map can use them.
 // The files are in initial.pak: [media]\...\classes\daytimes\*.xml (the states), ...\classes\skies\sky_*.xml (each
-// region's sky layers), ...\classes\weather\*.xml (what a rain or snow type looks like). Five parts, each on its own:
+// region's sky layers), ...\classes\weather\*.xml (what a rain or snow type looks like). Nine parts, each on its own:
 //   shadows  cloud shadows in every day state that has none, the way ru_17 has them (scale 6, speed 2, direction
 //            (1; 0.5)): the plain states the light map (cloud_shadow_01), the variants the medium one (02), the
 //            variants with heavy rain or snow the dense one (03)
