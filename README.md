@@ -41,7 +41,7 @@ Atmosphere and image
 - Debris and splashes: leaves, grass, twigs and dirt thrown up by the wheels stay on the ground and get pushed by the tyres; mud, water and snow splashes throw more drops; exhaust and dust hang in the air longer.
 - Night sky: NASA's star map in place of the game's star texture, and its stars in the photo night skies of Scandinavia, Kola and Quebec.
 - Winter skies: Kola's clear-day sky dome made anew from a winter panorama, the game's cloud bands still over it. Off by default.
-- Map days: Maine shows the days and the snowfall of two snow regions; this gives it Michigan's days, weather and sky. Rows for British Columbia and Austria. Off by default.
+- Map days: Maine shows the days and the snowfall of two snow regions; this gives it Michigan's days, weather and sky. Rows for British Columbia, Austria and Washington, and on every row a third value, map by map, that picks days for each map on its own. Off by default.
 - Brighter stars: the stars of the night sky drawn brighter.
 - Tonemap: stronger contrast and a lighter bloom.
 - Bloom soft cut: no haze from bright snow and sky.
@@ -54,7 +54,7 @@ Scenery, both off by default
 
 Interface
 
-- Next Gen logo: NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map.
+- Next Gen logo: NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map. A row Start-up, off by default, starts the game on the Next Gen splash without the warning and the publisher logos.
 
 The (?) on each card says what the module does, what to look for, and what it costs.
 
@@ -86,7 +86,7 @@ Every Apply and Restore is written to `install.log` in `%LOCALAPPDATA%\SnowRunne
 
 ## What it changes
 
-In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather, debris and splashes), `boot.pak` (photo grade, particles, night sky, reflection cubes, winter skies) `gfx.pak` (the logo) and, with Map days, a few names in the level files of Maine, British Columbia and Austria, all under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in the folder with `SnowRunner.exe` (`Sources\Bin` on Steam). Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
+In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather, debris and splashes, and Maine's own days with Map days map by map), `boot.pak` (photo grade, particles, night sky, reflection cubes, winter skies), `gfx.pak` (the logo, and the start without the intro) and, with Map days, a few names in the level files of Maine, British Columbia, Austria and Washington, all under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in the folder with `SnowRunner.exe` (`Sources\Bin` on Steam). Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
 
 The kept originals live in `%LOCALAPPDATA%\SnowRunnerNextGen`. Every new file is written next to the old one, read back and checked before it takes the old one's place. The program refuses to write while the game runs.
 
