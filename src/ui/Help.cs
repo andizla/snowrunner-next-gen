@@ -297,10 +297,10 @@ namespace SnowRunnerNextGen
                 Know, "A game update or a Steam file check puts the original shared.pak back. Apply again afterwards.");
 
             d["grass"] = E(
-                Does, "Most grass fades out about 30 metres from the camera. This draws it farther: three or two times the game's distances.",
-                Costs, "Frame rate in grassy areas: at 3x about nine times as much grass is drawn.",
-                Choices, "Reach: 3x or 2x the game's fade distances.",
-                Know, "It changes initial.pak, a file that other mods change too.");
+                Does, "Most grass fades out about 30 metres from the camera. This draws it out to 60 metres, and it still grows in as it comes nearer.",
+                Costs, "Frame rate in grassy areas: grass covers up to four times the ground, and at 3x it stays thick farther out than at 2x.",
+                Choices, "Reach: 3x or 2x the game's fade distances, each step at most 50, 55 and 60 metres.",
+                Know, "The game draws grass only to about 64 metres from the camera. Set farther, the grass at the edge appears whole at once instead of growing in, so no step goes past 60 metres; a step the game itself sets farther stays. It changes initial.pak, a file that other mods change too.");
 
             d["maps"] = E(
                 Does, "Each map's level file names the day states it cycles through and its sky file. Four regions have none of their own and name another region's. Maine: its first map names Yukon's and its second Alaska's, two snow regions, so Maine gets their snowfall at dusk and at night and their light. This gives both maps Michigan's days, weather and sky. British Columbia: its maps name Michigan's, and the row gives them North Carolina's, which the game itself gives Washington, the region next to it. Austria: its first map names another region's days than its second, and the row gives the first the second's. Washington, an autumn region: its three maps name North Carolina's summer, and the row gives them Michigan's autumn.",

@@ -116,6 +116,7 @@ GNU General Public License v3.0 (GPL-3.0-only), see `LICENSE`. Third party notic
 - The contact shadows are a modified copy of Bend Studio's screen-space shadows.
 - The rebuilt shadow edges follow revectorization-based shadow mapping by Macedo and Apolinário (2016) and shadow map silhouette revectorization by Bondarev (2014).
 - The night sky's star map is made from Deep Star Maps 2020 by NASA's Scientific Visualization Studio.
+- Milliath found how far the game draws grass, the limit Grass reach keeps to.
 - The package runs its engine on Node.js.
 
 SnowRunner is a game by Saber Interactive. This project is not affiliated with Saber Interactive or Focus Entertainment.

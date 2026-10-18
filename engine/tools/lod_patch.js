@@ -7,7 +7,8 @@
 //           grass meshes carry no LOD switches, the game fades grass by distance per grass type instead (initial.pak,
 //           [media]\...\classes\grass\*.xml, <GrassBrand FadeDistances="7, 17, 30">: density steps, then the end of the
 //           grass; most grass is gone at 30 m), so with this set those distances are multiplied by GRASS_FACTOR (3
-//           by default; an installer may offer others). initial.pak is built from
+//           by default; an installer may offer others), each step kept under the end of the game's grass (scaleList).
+//           initial.pak is built from
 //           pak_backup\initial.pak.orig, read back and checked, the same way; the nature set and restore put the
 //           original initial.pak back, but only over this tool's own build (another tool's change is left alone).
 //
@@ -642,12 +643,20 @@ function backup()
 // carries the stars in its alpha get their sky alpha times 3 in every build, stars part or not (without it the aurora
 // comes out at a third). Changed entries are small XML
 // files and are stored again whole (deflated at zlib -9 where they were deflated); everything else is copied raw.
-// "7, 17, 30" -> "21, 51, 90"; null when the list is not plain numbers
+// The game draws grass only so far around the camera, about 64 m (found by Milliath): a step set beyond that no longer
+// fades, the grass at the edge appears whole at once. So step n of k ends at most GRASS_END - GRASS_GAP * (k - 1 - n)
+// metres (50, 55, 60 for three steps), and a step the game itself sets further stays as it is
+const GRASS_END = 60, GRASS_GAP = 5;
+// "7, 17, 30" -> "21, 51, 60" at 3, "14, 34, 60" at 2; null when the list is not plain numbers
 function scaleList(list, factor)
 {
     const parts = list.split(',').map((s) => s.trim());
     if (!parts.length || parts.some((s) => !/^\d+(\.\d+)?$/.test(s))) return null;
-    return parts.map((s) => { const v = Number(s) * factor; return Number.isInteger(v) ? String(v) : v.toFixed(1); }).join(', ');
+    return parts.map((s, n) =>
+    {
+        const was = Number(s), v = Math.max(was, Math.min(was * factor, GRASS_END - GRASS_GAP * (parts.length - 1 - n)));
+        return Number.isInteger(v) ? String(v) : v.toFixed(1);
+    }).join(', ');
 }
 // parts: { grass: factor or null, fill: factor or null, stars: factor or null, weather: comma list or null, debris: drops
 // factor or null, days: the regions with days of their own, a comma list of codes such as us_91, or null }. photoWas:
