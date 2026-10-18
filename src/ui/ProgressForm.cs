@@ -269,7 +269,7 @@ namespace SnowRunnerNextGen
             Invalidate();
         }
 
-        // the newest line stays in view, until the user scrolls up to read
+        // the newest line stays in view, until the log is scrolled up to read
         bool follow = true;
 
         protected override void OnLayout(LayoutEventArgs e)

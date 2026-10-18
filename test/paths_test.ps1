@@ -60,7 +60,7 @@ $selection | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $file -Encoding 
 'the untouched copy'
 $s = Status
 Check 'status: the originals' ('{0} {1} {2} {3}' -f $s.shader.state, $s.dll.state, $s.grass.state, $s.logos.state) 'stock none vanilla vanilla'
-Check 'status: the state folder lies under the user folder' ((Test-Path -LiteralPath (Join-Path $local 'SnowRunnerNextGen\games'))) 'True'
+Check 'status: the state folder lies under the account''s local application data' ((Test-Path -LiteralPath (Join-Path $local 'SnowRunnerNextGen\games'))) 'True'
 
 'apply with the default selection'
 $r = Engine @('apply', '--selection', $file)
@@ -90,7 +90,7 @@ $r = Engine @('restore')
 Check 'restore: done' (Last $r) 'done'
 foreach ($p in 'shader', 'shared', 'initial', 'boot', 'gfx') { Check "restore: $p.pak is the original byte for byte" (Hash (Join-Path $paks "$p.pak")) (Hash (Join-Path $Originals "$p.pak.orig")) }
 Check 'restore: no hid.dll, ini or note left' ((Test-Path -LiteralPath (Join-Path $bin 'hid.dll')) -or (Test-Path -LiteralPath (Join-Path $bin 'SnowRunnerShadows.ini')) -or (Test-Path -LiteralPath (Join-Path $paks 'SnowRunnerNextGen.json'))) 'False'
-'files written under the user folder''s TEMP: ' + (Get-ChildItem -LiteralPath $temp -Recurse -File | Measure-Object).Count
+'files written under the account''s TEMP: ' + (Get-ChildItem -LiteralPath $temp -Recurse -File | Measure-Object).Count
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }
 'all passed; the copy is under ' + $user

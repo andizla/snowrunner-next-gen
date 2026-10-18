@@ -73,7 +73,7 @@ namespace SnowRunnerNextGen
             return File.Exists(Path.Combine(folder, "shader.pak"));
         }
 
-        // the game folder of a file the user picked (SnowRunner.exe or shader.pak); null when no game is around it.
+        // the game folder of a file picked in the dialog (SnowRunner.exe or shader.pak); null when no game is around it.
         // SnowRunner.exe lies in Sources\Bin, two folders down (Steam, Epic Games), or in the game's own folder (the
         // Xbox app's version)
         public static string FolderOfPick(string file)

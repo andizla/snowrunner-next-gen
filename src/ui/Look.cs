@@ -19,7 +19,7 @@ namespace SnowRunnerNextGen
         public const TextFormatFlags Middle = Line | TextFormatFlags.VerticalCenter;
         public const TextFormatFlags Center = Middle | TextFormatFlags.HorizontalCenter;
 
-        // The body font: the system's message font (9 pt Segoe UI, larger when the user made text bigger) at 10/9 of
+        // The body font: the system's message font (9 pt Segoe UI, larger when Windows' text size is raised) at 10/9 of
         // its size. scale 0 = the screen's own scaling; otherwise the scaling to draw at (1 = 100 %), for pictures.
         public static Font BaseFont(float scale)
         {

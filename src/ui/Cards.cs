@@ -23,9 +23,9 @@ namespace SnowRunnerNextGen
         bool on, hot, pressed, infoHot, downInfo;
         int hotRow = -1, hotButton = -1, downRow = -1, downButton = -1, keyRow;
 
-        public event EventHandler Toggled;    // the user ticked or unticked it
-        public event EventHandler Picked;     // the user picked an option
-        public event EventHandler InfoAsked;  // the user asked for the explanation: the (?), F1 or ?
+        public event EventHandler Toggled;    // ticked or unticked by a click or a key
+        public event EventHandler Picked;     // an option picked
+        public event EventHandler InfoAsked;  // the explanation asked for: the (?), F1 or ?
 
         // the layout for the current width
         Rectangle box, title, info, tag, text, needs;
