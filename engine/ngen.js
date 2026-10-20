@@ -38,7 +38,10 @@ const { spawn, execFileSync } = require('child_process');
 
 // the game's own shader.pak of the versions this engine knows (sha256): the first install takes such a file as the
 // original without asking
-const KNOWN_SHADER = ['554f67ec40e5d807d7e06afce4c0268841bc949cbdcd85cedc7a9c20d92352c2'];   // 55,689,216 bytes, 2026-07
+const KNOWN_SHADER = [
+    '554f67ec40e5d807d7e06afce4c0268841bc949cbdcd85cedc7a9c20d92352c2',   // 55,689,216 bytes, 2026-07
+    '03aa2c0b111de1d352c74e1a386c0f5dc9a0cde33c520183d5ecd02bc07e735c',   // 55,713,792 bytes, the update of 2026-10-20 (exe 6ab52f5d)
+];
 // the modules that read the scene's picture from SnowRunner Shadows
 const NEED_DLL = ['gi', 'water', 'sssr', 'reflections', 'puddles', 'contact'];
 
