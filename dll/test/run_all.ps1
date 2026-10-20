@@ -10,6 +10,9 @@ $configs = @(
     @{ name = 'double';         ini = @();                          args = @('double') },
     @{ name = 'off';            ini = @('Factor=1');                args = @('off') },
     @{ name = 'off nofeed';     ini = @('Factor=1', 'Feed=0');      args = @('off', 'nofeed') },
+    # the texture base rule is checked in every run (this program is a build without known addresses); off here, and
+    # in 'off nofeed' above the device hook is there for the rule alone
+    @{ name = 'texture rule off'; ini = @('TextureBaseRule=0');     args = @('texoff') },
     @{ name = 'nogi';           ini = @('GI=0');                    args = @('nogi') },
     @{ name = 'nomips';         ini = @('FeedMips=0');              args = @('nomips') },
     @{ name = 'runtime mips';   ini = @('FeedMips=2');              args = @() },

@@ -30,7 +30,8 @@ fxc /nologo /T vs_5_0 /E main /O3 /Vn g_vsContact /Fh out\obj\g_vsContact.h src\
 fxc /nologo /T ps_5_0 /E main /O3 /Vn g_psContact /Fh out\obj\g_psContact.h src\sss\contact_ps.hlsl >nul || goto fail
 cl /nologo /c /O2 /W4 /EHsc /std:c++17 /utf-8 /MT /I out\obj /Fo:out\obj\shadows.obj src\shadows.cpp || goto fail
 link /nologo /DLL /DEF:src\hid.def /OUT:out\hid.dll /IMPLIB:out\obj\hid_proxy.lib out\obj\hid_stubs.obj out\obj\vtidx.obj out\obj\shadows.obj user32.lib || goto fail
-cl /nologo /O2 /W4 /EHsc /std:c++17 /utf-8 /MT /Fo:out\obj\ /Fe:out\shadow_test.exe test\shadow_test.cpp /link d3d11.lib dxgi.lib d3dcompiler.lib hid.lib user32.lib || goto fail
+ml64 /nologo /c /Fo out\obj\tex_small.obj test\tex_small.asm || goto fail
+cl /nologo /O2 /W4 /EHsc /std:c++17 /utf-8 /MT /Fo:out\obj\ /Fe:out\shadow_test.exe test\shadow_test.cpp out\obj\tex_small.obj /link d3d11.lib dxgi.lib d3dcompiler.lib hid.lib user32.lib || goto fail
 cl /nologo /O2 /W4 /EHsc /std:c++17 /utf-8 /MT /I out\obj /Fo:out\obj\ /Fe:out\sss_lab.exe test\sss_lab.cpp /link d3d11.lib dxgi.lib || goto fail
 echo BUILD OK: out\hid.dll, out\shadow_test.exe, out\sss_lab.exe
 exit /b 0

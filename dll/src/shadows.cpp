@@ -5733,9 +5733,13 @@ static HRESULT WINAPI Hook_CreateDXGIFactory1(REFIID riid, void **out)
 // a shorter block than their file holds, which the reader already handles (it skips the extra leading bytes). The value
 // has one reader and no writer; it is set here, before any game code runs (the code is still encrypted then, its data is
 // not), for this game build only, and TextureBaseCheck looks at the reader once the code is decrypted.
+// Any other build (a game update moves both): the int is found once the code is decrypted, when the game makes its
+// D3D11 device, before any texture exists, by that reader (mov ecx,[rip+disp32]; mov eax,ecx; cdq; sub eax,edx; sar
+// eax,1) in the image's executable sections, pointing into the image at an int of 512. Readers of one int only, or the
+// game's rule stays and the log says what was found.
 static const uintptr_t kTexSmallRva = 0x29d931c, kTexSmallReadRva = 0x14d8037;
 static const BYTE kTexSmallRead[] = { 0x8b, 0x0d, 0xdf, 0x12, 0x50, 0x01, 0x8b, 0xc1, 0x99, 0x2b, 0xc2, 0xd1, 0xf8 }; // mov ecx,[that int]; mov eax,ecx; cdq; sub eax,edx; sar eax,1
-static bool g_texBaseSet = false;
+static bool g_texBaseSet = false, g_texBaseLate = false;
 
 static void TextureBaseRule()
 {
@@ -5744,8 +5748,9 @@ static void TextureBaseRule()
     int *side = (int *)(exe + kTexSmallRva);
     if (nt->FileHeader.TimeDateStamp != 0x6a607c05 || nt->OptionalHeader.SizeOfImage != 0x2e02000 || *side != 512)
     {
-        Log("texture base rule: not the game build this was made for (stamp %08x, image size %x), left as the game has it", (unsigned)nt->FileHeader.TimeDateStamp,
-            (unsigned)nt->OptionalHeader.SizeOfImage);
+        g_texBaseLate = true;
+        Log("texture base rule: game build %08x (image size %x), not the one with known addresses: the value is looked for by its reader when the device is made",
+            (unsigned)nt->FileHeader.TimeDateStamp, (unsigned)nt->OptionalHeader.SizeOfImage);
         return;
     }
     *side = 256;
@@ -5753,10 +5758,78 @@ static void TextureBaseRule()
     Log("texture base rule: resident low mips of a texture with a side under 128 (the game: 256) are the whole texture, as the Image Editor builds them (upscaled textures load)");
 }
 
+// the readers of the int in [from, to): the count, or -1 when a page could not be read, -2 when two ints are read so
+// (*target holds the int the first reader names)
+static int ScanTexSmall(BYTE *exe, SIZE_T image, BYTE *from, BYTE *to, BYTE **target, BYTE **reader)
+{
+    int n = 0;
+    __try
+    {
+        for (BYTE *p = from; p + sizeof kTexSmallRead <= to; p++)
+        {
+            if (p[0] != 0x8b || p[1] != 0x0d || memcmp(p + 6, kTexSmallRead + 6, sizeof kTexSmallRead - 6) != 0) continue;
+            BYTE *t = p + 6 + *(const INT32 *)(p + 2);
+            if (t < exe || t + sizeof(int) > exe + image || *(const int *)t != 512) continue;
+            if (!*target) { *target = t; *reader = p; }
+            else if (t != *target) return -2;
+            n++;
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+    return n;
+}
+
+static bool Readable(DWORD protect)
+{
+    if (protect & (PAGE_GUARD | PAGE_NOACCESS)) return false;
+    return (protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) != 0;
+}
+
+static void TextureBaseLate()
+{
+    BYTE *exe = (BYTE *)GetModuleHandleW(nullptr);
+    const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)(exe + ((const IMAGE_DOS_HEADER *)exe)->e_lfanew);
+    const SIZE_T image = nt->OptionalHeader.SizeOfImage;
+    const IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+    BYTE *target = nullptr, *reader = nullptr;
+    int n = 0;
+    for (WORD s = 0; s < nt->FileHeader.NumberOfSections && n >= 0; s++)
+    {
+        if (!(sec[s].Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        BYTE *p = exe + sec[s].VirtualAddress, *end = p + sec[s].Misc.VirtualSize;
+        while (p < end && n >= 0)
+        {
+            // one stretch of committed, readable pages, then the unreadable one after it skipped
+            MEMORY_BASIC_INFORMATION mi;
+            BYTE *run = p;
+            while (run < end && VirtualQuery(run, &mi, sizeof mi) && mi.State == MEM_COMMIT && Readable(mi.Protect)) run = (BYTE *)mi.BaseAddress + mi.RegionSize;
+            if (run > end) run = end;
+            if (run > p) { const int k = ScanTexSmall(exe, image, p, run, &target, &reader); n = k < 0 ? k : n + k; }
+            if (run >= end || !VirtualQuery(run, &mi, sizeof mi)) break;
+            p = (BYTE *)mi.BaseAddress + mi.RegionSize;
+        }
+    }
+    if (n <= 0)
+    {
+        Log("texture base rule: %s, left as the game has it", n == 0 ? "no reader of the value found" : n == -1 ? "a code page could not be read" : "readers of two different ints found");
+        return;
+    }
+    MEMORY_BASIC_INFORMATION mi;
+    if (!VirtualQuery(target, &mi, sizeof mi) || !(mi.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)))
+    {
+        Log("texture base rule: the value at rva %llx is not writable, left as the game has it", (unsigned long long)(target - exe));
+        return;
+    }
+    *(int *)target = 256;
+    Log("texture base rule: the value found at rva %llx by %d reader(s) (the first at rva %llx) and set to 256: upscaled textures load",
+        (unsigned long long)(target - exe), n, (unsigned long long)(reader - exe));
+}
+
 static void TextureBaseCheck()
 {
     static std::atomic<bool> checked{ false };
-    if (!g_texBaseSet || checked.exchange(true)) return;
+    if (!(g_texBaseSet || g_texBaseLate) || checked.exchange(true)) return;
+    if (g_texBaseLate) { TextureBaseLate(); return; }
     BYTE *exe = (BYTE *)GetModuleHandleW(nullptr);
     if (memcmp(exe + kTexSmallReadRva, kTexSmallRead, sizeof kTexSmallRead) == 0) Log("texture base rule: the game's reader of the value is where expected");
     else
@@ -5832,13 +5905,14 @@ static LONG CALLBACK CrashVeh(EXCEPTION_POINTERS *ep)
 
 typedef HRESULT(WINAPI *PFN_D3D11CreateDevice)(IDXGIAdapter *, D3D_DRIVER_TYPE, HMODULE, UINT, const D3D_FEATURE_LEVEL *, UINT, UINT, ID3D11Device **, D3D_FEATURE_LEVEL *, ID3D11DeviceContext **);
 static PFN_D3D11CreateDevice g_realCreateDevice = nullptr;
+static bool g_deviceWork = true;   // false when the hook is there for the texture base rule alone
 
 static HRESULT WINAPI Hook_D3D11CreateDevice(IDXGIAdapter *adapter, D3D_DRIVER_TYPE type, HMODULE sw, UINT flags, const D3D_FEATURE_LEVEL *levels, UINT count,
     UINT sdk, ID3D11Device **device, D3D_FEATURE_LEVEL *level, ID3D11DeviceContext **context)
 {
     TextureBaseCheck();
     const HRESULT hr = g_realCreateDevice(adapter, type, sw, flags, levels, count, sdk, device, level, context);
-    if (SUCCEEDED(hr) && device && *device) HookDevice(*device);
+    if (SUCCEEDED(hr) && device && *device && g_deviceWork) HookDevice(*device);
     return hr;
 }
 
@@ -5999,7 +6073,13 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
             _wfopen_s(&g_traceFile, (g_dir + L"SnowRunnerShadows.trace.log").c_str(), L"w");
             Log("trace on: SnowRunnerShadows.trace.log, bursts of %llu ms every %llu s", kBurstLength, kBurstEvery / 1000);
         }
-        if (g_scaling || g_feed || g_twinCount || g_gpuProfile)
+        g_deviceWork = g_scaling || g_feed || g_twinCount || g_gpuProfile;
+        if (!g_deviceWork && g_texBaseLate)
+        {
+            const bool ok = PatchImport(GetModuleHandleW(nullptr), "d3d11.dll", "D3D11CreateDevice", (void *)&Hook_D3D11CreateDevice, (void **)&g_realCreateDevice);
+            Log("D3D11CreateDevice import %s, for the texture base rule alone", ok ? "hooked" : "NOT FOUND, the game's rule stays");
+        }
+        if (g_deviceWork)
         {
             const bool ok = PatchImport(GetModuleHandleW(nullptr), "d3d11.dll", "D3D11CreateDevice", (void *)&Hook_D3D11CreateDevice, (void **)&g_realCreateDevice);
             Log("factor %g%s, slope bias %s, scene feed %s, bounce light %s; D3D11CreateDevice import %s", g_factor, g_scaling ? "" : " (not scaling)",

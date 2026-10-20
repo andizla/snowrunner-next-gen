@@ -42,6 +42,8 @@
 extern "C" void __stdcall HidD_GetHidGuid(GUID *guid); // hidsdi.h, declared here to keep the SDK's hid headers out
 
 static int g_failures = 0;
+extern "C" int TexSmallHalf();   // tex_small.asm: half the texture base rule's value, read the way the game reads it
+
 static void Check(bool ok, const char *what)
 {
     printf("%s  %s\n", ok ? "ok  " : "FAIL", what);
@@ -1409,11 +1411,11 @@ int main(int argc, char **argv)
 {
     bool expectOff = false, hardware = false, twoDevices = false, noFeed = false, noGI = false, puddlesOff = false, bounceOff = false;
     bool makeTable = false, twins = false, stockAll = false, stockAO = false, dumpMode = false, dumpImmediate = false, noMips = false;
-    bool ssrMode = false, ssrRough = false, aoHalfMode = false, aoFullMode = false, contactMode = false;
+    bool ssrMode = false, ssrRough = false, aoHalfMode = false, aoFullMode = false, contactMode = false, texOff = false;
     const char *replayDir = nullptr;
     for (int i = 1; i < argc; i++)
     {
-        contactMode |= strcmp(argv[i], "contact") == 0;
+        contactMode |= strcmp(argv[i], "contact") == 0; texOff |= strcmp(argv[i], "texoff") == 0;
         ssrMode |= strcmp(argv[i], "ssr") == 0; ssrRough |= strcmp(argv[i], "rough") == 0; aoHalfMode |= strcmp(argv[i], "aohalf") == 0;
         aoFullMode |= strcmp(argv[i], "aofull") == 0;
         if (strcmp(argv[i], "ssrreplay") == 0 && i + 1 < argc) replayDir = argv[i + 1];
@@ -1448,6 +1450,9 @@ int main(int argc, char **argv)
     D3D_FEATURE_LEVEL fl = D3D_FEATURE_LEVEL_11_0;
     if (FAILED(D3D11CreateDevice(nullptr, hardware ? D3D_DRIVER_TYPE_HARDWARE : D3D_DRIVER_TYPE_WARP, nullptr, 0, &fl, 1, D3D11_SDK_VERSION, &r.dev, nullptr, &r.ctx))) { printf("FAIL  no device\n"); return 2; }
     printf("device: %s\n", hardware ? "GPU" : "WARP");
+    // the texture base rule on a build without known addresses (this program): the int found by its reader
+    Check(TexSmallHalf() == (texOff ? 256 : 128), texOff ? "texture base rule off (ini TextureBaseRule=0): the value stays 512"
+        : "texture base rule: the value found by its reader (tex_small.asm) when the device was made, 512 -> 256");
     ID3D11Device *second = nullptr;
     if (twoDevices)
     {
