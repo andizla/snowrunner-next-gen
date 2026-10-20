@@ -195,6 +195,7 @@ enum : uint32_t { kFeedAO = 1, kFeedReads = 2, kFeedGIWrites = 4, kFeedGIReads =
 // dev switches: a changed shader's original (private data interface) and its group (1 the AO pass, 2 any other)
 static const GUID kTwinTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x48 } };
 static const GUID kTwinGroupTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x49 } };
+static const GUID kTwinEntryTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x4b } };   // its original's place in the table
 static const UINT kFeedSlot = 120; // t120 the previous frame's scene colour, t121 its linear depth
 static const UINT kGISlot = 122;   // t122 the bounce light the AO pass measured last frame
 static const UINT kSSRSlot = 123;  // t123 the reflections of the last pass, t124 the object motion of the last frame
@@ -4866,6 +4867,46 @@ static uint32_t ShaderHash(ID3D11DeviceChild *s)
     return h;
 }
 
+// dev switches: the original of a changed shader, made the first time a switch wants it and kept on it (it holds the
+// reference), not when the game makes the shader: a start then builds no originals (about 5,600 with every card on,
+// which put the first frame of a start seconds later), and only the shaders drawn while a switch holds get one. A
+// reference for the caller, or null (no entry, or the device would not make it: the changed shader draws, the first
+// four failures are logged, and it is not tried again)
+static std::mutex g_twinLock;
+template <class T> static IUnknown *MakeTwin(T *sh)
+{
+    constexpr bool pixel = std::is_same_v<T, ID3D11PixelShader>;
+    std::lock_guard<std::mutex> lock(g_twinLock);
+    IUnknown *twin = nullptr;
+    UINT size = sizeof twin;
+    if (SUCCEEDED(sh->GetPrivateData(kTwinTag, &size, &twin)) && twin) return twin;   // made on another context meanwhile
+    uint32_t index = 0;
+    size = sizeof index;
+    if (FAILED(sh->GetPrivateData(kTwinEntryTag, &size, &index)) || size != sizeof index || index >= g_twinCount) return nullptr;
+    const TwinEntry &t = g_twins[index];
+    const uint8_t *stock = g_twinBase + t.offset;
+    ID3D11Device *dev = nullptr;
+    sh->GetDevice(&dev);
+    if (!dev) return nullptr;
+    const DeviceOrig *d = DevOrig(dev);
+    T *made = nullptr;
+    HRESULT hr;
+    if constexpr (pixel) hr = d->createPS(dev, stock, t.size, nullptr, &made);
+    else hr = d->createVS(dev, stock, t.size, nullptr, &made);
+    dev->Release();
+    if (FAILED(hr) || !made)
+    {
+        if (g_twinsFailed++ < 4) Log("stock twins: the original of %s shader %08X could not be made", pixel ? "pixel" : "vertex", t.key);
+        sh->SetPrivateData(kTwinEntryTag, 0, nullptr);
+        return nullptr;
+    }
+    if constexpr (pixel) { const uint32_t f = g_feed ? FeedFlags(stock, t.size) : 0; if (f) made->SetPrivateData(kFeedTag, sizeof f, &f); }
+    if (g_trace || g_gpuProfile || g_depthProbe) { const uint32_t th = Crc32(stock, t.size); made->SetPrivateData(kHashTag, sizeof th, &th); }
+    sh->SetPrivateDataInterface(kTwinTag, made);
+    g_twinsMade++;
+    return made;   // the creation's reference, for the caller
+}
+
 // dev switches: the original to draw with instead of sh (a pixel or a vertex shader) while its group is switched to
 // stock (F8 every changed shader, F11 the AO pass), with a reference for the caller to release; null: draw sh itself
 template <class T> static T *StockTwin(T *sh)
@@ -4877,7 +4918,11 @@ template <class T> static T *StockTwin(T *sh)
     if (FAILED(sh->GetPrivateData(kTwinGroupTag, &size, &group)) || size != sizeof group || !(all || group == 1)) return nullptr;
     IUnknown *twin = nullptr;
     size = sizeof twin;
-    if (FAILED(sh->GetPrivateData(kTwinTag, &size, &twin)) || !twin) return nullptr;
+    if (FAILED(sh->GetPrivateData(kTwinTag, &size, &twin)) || !twin)
+    {
+        twin = MakeTwin(sh);
+        if (!twin) return nullptr;
+    }
     T *out = nullptr;
     twin->QueryInterface(__uuidof(T), (void **)&out);
     twin->Release();
@@ -5468,19 +5513,13 @@ static HRESULT STDMETHODCALLTYPE Hook_CreateVertexShader(ID3D11Device *self, con
     if (!scope.outer || FAILED(hr) || !code || !out || !*out) return hr;
     const uint32_t crc = Crc32(code, size);
     if (g_trace || g_depthProbe) (*out)->SetPrivateData(kHashTag, sizeof crc, &crc);
-    // dev switches: a vertex shader the fidelity bundle changed gets its original beside it, as the pixel shaders do
+    // dev switches: a vertex shader the fidelity bundle changed is marked with its original's place in the table, as
+    // the pixel shaders are; the original is made when a switch first wants it (MakeTwin)
     if (const TwinEntry *t = g_twinCount ? FindTwin(crc) : nullptr)
     {
-        ID3D11VertexShader *twin = nullptr;
-        if (SUCCEEDED(d->createVS(self, g_twinBase + t->offset, t->size, link, &twin)) && twin)
-        {
-            if (g_trace || g_depthProbe) { const uint32_t th = Crc32(g_twinBase + t->offset, t->size); twin->SetPrivateData(kHashTag, sizeof th, &th); }
-            (*out)->SetPrivateDataInterface(kTwinTag, twin);
-            (*out)->SetPrivateData(kTwinGroupTag, sizeof t->group, &t->group);
-            twin->Release(); // the changed shader holds it
-            g_twinsMade++;
-        }
-        else if (g_twinsFailed++ < 4) Log("stock twins: the original of vertex shader %08X could not be made", crc);
+        const uint32_t index = (uint32_t)(t - g_twins);
+        (*out)->SetPrivateData(kTwinEntryTag, sizeof index, &index);
+        (*out)->SetPrivateData(kTwinGroupTag, sizeof t->group, &t->group);
     }
     return hr;
 }
@@ -5504,22 +5543,13 @@ static HRESULT STDMETHODCALLTYPE Hook_CreatePixelShader(ID3D11Device *self, cons
     if (!scope.outer || FAILED(hr) || !code || !out || !*out) return hr;
     const uint32_t crc = g_trace || g_twinCount || g_ssr || g_gpuProfile ? Crc32(code, size) : 0;
     if (g_trace || g_gpuProfile) (*out)->SetPrivateData(kHashTag, sizeof crc, &crc);
-    // dev switches: a shader the fidelity bundle changed gets its original beside it
+    // dev switches: a shader the fidelity bundle changed is marked with its original's place in the table; the
+    // original is made when a switch first wants it (MakeTwin)
     if (const TwinEntry *t = g_twinCount ? FindTwin(crc) : nullptr)
     {
-        ID3D11PixelShader *twin = nullptr;
-        const uint8_t *stock = g_twinBase + t->offset;
-        if (SUCCEEDED(d->createPS(self, stock, t->size, link, &twin)) && twin)
-        {
-            const uint32_t tflags = g_feed ? FeedFlags(stock, t->size) : 0;
-            if (tflags) twin->SetPrivateData(kFeedTag, sizeof tflags, &tflags);
-            if (g_trace || g_gpuProfile) { const uint32_t th = Crc32(stock, t->size); twin->SetPrivateData(kHashTag, sizeof th, &th); }
-            (*out)->SetPrivateDataInterface(kTwinTag, twin);
-            (*out)->SetPrivateData(kTwinGroupTag, sizeof t->group, &t->group);
-            twin->Release(); // the changed shader holds it
-            g_twinsMade++;
-        }
-        else if (g_twinsFailed++ < 4) Log("stock twins: the original of shader %08X could not be made", crc);
+        const uint32_t index = (uint32_t)(t - g_twins);
+        (*out)->SetPrivateData(kTwinEntryTag, sizeof index, &index);
+        (*out)->SetPrivateData(kTwinGroupTag, sizeof t->group, &t->group);
     }
     if (g_feed)
     {
