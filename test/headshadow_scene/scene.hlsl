@@ -20,7 +20,7 @@ cbuffer Scene : register(b3)
 
 struct Box { float3 lo; float3 hi; float albedo; };
 // metres; x to the right of the truck, y up, z ahead of its front (the lamps at z = 0.05)
-static const Box BOXES[9] =
+static const Box BOXES[13] =
 {
     { float3(-1.00, 0.45, -4.60), float3(1.00, 1.25, 0.00), 0.12 },   // the truck's body and hood
     { float3(-0.95, 1.25, -2.60), float3(0.95, 2.00, -1.00), 0.12 },  // its cab
@@ -31,6 +31,10 @@ static const Box BOXES[9] =
     { float3(-2.60, 0.00, 11.00), float3(-1.40, 0.80, 11.60), 0.50 }, // a concrete block
     { float3(-8.00, 0.00, 22.00), float3(8.00, 3.00, 22.50), 0.40 },  // a wall across the road
     { float3( 3.50, 0.00,  4.00), float3(3.80, 2.20, 4.30), 0.45 },   // a post beside the beam
+    { float3(-1.05, 0.30,  0.00), float3(1.05, 0.62, 0.22), 0.20 },   // the front bumper, below the lamps
+    { float3(-0.25, 0.40,  0.22), float3(0.25, 0.66, 0.45), 0.15 },   // a winch on it
+    { float3(-0.50, 0.30,  0.40), float3(-0.42, 1.30, 0.48), 0.25 },  // a bull bar's two uprights, between the lamps
+    { float3( 0.42, 0.30,  0.40), float3(0.50, 1.30, 0.48), 0.25 },
 };
 static const float GROUND_ALBEDO = 0.30;
 static const float AMBIENT = 0.02;
@@ -44,7 +48,7 @@ Hit Trace(float3 o, float3 d)
     h.t = 1e9; h.n = float3(0, 1, 0); h.albedo = 0;
     if (d.y < 0.0) { h.t = -o.y / d.y; h.albedo = GROUND_ALBEDO; }
     const float3 inv = 1.0 / d;
-    [unroll] for (int i = 0; i < 9; i++)
+    [unroll] for (int i = 0; i < 13; i++)
     {
         const float3 t0 = (BOXES[i].lo - o) * inv, t1 = (BOXES[i].hi - o) * inv;
         const float3 a = min(t0, t1), b = max(t0, t1);
