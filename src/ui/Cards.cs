@@ -160,9 +160,9 @@ namespace SnowRunnerNextGen
             Rectangle r = ClientRectangle;
             float radius = look.F(10);
             Color fill = hot ? Theme.CardHot : Theme.Card;
-            if (on) fill = Look.Mix(fill, Theme.Ice, 0.07f);   // ticked cards keep the blue base; the orange is for what is pressed
+            if (on) fill = Look.Mix(fill, Theme.Accent, 0.03f);   // ticked: a breath of the orange, its edge as the menu's separators
             Look.Fill(g, r, radius, fill);
-            Look.Stroke(g, r, radius, on ? Look.Mix(Theme.Border, Theme.Ice, 0.6f) : Theme.Border, Math.Max(1f, look.F(1)));
+            Look.Stroke(g, r, radius, on ? Look.Mix(Theme.Border, Theme.Accent, 0.45f) : Theme.Border, Math.Max(1f, look.F(1)));
             if (Focused && ShowFocusCues) Look.Stroke(g, Rectangle.Inflate(r, -look.U(3), -look.U(3)), radius - look.F(3), Theme.Accent, look.F(2));
 
             float boxRadius = look.F(5);
