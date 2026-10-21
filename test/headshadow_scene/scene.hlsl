@@ -81,10 +81,28 @@ float Headlight(float3 P, float3 N)
     return 30.0 * cone * reach * nearFade * saturate(dot(N, -l)) / (1.0 + 0.04 * d * d);
 }
 
-float depth_ps(float4 pos : SV_Position) : SV_Target
+// pass 1: the linear depth (t121) and, for timing the helper alone, the world position with 1 in w inside the beam
+struct DepthOut { float depth : SV_Target0; float4 pos : SV_Target1; };
+DepthOut depth_ps(float4 pos : SV_Position)
 {
-    const Hit h = Trace(s_eye, CamDir(pos.xy));
-    return h.albedo > 0.0 ? h.t : 1e4;
+    const float3 d = CamDir(pos.xy);
+    const Hit h = Trace(s_eye, d);
+    DepthOut o;
+    o.depth = h.albedo > 0.0 ? h.t : 1e4;
+    const float3 P = s_eye + d * h.t, toP = P - s_lamp;
+    o.pos = float4(P, h.albedo > 0.0 && dot(normalize(toP), normalize(s_dir)) > 0.82 && length(toP) < 45.0 ? 1.0 : 0.0);
+    return o;
+}
+
+// timing the helper alone (modes 3 and 4): each pixel's position from pass 1, the helper called inside the beam (mode 3)
+// or not (mode 4); the difference is the helper's cost without the scene's ray casting around it
+Texture2D<float4> g_txPos : register(t0);
+float4 helper_ps(float4 pos : SV_Position) : SV_Target
+{
+    const float4 p = g_txPos.Load(int3(pos.xy, 0));
+    float v = 1.0;
+    if (s_mode == 3.0 && p.w > 0.5) v = main(float4(p.xyz, 1.0)).x;
+    return float4(v, p.w, 0.0, 1.0);
 }
 
 float4 shade_ps(float4 pos : SV_Position) : SV_Target
@@ -100,7 +118,10 @@ float4 shade_ps(float4 pos : SV_Position) : SV_Target
             if (h.albedo <= 0.0) { acc += SKY; continue; }
             const float3 P = s_eye + d * h.t;
             const float light = Headlight(P, h.n);
-            const float v = s_mode == 1.0 ? 1.0 : main(float4(P, 1.0)).x;
+            // the helper runs only inside the beam, as in the game, where it sits inside the shader's own reach and cone test
+            const float3 toP = P - s_lamp;
+            const bool inBeam = dot(normalize(toP), normalize(s_dir)) > 0.82 && length(toP) < 45.0;
+            const float v = s_mode == 1.0 || !inBeam ? 1.0 : main(float4(P, 1.0)).x;
             if (s_mode == 2.0) acc += light > 1e-4 ? v.xxx : float3(0.05, 0.05, 0.12);
             else acc += h.albedo * (AMBIENT + light * v);
         }

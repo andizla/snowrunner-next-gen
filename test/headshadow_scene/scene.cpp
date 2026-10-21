@@ -4,11 +4,13 @@
 // c2..c5 the view-projection's columns), b2 CB_GLOBAL_SCENE (c20 the headlight's direction, c24 its position); pass 1's
 // linear depth is bound at t121 for pass 2, as SnowRunner Shadows binds its copy in the game.
 // usage: scene <scene.hlsl> <out.bmp> [--size W H] [--eye x y z] [--target x y z] [--fov degrees] [--mode 0|1|2] [--ss n]
-//        [-D NAME=value ...]     mode 0: with the helper's shadows, 1: the game's own light, 2: the helper's value alone
+//        [--time N] [-D NAME=value ...]     mode 0: with the helper's shadows, 1: the game's own light, 2: the helper's value
+//        alone (3 and 4: the helper alone, timed against no helper); --time N draws the shading pass N more times between GPU timestamps and prints the fastest and the median
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -43,7 +45,7 @@ static ID3D11Buffer *Constants(ID3D11Device *dev, const void *data, UINT bytes)
 int wmain(int argc, wchar_t **argv)
 {
     if (argc < 3) { std::fprintf(stderr, "usage: scene <scene.hlsl> <out.bmp> [options]\n"); return 2; }
-    UINT W = 960, H = 540; V3 eye = { 5.5f, 3.0f, -3.0f }, target = { -0.5f, 0.3f, 10.0f }; float fov = 60, mode = 0, ss = 3;
+    UINT W = 960, H = 540; V3 eye = { 5.5f, 3.0f, -3.0f }, target = { -0.5f, 0.3f, 10.0f }; float fov = 60, mode = 0, ss = 3; int timed = 0;
     std::vector<std::string> defText;
     for (int i = 3; i < argc; i++)
     {
@@ -55,6 +57,7 @@ int wmain(int argc, wchar_t **argv)
         else if (a == L"--fov" && i + 1 < argc) { fov = f(1); i += 1; }
         else if (a == L"--mode" && i + 1 < argc) { mode = f(1); i += 1; }
         else if (a == L"--ss" && i + 1 < argc) { ss = f(1); i += 1; }
+        else if (a == L"--time" && i + 1 < argc) { timed = (int)f(1); i += 1; }
         else if (a == L"-D" && i + 1 < argc) { std::string d; for (const wchar_t *c = argv[++i]; *c; c++) d += (char)*c; defText.push_back(d); }
         else { std::fwprintf(stderr, L"unknown option %s\n", argv[i]); return 2; }
     }
@@ -78,10 +81,12 @@ int wmain(int argc, wchar_t **argv)
     ID3DBlob *vsCode = Compile(nullptr, vsSrc, "main", "vs_5_0", defs);
     ID3DBlob *depthCode = Compile(argv[1], nullptr, "depth_ps", "ps_5_0", defs);
     ID3DBlob *shadeCode = Compile(argv[1], nullptr, "shade_ps", "ps_5_0", defs);
-    ID3D11VertexShader *vs = nullptr; ID3D11PixelShader *depthPs = nullptr, *shadePs = nullptr;
+    ID3DBlob *helperCode = Compile(argv[1], nullptr, "helper_ps", "ps_5_0", defs);
+    ID3D11VertexShader *vs = nullptr; ID3D11PixelShader *depthPs = nullptr, *shadePs = nullptr, *helperPs = nullptr;
     dev->CreateVertexShader(vsCode->GetBufferPointer(), vsCode->GetBufferSize(), nullptr, &vs);
     dev->CreatePixelShader(depthCode->GetBufferPointer(), depthCode->GetBufferSize(), nullptr, &depthPs);
     dev->CreatePixelShader(shadeCode->GetBufferPointer(), shadeCode->GetBufferSize(), nullptr, &shadePs);
+    dev->CreatePixelShader(helperCode->GetBufferPointer(), helperCode->GetBufferSize(), nullptr, &helperPs);
 
     // the camera: x right, y up, z forward; clip = (x * sx, y * sy, depth terms, view depth)
     const V3 f = norm(sub(target, eye)), r = norm(cross({ 0, 1, 0 }, f)), u = cross(f, r);
@@ -102,13 +107,17 @@ int wmain(int argc, wchar_t **argv)
     ID3D11Buffer *cbs[3] = { Constants(dev, cam, sizeof cam), Constants(dev, scene, sizeof scene), Constants(dev, s3, sizeof s3) };
 
     D3D11_TEXTURE2D_DESC td = { W, H, 1, 1, DXGI_FORMAT_R32_FLOAT, { 1, 0 }, D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
-    ID3D11Texture2D *depth = nullptr, *color = nullptr, *staging = nullptr;
+    ID3D11Texture2D *depth = nullptr, *color = nullptr, *staging = nullptr, *posTex = nullptr;
     dev->CreateTexture2D(&td, nullptr, &depth);
+    td.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    dev->CreateTexture2D(&td, nullptr, &posTex);
     td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.BindFlags = D3D11_BIND_RENDER_TARGET;
     dev->CreateTexture2D(&td, nullptr, &color);
     td.Usage = D3D11_USAGE_STAGING; td.BindFlags = 0; td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
     dev->CreateTexture2D(&td, nullptr, &staging);
-    ID3D11RenderTargetView *depthRtv = nullptr, *colorRtv = nullptr; ID3D11ShaderResourceView *depthSrv = nullptr;
+    ID3D11RenderTargetView *depthRtv = nullptr, *colorRtv = nullptr, *posRtv = nullptr; ID3D11ShaderResourceView *depthSrv = nullptr, *posSrv = nullptr;
+    dev->CreateRenderTargetView(posTex, nullptr, &posRtv);
+    dev->CreateShaderResourceView(posTex, nullptr, &posSrv);
     dev->CreateRenderTargetView(depth, nullptr, &depthRtv);
     dev->CreateRenderTargetView(color, nullptr, &colorRtv);
     dev->CreateShaderResourceView(depth, nullptr, &depthSrv);
@@ -118,13 +127,39 @@ int wmain(int argc, wchar_t **argv)
     ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ctx->VSSetShader(vs, nullptr, 0);
     ctx->PSSetConstantBuffers(1, 3, cbs);
-    ctx->OMSetRenderTargets(1, &depthRtv, nullptr);
+    ID3D11RenderTargetView *pass1[2] = { depthRtv, posRtv };
+    ctx->OMSetRenderTargets(2, pass1, nullptr);
     ctx->PSSetShader(depthPs, nullptr, 0);
     ctx->Draw(3, 0);
     ctx->OMSetRenderTargets(1, &colorRtv, nullptr);
     ctx->PSSetShaderResources(121, 1, &depthSrv);
-    ctx->PSSetShader(shadePs, nullptr, 0);
+    ctx->PSSetShaderResources(0, 1, &posSrv);
+    ctx->PSSetShader(mode >= 3 ? helperPs : shadePs, nullptr, 0);
     ctx->Draw(3, 0);
+    // timing: the shading pass again, N times between timestamps (after a few unmeasured draws), fastest and median
+    std::vector<double> ms;
+    if (timed > 0)
+    {
+        for (int k = 0; k < 5; k++) ctx->Draw(3, 0);
+        D3D11_QUERY_DESC qd = { D3D11_QUERY_TIMESTAMP_DISJOINT, 0 };
+        ID3D11Query *disjoint = nullptr; dev->CreateQuery(&qd, &disjoint);
+        qd.Query = D3D11_QUERY_TIMESTAMP;
+        std::vector<ID3D11Query *> ts(timed * 2);
+        for (auto &q : ts) dev->CreateQuery(&qd, &q);
+        ctx->Begin(disjoint);
+        for (int k = 0; k < timed; k++) { ctx->End(ts[k * 2]); ctx->Draw(3, 0); ctx->End(ts[k * 2 + 1]); }
+        ctx->End(disjoint);
+        D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj;
+        while (ctx->GetData(disjoint, &dj, sizeof dj, 0) != S_OK) Sleep(1);
+        for (int k = 0; k < timed; k++)
+        {
+            UINT64 a = 0, b = 0;
+            while (ctx->GetData(ts[k * 2], &a, sizeof a, 0) != S_OK) Sleep(0);
+            while (ctx->GetData(ts[k * 2 + 1], &b, sizeof b, 0) != S_OK) Sleep(0);
+            if (!dj.Disjoint && b > a) ms.push_back(double(b - a) * 1000.0 / double(dj.Frequency));
+        }
+        std::sort(ms.begin(), ms.end());
+    }
     ctx->CopyResource(staging, color);
 
     D3D11_MAPPED_SUBRESOURCE m;
@@ -138,6 +173,9 @@ int wmain(int argc, wchar_t **argv)
             d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = 255;   // RGBA to the BMP's BGRA
         }
     ctx->Unmap(staging, 0);
+    // mode 2: the beam's share of the screen (its pixels are grey, white or black; outside it blue, the sky dark blue)
+    double beam = -1;
+    if (mode == 2) { size_t n = 0; for (size_t k = 0; k < px.size(); k += 4) if (px[k] == px[k + 1] && px[k + 1] == px[k + 2]) n++; beam = double(n) / (W * H); }
 
     // a 32-bit top-down BMP
     BITMAPFILEHEADER fh = {}; BITMAPINFOHEADER ih = {};
@@ -147,6 +185,9 @@ int wmain(int argc, wchar_t **argv)
     if (_wfopen_s(&out, argv[2], L"wb") || !out) { std::fwprintf(stderr, L"cannot write %s\n", argv[2]); return 2; }
     std::fwrite(&fh, sizeof fh, 1, out); std::fwrite(&ih, sizeof ih, 1, out); std::fwrite(px.data(), 1, px.size(), out);
     std::fclose(out);
-    std::printf("%ux%u, mode %g, %g x %g sub-samples, %s\n", W, H, mode, ss, ss, driver);
+    std::printf("%ux%u, mode %g, %g x %g sub-samples, %s", W, H, mode, ss, ss, driver);
+    if (beam >= 0) std::printf(", beam %.1f %% of the screen", beam * 100);
+    if (!ms.empty()) std::printf(", shading pass %.3f ms fastest, %.3f ms median of %zu", ms.front(), ms[ms.size() / 2], ms.size());
+    std::printf("\n");
     return 0;
 }
