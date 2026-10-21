@@ -40,7 +40,7 @@ Atmosphere and image
 - Sharper smoke and particles: the particle textures at twice their size.
 - Debris and splashes: leaves, grass, twigs and dirt thrown up by the wheels stay on the ground and get pushed by the tyres; mud, water and snow splashes throw more drops; exhaust and dust hang in the air longer.
 - Night sky: NASA's star map in place of the game's star texture, and its stars in the photo night skies of Scandinavia, Kola and Quebec.
-- Skies: 43 of the game's sky domes and cloud bands, every region's, made anew from photographs of real skies; the clouds still drift.
+- Skies: 47 of the game's sky domes, cloud bands and night layers, every region's, made anew from photographs of real skies and NASA's star map; the clouds still drift.
 - Map days: Maine shows the days and the snowfall of two snow regions; this gives it Michigan's days, weather and sky. Rows for British Columbia, Austria and Washington, and on every row a third value, map by map, that picks days for each map on its own. Off by default.
 - Brighter stars: the stars of the night sky drawn brighter.
 - Tonemap: stronger contrast and a lighter bloom.
@@ -61,7 +61,7 @@ The (?) on each card says what the module does, what to look for, and what it co
 ## Install
 
 1. Close SnowRunner.
-2. Unzip the folder anywhere and run `SnowRunnerNextGen.exe`. Nothing else needs to be installed.
+2. Unzip the folder anywhere and run `SnowRunnerNextGen.exe`. Nothing else needs to be installed. For the Skies card, unzip the sky pack (`SnowRunnerNextGen_Skies.zip`, a download of its own, about 210 MB) into the same folder; without it the skies are left out.
 3. The program finds the game through Steam, Epic Games or the Microsoft Store. If it does not, pick the game folder.
 4. Pick the modules, then click Apply.
 
@@ -101,7 +101,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1
 ```
 
-`build.ps1` builds the window and compiles the shaders in `engine\replacements` (`engine\tools\build_shaders.js`). Every compiled shader is checked against the list of tested builds, `engine\replacements\shaders.sha256`, and a difference stops the build. `package.ps1` then puts the package together in `out\package\SnowRunnerNextGen` from the `engine` folder: the tools, the compiled shaders and the texture sets. With `-Zip` it also writes `out\SnowRunnerNextGen.zip`, the download of a release.
+`build.ps1` builds the window and compiles the shaders in `engine\replacements` (`engine\tools\build_shaders.js`). Every compiled shader is checked against the list of tested builds, `engine\replacements\shaders.sha256`, and a difference stops the build. `package.ps1` then puts the package together in `out\package\SnowRunnerNextGen` from the `engine` folder: the tools, the compiled shaders and the texture sets. With `-Zip` it also writes the downloads of a release: `out\SnowRunnerNextGen.zip`, the program without the sky textures, and `out\SnowRunnerNextGen_Skies.zip`, the sky pack (`engine\replacements\skies` alone), which unzips into the same folder. `engine\files.json`, the list the program checks its own copy against, leaves the sky textures out.
 
 SnowRunner Shadows is in `dll`: `dll\build.bat` builds `dll\out\hid.dll`, and `dll\test\run_all.ps1` tests it. The package takes the DLL from `assets\engine\hid.dll` and wants the build named in `assets\engine\hid.dll.sha256`, the one the modules were tested with. A rebuild never has that hash, because the linker stamps the time into the file: copy the new DLL there and put its SHA-256 into the `.sha256` file.
 

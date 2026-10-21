@@ -1,7 +1,9 @@
 Next Gen Graphics (SnowRunner Next Gen before October 2026): graphics modules for SnowRunner, in one window.
 
 1. Close SnowRunner.
-2. Unzip this folder anywhere and run SnowRunnerNextGen.exe. Nothing else needs to be installed.
+2. Unzip this folder anywhere and run SnowRunnerNextGen.exe. Nothing else needs to be installed. For the Skies card,
+   unzip the sky pack (SnowRunnerNextGen_Skies.zip, a download of its own) into the same folder; without it the skies
+   are left out.
 3. Pick the modules, then Apply. Restore puts the files back as they were before Next Gen Graphics changed them.
 
 The first Apply reads your game's own shaders and prepares the shader modules from them (a minute or two). The

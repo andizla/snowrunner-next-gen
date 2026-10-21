@@ -598,6 +598,9 @@ const NOTE_NAME = 'SnowRunnerNextGen.json';
 const NOTE_ABOUT = 'Next Gen Graphics (SnowRunner Next Gen before October 2026) wrote this note. The files named here hold its changes, and their originals are kept in %LOCALAPPDATA%\\SnowRunnerNextGen. ' +
     'Should those originals ever be lost, the note tells the program that these are not the game\'s own files. Restore originals takes the note away.';
 const pakFile = (g, name) => g[name.replace(/\.pak$/, '')];
+// the sky textures come as a download of their own (package.ps1): whether they are in this copy
+// (where lut_grade.js looks for them: SR_SKIES_DIR, else replacements\skies\pct beside the tools)
+const skiesPack = () => { try { return fs.readdirSync(process.env.SR_SKIES_DIR || path.join(config.tools, '..', 'replacements', 'skies', 'pct')).some((f) => f.endsWith('.pct')); } catch (e) { return false; } };
 
 // sha256 of a pak's file directory (the zip's central directory), which changes with any entry; null when the file is
 // missing or has no directory
@@ -1040,7 +1043,8 @@ async function apply(g, state, sel, adopt, leave)
     }
     else if (now.skies.state === 'ours' && sameCode(notes, 'skies')) emit({ type: 'log', text: 'boot.pak already has the skies' });
     else if (now.skies.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the skies were left out.');
-    else { step('Putting the skies in (boot.pak, 430 MB)'); await must('lut_grade.js', ['skies-install'], env); }
+    else if (!skiesPack()) warn('Skies needs the sky pack, a download of its own (SnowRunnerNextGen_Skies.zip, beside this program\'s download), unzipped into this program\'s folder. The skies were left out.');
+    else { step('Putting the skies in (boot.pak, 490 MB)'); await must('lut_grade.js', ['skies-install'], env); }
 
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
 

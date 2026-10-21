@@ -159,27 +159,35 @@ foreach ($f in @((Join-Path $pkg 'LICENSE'), (Join-Path $pkg 'THIRD_PARTY_NOTICE
 # config.json is the one file meant to be edited and stays out of the list
 $version = "$(Get-Content -LiteralPath (Join-Path $root 'CHANGELOG.md') | Where-Object { $_ -match '^## \[\d+\.\d+\.\d+\]' } | Select-Object -First 1)" -replace '^## \[(\d+\.\d+\.\d+)\].*$', '$1'
 if (-not $version) { throw 'CHANGELOG.md names no version' }
+# The sky textures are a download of their own (the sky pack, unzipped into the same folder), so they are not in the
+# list: a copy without them is complete, and the Skies card says what it needs
+$skiesDir = Join-Path $engine 'replacements\skies'
+$isSky = { param($f) $f.FullName.StartsWith($skiesDir + '\', [StringComparison]::OrdinalIgnoreCase) }
 $listed = [ordered]@{}
-foreach ($f in (Get-ChildItem -LiteralPath $engine -File -Recurse | Where-Object { $_.FullName -ne (Join-Path $engine 'config.json') } | Sort-Object FullName)) { $listed[$f.FullName.Substring($pkg.Length + 1).Replace('\', '/')] = $f.Length }
+foreach ($f in (Get-ChildItem -LiteralPath $engine -File -Recurse | Where-Object { $_.FullName -ne (Join-Path $engine 'config.json') -and -not (& $isSky $_) } | Sort-Object FullName)) { $listed[$f.FullName.Substring($pkg.Length + 1).Replace('\', '/')] = $f.Length }
 [IO.File]::WriteAllText((Join-Path $engine 'files.json'), ((([ordered]@{ version = $version; files = $listed }) | ConvertTo-Json).Replace("`r`n", "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
 
 # The zip is the release's download and is made only on request (-Zip). An older one goes either way, so that no zip
 # outlives the folder it was made from. It is written entry by entry with forward slashes in its paths, as the zip
 # format asks: Compress-Archive writes backslashes, which archive programs on Linux unpack into one flat folder and
 # some on Windows into a folder that is a file. The folders come first, each marked as one.
-function WriteZip([string]$folder, [string]$file) {
+# $keep: which files go in (the sky pack's or the rest); a folder goes in when a file in it does
+function WriteZip([string]$folder, [string]$file, [scriptblock]$keep) {
   Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
   $name = { param($item) $item.FullName.Substring($folder.Length + 1).Replace('\', '/') }
+  $kept = @(Get-ChildItem -LiteralPath $folder -File -Recurse | Where-Object { & $keep $_ } | Sort-Object FullName)
   $stream = [IO.File]::Open($file, [IO.FileMode]::Create)
   try {
     $zip = New-Object IO.Compression.ZipArchive($stream, [IO.Compression.ZipArchiveMode]::Create)
     try {
       foreach ($d in (Get-ChildItem -LiteralPath $folder -Directory -Recurse | Sort-Object FullName)) {
+        $dn = $d.FullName + '\'
+        if (-not ($kept | Where-Object { $_.FullName.StartsWith($dn, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)) { continue }
         $entry = $zip.CreateEntry((& $name $d) + '/')
         $entry.LastWriteTime = $d.LastWriteTime
         $entry.ExternalAttributes = 0x10
       }
-      foreach ($f in (Get-ChildItem -LiteralPath $folder -File -Recurse | Sort-Object FullName)) {
+      foreach ($f in $kept) {
         [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $f.FullName, (& $name $f), [IO.Compression.CompressionLevel]::Optimal)
       }
     } finally { $zip.Dispose() }
@@ -193,12 +201,14 @@ function WriteZip([string]$folder, [string]$file) {
       if (-not $e.FullName.EndsWith('/')) { $inZip[$e.FullName] = $e.Length }
     }
   } finally { $back.Dispose() }
-  $files = @(Get-ChildItem -LiteralPath $folder -File -Recurse)
-  if ($inZip.Count -ne $files.Count) { throw "the zip holds $($inZip.Count) files, the folder $($files.Count)" }
-  foreach ($f in $files) { if ($inZip[(& $name $f)] -ne $f.Length) { throw "the zip's $(& $name $f) is not the folder's" } }
+  if ($inZip.Count -ne $kept.Count) { throw "the zip holds $($inZip.Count) files, the folder $($kept.Count)" }
+  foreach ($f in $kept) { if ($inZip[(& $name $f)] -ne $f.Length) { throw "the zip's $(& $name $f) is not the folder's" } }
 }
-if (Test-Path -LiteralPath $zipFile) { Remove-Item -LiteralPath $zipFile }
-if ($Zip) { WriteZip $pkg $zipFile }
+# two downloads: the program without the sky textures, and the sky pack (engine\replacements\skies alone, unzipped into
+# the same folder)
+$skyZip = Join-Path $root 'out\SnowRunnerNextGen_Skies.zip'
+foreach ($z in $zipFile, $skyZip) { if (Test-Path -LiteralPath $z) { Remove-Item -LiteralPath $z } }
+if ($Zip) { WriteZip $pkg $zipFile { param($f) -not (& $isSky $f) }; WriteZip $pkg $skyZip $isSky }
 $folderBytes = (Get-ChildItem -LiteralPath $pkg -File -Recurse | Measure-Object Length -Sum).Sum
 $textureCount = ($textures.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
 '{0}  {1:N1} MB in {2} files ({3} tools, {4} shaders, {5} texture files; node.exe {6})' -f $pkg, ($folderBytes / 1MB), @(Get-ChildItem -LiteralPath $pkg -File -Recurse).Count, $closure.Count, $helpers.Count, $textureCount, $nodeVersion
