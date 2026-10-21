@@ -115,7 +115,7 @@ function checkPackage()
         if (!s || !s.isFile() || s.size !== size) bad.push(name.replace(/\//g, '\\'));
     }
     if (!bad.length) return;
-    throw new EngineError('failed', 'This copy of SnowRunner Next Gen is incomplete: ' + bad.slice(0, 3).join(', ') + (bad.length > 3 ? ' and ' + (bad.length - 3) + ' more' : '') +
+    throw new EngineError('failed', 'This copy of Next Gen Graphics is incomplete: ' + bad.slice(0, 3).join(', ') + (bad.length > 3 ? ' and ' + (bad.length - 3) + ' more' : '') +
         (bad.length === 1 ? ' is' : ' are') + ' missing or cut short. Unzip the download again (right click the zip, Extract All) and start the program from the new folder.');
 }
 
@@ -594,7 +594,7 @@ async function readLogos(g, env)
 // has that hash and whose original is not in the state folder, is one of ours without its original. Apply and Restore
 // stop on it before anything is written.
 const NOTE_NAME = 'SnowRunnerNextGen.json';
-const NOTE_ABOUT = 'SnowRunner Next Gen wrote this note. The files named here hold its changes, and their originals are kept in %LOCALAPPDATA%\\SnowRunnerNextGen. ' +
+const NOTE_ABOUT = 'Next Gen Graphics (SnowRunner Next Gen before October 2026) wrote this note. The files named here hold its changes, and their originals are kept in %LOCALAPPDATA%\\SnowRunnerNextGen. ' +
     'Should those originals ever be lost, the note tells the program that these are not the game\'s own files. Restore originals takes the note away.';
 const pakFile = (g, name) => g[name.replace(/\.pak$/, '')];
 
@@ -1136,7 +1136,7 @@ async function main()
         const game = opt('game');
         if (!game || !['status', 'apply', 'restore'].includes(cmd)) throw new EngineError('usage', 'usage: node ngen.js status|apply|restore --game <folder> [--selection <file.json>] [--adopt | --leave]');
         logLine('==== ' + [cmd].concat(args.filter((a) => a === '--adopt' || a === '--leave')).join(' ') + ' for ' + path.resolve(game) + (cmd === 'status' ? '' :
-            ': SnowRunner Next Gen ' + ((PACKAGE && PACKAGE.version) || 'dev build') + ' in ' + path.join(__dirname, '..') + ', Windows ' + os.release() + ' ' + os.arch() + ', Node.js ' + process.version));
+            ': Next Gen Graphics ' + ((PACKAGE && PACKAGE.version) || 'dev build') + ' in ' + path.join(__dirname, '..') + ', Windows ' + os.release() + ' ' + os.arch() + ', Node.js ' + process.version));
         checkPackage();
         g = gameFiles(game);
         state = stateDir(g);

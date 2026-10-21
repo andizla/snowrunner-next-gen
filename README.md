@@ -1,6 +1,6 @@
-# SnowRunner Next Gen
+# Next Gen Graphics for SnowRunner
 
-Graphics modules for SnowRunner, installed from one window.
+Graphics modules for SnowRunner, installed from one window. Called SnowRunner Next Gen before October 2026.
 
 Each card in the window is one module: sharper shadows, ambient occlusion, bounce light, reflections on paint and water, fog, smoke, colour, the night sky. Tick what you want and click Apply. The program builds the game's files on your machine, from your own game files, and installs them. Restore puts the files back as they were.
 

@@ -104,5 +104,5 @@ $replacements = Join-Path $copy 'engine\replacements'
 [IO.File]::WriteAllBytes($replacements, [byte[]]::new(0))
 $said = @(& (Join-Path $copy 'engine\node.exe') (Join-Path $copy 'engine\ngen.js') status --game (Join-Path $root 'out\enginetest\game') | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
 $e = $said[$said.Count - 1]
-if ($e.type -ne 'error' -or $e.text -notmatch '^This copy of SnowRunner Next Gen is incomplete: engine\\replacements\\' -or $e.text -notmatch 'Unzip the download again') { throw "an incomplete copy was not reported: $($e.type) $($e.text)" }
+if ($e.type -ne 'error' -or $e.text -notmatch '^This copy of Next Gen Graphics is incomplete: engine\\replacements\\' -or $e.text -notmatch 'Unzip the download again') { throw "an incomplete copy was not reported: $($e.type) $($e.text)" }
 'ok   an incomplete copy says so, names the files and asks to unzip again'

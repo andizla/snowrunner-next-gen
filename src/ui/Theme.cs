@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// The window's colours. Own palette: dark slate, an ice-blue accent, one colour per category tag.
+// The window's colours. Own palette: dark blue slate, the Next Gen logo's orange as the accent, one colour per category tag.
 using System.Drawing;
 
 namespace SnowRunnerNextGen
@@ -13,10 +13,13 @@ namespace SnowRunnerNextGen
         public static readonly Color Border = Color.FromArgb(52, 58, 76);
         public static readonly Color Text = Color.FromArgb(232, 236, 244);
         public static readonly Color Muted = Color.FromArgb(142, 150, 172);
-        public static readonly Color Accent = Color.FromArgb(92, 178, 255);
+        public static readonly Color Accent = Color.FromArgb(254, 158, 32);       // the middle of the logo's NEXT GEN gradient
         public static readonly Color AccentText = Color.FromArgb(10, 14, 22);
+        public static readonly Color Ice = Color.FromArgb(92, 178, 255);          // the blue of the base: a ticked card's tint and border
+        public static readonly Color LogoTop = Color.FromArgb(255, 203, 57);      // the gradient's top and bottom, as measured
+        public static readonly Color LogoBottom = Color.FromArgb(236, 103, 19);   // on the logo picture
         public static readonly Color Good = Color.FromArgb(96, 204, 138);
-        public static readonly Color Warn = Color.FromArgb(232, 176, 70);
+        public static readonly Color Warn = Color.FromArgb(240, 208, 72);         // yellow, apart from the orange accent
         public static readonly Color Bad = Color.FromArgb(232, 96, 96);
 
         public static Color Category(string name)
@@ -30,7 +33,7 @@ namespace SnowRunnerNextGen
                 case "ATMOSPHERE": return Color.FromArgb(206, 208, 220);
                 case "IMAGE": return Color.FromArgb(240, 132, 172);
                 case "SCENERY": return Color.FromArgb(124, 204, 112);
-                case "INTERFACE": return Color.FromArgb(240, 150, 96);
+                case "INTERFACE": return LogoBottom;
                 default: return Muted;
             }
         }

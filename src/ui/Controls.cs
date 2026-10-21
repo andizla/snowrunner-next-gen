@@ -102,7 +102,7 @@ namespace SnowRunnerNextGen
     // button to change it. Narrow windows put the folder under the name.
     class Header : Control
     {
-        public const string AppName = "SnowRunner Next Gen";
+        public const string AppName = "Next Gen Graphics";
         const string Subtitle = "Graphics modules for SnowRunner. Tick what you want, then press Apply.";
         const string FolderLabel = "GAME FOLDER";
         const string NotFound = "SnowRunner was not found";
@@ -247,13 +247,13 @@ namespace SnowRunnerNextGen
             }
         }
 
-        // a snowy peak on an ice-blue tile
+        // a snowy peak on a tile in the logo's orange, its gradient from top to bottom as on NEXT GEN
         static void DrawEmblem(Graphics g, Rectangle r)
         {
             if (r.Width <= 0) return;
             RectangleF wide = new RectangleF(r.X - 1, r.Y - 1, r.Width + 2, r.Height + 2);   // no seam where the gradient starts
             using (GraphicsPath tile = Look.Rounded(r, r.Width * 0.26f))
-            using (LinearGradientBrush b = new LinearGradientBrush(wide, Theme.Accent, Theme.Category("REFLECTIONS"), 45f))
+            using (LinearGradientBrush b = new LinearGradientBrush(wide, Theme.LogoTop, Theme.LogoBottom, 90f))
                 g.FillPath(b, tile);
             float x = r.X, y = r.Y, s = r.Width;
             PointF[] mountain =
