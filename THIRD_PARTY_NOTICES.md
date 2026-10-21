@@ -87,9 +87,22 @@ included; the tool is written fresh.
 
 ## Poly Haven panoramas
 
-The reflection cubes (engine\replacements\cubes\pct) and the winter skies (engine\replacements\skies\pct) are made with
-engine\tools\make_cube.js from 21 panoramas published by Poly Haven (https://polyhaven.com) under CC0 1.0 (public
-domain dedication):
+The skies (engine\replacements\skies\pct) are made with engine\tools\make_cube.js and make_clouds.js from 23 "pure sky"
+panoramas published by Poly Haven (https://polyhaven.com) under CC0 1.0 (public domain dedication):
+
+- Greg Zaal and Jarod Guest: "Kloofendal 38d Partly Cloudy", "Kloofendal 48d Partly Cloudy", "Kloppenheim 03",
+  "Kloppenheim 06", "Kloppenheim 07", "Mpumalanga Veld", "Qwantani Dusk 2", "Qwantani Sunset", "Rocky Ridge",
+  "Table Mountain 1", "Table Mountain 2"
+- Jarod Guest and Sergej Majboroda: "Evening Road 01", "Hilly Terrain 01", "Industrial Sunset", "Industrial Sunset 02",
+  "Overcast Soil", "Scythian Tombs", "Sunflowers", "Wasteland Clouds"
+- Dimitrios Savva and Jarod Guest: "Citrus Orchard Road", "Farm Field", "Rosendal Park Sunset"
+- Greg Zaal: "Kloofendal Overcast"
+
+Two of the skies' night layers (env_cloud_01_ru_08__s_d_a, env_cloud_01_us_09__s_d_a) carry the Milky Way from NASA's
+Deep Star Maps 2020 (see above), laid into the game's patch.
+
+The reflection cubes (engine\replacements\cubes\pct) are made with engine\tools\make_cube.js from 21 panoramas
+published by Poly Haven under CC0 1.0 (public domain dedication):
 
 - Grzegorz Wronkowski: "Passendorf Snow", "Stierberg Sunrise", "Horn-koppe Spring"
 - Sergej Majboroda: "Snow Field", "Rural Crossroads", "Winter Lake 01", "Birchwood"
