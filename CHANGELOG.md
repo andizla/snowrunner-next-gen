@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [1.1.0] - not released yet
+
+- Skies (the card was Winter skies) is on by default and holds the full set: 43 of the game's sky domes and cloud bands, every region's, made anew from 22 photographs of real skies, each at the size and brightness of the texture it replaces, the photographs' sun taken out. The aurora, the Milky Way, the rainbow, the sun's glow and the treeline stay the game's. About 430 MB more in the download.
+- SnowRunner Shadows' start-up probe log is off (SSRProbe=0 in its ini, written once into an existing ini as well): it was a development aid that wrote a file next to the game on every start.
 
 - The mod's name is Next Gen Graphics, SnowRunner Next Gen before. The window, its messages, the note it leaves in the game folder and the guide say so; the program's file name, SnowRunnerNextGen.exe, and the folder that keeps the original game files, %LOCALAPPDATA%\SnowRunnerNextGen, keep their names, so an install made before goes on as it was. The window takes the greys of the in-game Next Gen menu (#141416 behind, #2A2A2E cards, #3A3A3F edges) and the logo's orange as its accent (#FE9E20, with the emblem in the logo's gradient from #FFCB39 to #EC6713); a ticked card has a thin orange edge, warnings are yellow, apart from the accent.
 - The installer knows the game's own shader.pak of the update of 20 October 2026 (exe build 6ab52f5d): on a first install it is taken as the original without asking, as July's is, and the status reads it as the game's own instead of unknown.

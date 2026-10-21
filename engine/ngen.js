@@ -448,7 +448,8 @@ function installDll(g, state, want)
     const set = { Factor: want.factor, SlopeBias: want.slopeBias, AOHalf: want.aoHalf };
     if (!('Trace' in before)) set.Trace = '0';
     if (!('KeyDump' in before)) set.KeyDump = '0';   // F7's dump (150 MB into the game folder per press) stays off: no key the help names
-    if (before.Factor !== want.factor || before.SlopeBias !== want.slopeBias || before.AOHalf !== want.aoHalf || !fs.existsSync(ini))
+    if (!('SSRProbe' in before)) set.SSRProbe = '0';   // the start-up probe log is for development (review finding R13, off on the user's word)
+    if (before.Factor !== want.factor || before.SlopeBias !== want.slopeBias || before.AOHalf !== want.aoHalf || !('SSRProbe' in before) || !fs.existsSync(ini))
     {
         writeIni(ini, set);
         emit({ type: 'log', text: 'SnowRunnerShadows.ini: shadow texture ' + want.factor + 'x, self-shadow fix ' + (want.slopeBias === '1' ? 'on' : 'off') + ', ambient occlusion at ' + (want.aoHalf === '0' ? 'full' : 'half') + ' size' });
@@ -556,7 +557,7 @@ async function readCubes(g, env)
     const said = fs.existsSync(g.boot) ? await answer('lut_grade.js', ['cubes-status'], env) : 'missing';
     return { state: said === 'cubes' ? 'ours' : said === 'none' ? 'vanilla' : said };
 }
-// the winter skies in boot.pak, the fifth part there ({ state }): ours, vanilla, changed, missing
+// the skies in boot.pak, the fifth part there ({ state }): ours, vanilla, changed, missing
 async function readSkies(g, env)
 {
     const said = fs.existsSync(g.boot) ? await answer('lut_grade.js', ['skies-status'], env) : 'missing';
@@ -1030,16 +1031,16 @@ async function apply(g, state, sel, adopt, leave)
     else if (now.cubes.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the reflection cubes were left out.');
     else { step('Putting the reflection cubes in (boot.pak)'); await must('lut_grade.js', ['cubes-install'], env); }
 
-    // the winter skies (boot.pak, the fifth part there)
-    if (now.skies.state === 'missing') { if (skies) warn('No boot.pak in this game folder: the winter skies were left out.'); }
+    // the skies (boot.pak, the fifth part there)
+    if (now.skies.state === 'missing') { if (skies) warn('No boot.pak in this game folder: the skies were left out.'); }
     else if (!skies)
     {
         if (now.skies.state === 'ours') { step('Putting the original skies back (boot.pak)'); await must('lut_grade.js', ['skies-restore'], env); }
-        else if (now.skies.state === 'changed' && last.skies) warn(BOOT_CHANGED + ': left as it is, so the winter skies could not be taken out.');
+        else if (now.skies.state === 'changed' && last.skies) warn(BOOT_CHANGED + ': left as it is, so the skies could not be taken out.');
     }
-    else if (now.skies.state === 'ours' && sameCode(notes, 'skies')) emit({ type: 'log', text: 'boot.pak already has the winter skies' });
-    else if (now.skies.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the winter skies were left out.');
-    else { step('Putting the winter skies in (boot.pak, 45 MB)'); await must('lut_grade.js', ['skies-install'], env); }
+    else if (now.skies.state === 'ours' && sameCode(notes, 'skies')) emit({ type: 'log', text: 'boot.pak already has the skies' });
+    else if (now.skies.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the skies were left out.');
+    else { step('Putting the skies in (boot.pak, 430 MB)'); await must('lut_grade.js', ['skies-install'], env); }
 
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
 

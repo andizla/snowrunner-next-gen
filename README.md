@@ -40,7 +40,7 @@ Atmosphere and image
 - Sharper smoke and particles: the particle textures at twice their size.
 - Debris and splashes: leaves, grass, twigs and dirt thrown up by the wheels stay on the ground and get pushed by the tyres; mud, water and snow splashes throw more drops; exhaust and dust hang in the air longer.
 - Night sky: NASA's star map in place of the game's star texture, and its stars in the photo night skies of Scandinavia, Kola and Quebec.
-- Winter skies: Kola's clear-day sky dome made anew from a winter panorama, the game's cloud bands still over it. Off by default.
+- Skies: 43 of the game's sky domes and cloud bands, every region's, made anew from photographs of real skies; the clouds still drift.
 - Map days: Maine shows the days and the snowfall of two snow regions; this gives it Michigan's days, weather and sky. Rows for British Columbia, Austria and Washington, and on every row a third value, map by map, that picks days for each map on its own. Off by default.
 - Brighter stars: the stars of the night sky drawn brighter.
 - Tonemap: stronger contrast and a lighter bloom.

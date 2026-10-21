@@ -50,9 +50,9 @@ try {
   function Note { $bar.GetType().GetField('note', $flags).GetValue($bar) }
 
   # on by default: every card but Bounce light, Headlight glare cap, Winter skies, Volumetric fog, Map days, Scenery detail and Grass reach
-  $defaults = 'shadows edges blocker contact gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow cubes weather smoke smokeshade particles debris sky stars tonemap bloom grade logos'
+  $defaults = 'shadows edges blocker contact gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow cubes weather smoke smokeshade particles debris sky skies stars tonemap bloom grade logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '26 of 33 selected'
+  Check 'count' (Note) '27 of 33 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
@@ -140,13 +140,13 @@ try {
   $cards['shadows'].ToggleByUser()
   # Headlights in reflections goes with Object reflections and Sun glow through waves with Water reflections, which
   # both need SnowRunner Shadows
-  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint cubes weather smoke smokeshade particles debris sky stars tonemap bloom grade logos'
+  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint cubes weather smoke smokeshade particles debris sky skies stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Contact shadows, Object reflections, Headlights in reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
   $cards['gi'].ToggleByUser()
-  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint cubes weather smoke smokeshade particles debris sky stars tonemap bloom grade logos'
+  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint cubes weather smoke smokeshade particles debris sky skies stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Bounce light needs SnowRunner Shadows: ticked it too.'
   $cards['gtao'].ToggleByUser()
-  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint cubes weather smoke smokeshade particles debris sky stars tonemap bloom grade logos'
+  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint cubes weather smoke smokeshade particles debris sky skies stars tonemap bloom grade logos'
   Check 'its note' (Note) 'Wide occlusion and Bounce light need GTAO: unticked them too.'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($false))
   Check 'clear' (Note) '0 of 33 selected'
@@ -176,13 +176,13 @@ try {
   $has.Fill = 'ours'; $has.FillFactor = '0.7'; $has.Grade = 'ours'; $has.GradeStrength = '1'; $has.Particles = 'ours'
   $has.Stars = 'ours'; $has.StarsFactor = '3'; $has.Sky = 'ours'; $has.Logos = 'ours'
   $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift'
-  $has.Debris = 'ours'; $has.DebrisFactor = '4'; $has.Cubes = 'ours'
+  $has.Debris = 'ours'; $has.DebrisFactor = '4'; $has.Cubes = 'ours'; $has.Skies = 'ours'
   $viewType.GetField('installed', $flags).SetValue($view, $has)
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: the default set as installed' (Note) "26 of 33 selected  $([char]0xB7)  as installed"
+  Check 'bar: the default set as installed' (Note) "27 of 33 selected  $([char]0xB7)  as installed"
   $has.Outdated.Add('shader')
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: a newer build of an installed part' (Note) "26 of 33 selected  $([char]0xB7)  Apply to update the game to this version"
+  Check 'bar: a newer build of an installed part' (Note) "27 of 33 selected  $([char]0xB7)  Apply to update the game to this version"
   $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($has))
   Check 'header: says that Apply updates the game' ($said -match 'Note: this installer has a newer build of what is installed: Apply updates the game$') 'True'
   $viewType.GetField('installed', $flags).SetValue($view, $null)
