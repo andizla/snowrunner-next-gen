@@ -2,6 +2,8 @@
 
 ## [1.1.0] - not released yet
 
+- After test build 2: Headlight shadows, a new card, off by default. The game lights everything inside its headlights' cone, also what stands behind a post or a tree. In the lit shaders that take the truck's headlight, right after their one sample of the headlight's light pattern, a walk from the pixel towards each of the two lamps (1.4 m apart, stopping 2.5 m short of them) through this frame's depth from SnowRunner Shadows dims the light where something stands in the way. 2513 of the 2597 shaders take it; the 84 that work out the pixel's position another way keep the game's light. Without SnowRunner Shadows the light is the game's own. Tested offline: with every default module on as well, the build's input check passes and Direct3D 11 creates every changed shader. Not looked at in the game yet.
+
 - After test build 1: the sky textures are a download of their own, the sky pack (SnowRunnerNextGen_Skies.zip, about 210 MB), unzipped into the program's folder; the program's own download stays about 110 MB. Without the pack, Apply leaves the skies out and says where to get them.
 
 - After test build 1: no old picture in the shadows after a video setting changes. A player saw the menu's picture there until F8 or a restart: the copy of the scene that the bounce light and the reflections read stayed bound when the copies stopped. It is now bound only within 250 ms of the last copy, otherwise every reader keeps the game's own result. Tested offline (a reader set 300 ms after the last copy gets nothing, the next copy brings it back); not yet seen in the game.

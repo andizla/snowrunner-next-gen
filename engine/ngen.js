@@ -43,7 +43,7 @@ const KNOWN_SHADER = [
     '03aa2c0b111de1d352c74e1a386c0f5dc9a0cde33c520183d5ecd02bc07e735c',   // 55,713,792 bytes, the update of 2026-10-20 (exe 6ab52f5d)
 ];
 // the modules that read the scene's picture from SnowRunner Shadows
-const NEED_DLL = ['gi', 'water', 'sssr', 'reflections', 'puddles', 'contact'];
+const NEED_DLL = ['gi', 'water', 'sssr', 'reflections', 'puddles', 'contact', 'headshadow'];
 
 const configFile = path.join(__dirname, 'config.json');
 const config = Object.assign({ tools: path.join(__dirname, 'tools'), dll: path.join(__dirname, 'hid.dll') },

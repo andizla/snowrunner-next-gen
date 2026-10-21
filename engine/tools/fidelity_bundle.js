@@ -65,7 +65,12 @@
 //            uses for its contact shadows (screen-space sun shadows at the AO pass, darkening each pixel's sunlight; F4);
 //            patched last, on top of whatever the other modules made of each receiver; without the DLL the write goes
 //            nowhere; in DEFAULT
-//   sssr     tools\patch_gbuffer.js + sssr\gbuffer.cso, then tools\patch_object_ssr.js + sssr\object_sssr.cso: the 3229
+//   headshadow tools\patch_headshadow.js + headlight\headshadow.cso: the ~2600 lit shaders that take the truck's headlight:
+//            after their one sample of the headlight's pattern, a walk from the pixel to each lamp of the pair through
+//            this frame's depth (SnowRunner Shadows' t121) says how much of the light gets past what stands in the way,
+//            and the pattern is scaled by it; patched last, after contact; without the DLL t121 is unbound and the light
+//            is the game's own; not looked at in the game yet, off by default
+//   sssr    tools\patch_gbuffer.js + sssr\gbuffer.cso, then tools\patch_object_ssr.js + sssr\object_sssr.cso: the 3229
 //            object materials write the reflection pass's G-buffer (render target 7: normal, sqrt roughness) and read
 //            the pass's result (SnowRunner Shadows SSR=1: t123 reflections, t124 motion) at their cubemap sample;
 //            alternative to 'reflections'; in DEFAULT
@@ -121,8 +126,8 @@ const R = (...p) => path.join(W, 'replacements', ...p);
 // builds them from the player's shader.pak (same folder names), else replacements\; our own helpers always come from R()
 const SETS = process.env.SR_SETS_DIR || path.join(W, 'replacements');
 const S = (...p) => path.join(SETS, ...p);
-const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'watersun', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokemore', 'smokeshade', 'sssr', 'headglow', 'contact'];
-// what install and build take without a list: every module but these six, which stay selectable by name
+const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'watersun', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokemore', 'smokeshade', 'sssr', 'headglow', 'contact', 'headshadow'];
+// what install and build take without a list: every module but these seven, which stay selectable by name
 //   reflections  the per-material march alone: sssr took its place (the DLL's reflection pass, with that march only
 //                where the pass has nothing), and normalize refuses the two together
 //   glare        the lower cap on the headlights' highlight on wet ground: off since the reflections were reworked
@@ -131,8 +136,9 @@ const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'f
 //                to the camera; up to 1.0.1 the fog module alone brought them)
 //   smokemore    the smoke glow on eight more particle shaders: not looked at in the game yet
 //   watersun     the sun's highlight out in the sun's shadow on water: never seen to change anything in the game
+//   headshadow   the headlights' shadows: not looked at in the game yet
 // The fill light and the photo grade, defaults too, live in initial.pak and boot.pak (the installer's cards)
-const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun' && m !== 'smokemore' && m !== 'watersun');
+const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun' && m !== 'smokemore' && m !== 'watersun' && m !== 'headshadow');
 
 // known names in ALL's order, "shadows" (older notes and commands) as crisp + blocker, gtao with gi (the bounce light is
 // measured by the GTAO pass); throws on an unknown name
@@ -264,11 +270,11 @@ function build(orig, modules)
 {
     const { main, hdr } = plan(modules);
     const water = modules.includes('water'), tint = modules.includes('rivertint'), river = water || tint;
-    const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), glowWide = modules.includes('smokemore'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact');
-    let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, lakeHits = 0, lakePlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, checked = 0;
+    const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), glowWide = modules.includes('smokemore'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact'), headShadow = modules.includes('headshadow');
+    let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, lakeHits = 0, lakePlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, headHits = 0, headPlanned = 0, checked = 0;
     const z = pak.parseZip(orig);
     // whether any module touches the main cache (the check of the untouched entries at the end asks the same)
-    const mainRebuilt = !!(main.size || river || wet || bounce || refl || glow || shape || sssr || cont);
+    const mainRebuilt = !!(main.size || river || wet || bounce || refl || glow || shape || sssr || cont || headShadow);
     if (mainRebuilt)
     {
         const ent = z.entries.find((x) => x.name.endsWith(pak.ENTRY_TAIL));
@@ -513,6 +519,23 @@ function build(orig, modules)
                 else console.log('note: shadow receiver ' + i + ' writes no sun visibility: ' + r.reason);
             });
         }
+        // headlight shadows (module headshadow): the lit shaders that take the headlight's pattern get the walk to the
+        // lamps after their pattern sample (tools\patch_headshadow.js), last, on top of whatever the other modules made of
+        // each; a shader it does not take (its world position a temp: 84 of 2597) keeps what it had
+        if (headShadow)
+        {
+            const head = require('./patch_headshadow.js'); // here, not at the top: a package without it still builds every other module
+            const set = new Set(head.targets());
+            const helper = fs.readFileSync(R('headlight', 'headshadow.cso'));
+            parsed.blobs.forEach((bl, i) =>
+            {
+                const own = inflated.subarray(bl.off, bl.off + bl.size);
+                if (!set.has(pak.hex8(pak.crc32(own)))) return;
+                headPlanned++;
+                const r = head.patchHeadShadow(repl.get(i) || Buffer.from(own), helper);
+                if (r.blob) { repl.set(i, r.blob); headHits++; }
+            });
+        }
         // no changed shader may read an input component it does not declare (see the top)
         for (const [i, blob] of repl)
         {
@@ -555,7 +578,7 @@ function build(orig, modules)
         if (!changed && !pak.readEntry(orig, e).equals(pak.readEntry(out, e2))) throw new Error('entry changed: ' + e.name);
         if (pak.crc32(pak.readEntry(out, e2)) !== e2.crc) throw new Error('crc check failed: ' + e.name);
     }
-    return { out, mainHits, hdrHits, mainPlanned: main.size, hdrPlanned: hdr.size, waterHits, waterPlanned, lakeHits, lakePlanned, glareHits, glarePlanned, puddleHits, decalHits, decalPlanned, giHits, giPlanned, reflHits, reflPlanned, smokeHits, smokePlanned, shapeHits, shapePlanned, sssrHits, sssrPlanned, sssrGlass, contactHits, contactPlanned, checked };
+    return { out, mainHits, hdrHits, mainPlanned: main.size, hdrPlanned: hdr.size, waterHits, waterPlanned, lakeHits, lakePlanned, glareHits, glarePlanned, puddleHits, decalHits, decalPlanned, giHits, giPlanned, reflHits, reflPlanned, smokeHits, smokePlanned, shapeHits, shapePlanned, sssrHits, sssrPlanned, sssrGlass, contactHits, contactPlanned, headHits, headPlanned, checked };
 }
 
 // what a build holds, one line
@@ -571,6 +594,7 @@ function summary(modules, r, gtao)
         (r.shapePlanned ? ', smoke shape and soft edges ' + r.shapeHits + ' of ' + r.shapePlanned : '') +
         (r.sssrPlanned ? ', reflection pass readers ' + r.sssrHits + ' of ' + r.sssrPlanned + (r.sssrGlass ? ' (' + r.sssrGlass + ' windshield glass marched instead)' : '') : '') +
         (r.contactPlanned ? ', contact shadow receivers ' + r.contactHits + ' of ' + r.contactPlanned : '') +
+        (r.headPlanned ? ', headlight shadow receivers ' + r.headHits + ' of ' + r.headPlanned : '') +
         (r.checked ? '; ' + r.checked + ' changed shaders checked' : '') +
         '; shader.pak ' + r.out.length + ' bytes';
 }

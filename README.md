@@ -14,6 +14,7 @@ Light and shadow
 - Shadow edges: straight shadow edges rebuilt from the shadow texture, with no texel stairs at any resolution, and blended cascade seams. A 16-tap filter is the other choice.
 - Blocker search: shadows sharp at the contact and softer the farther they fall from what casts them.
 - Contact shadows: fine sun shadows traced on screen where things touch or overlap.
+- Headlight shadows: posts, trees and rocks in the beam cast shadows away from the truck's lamps. Off by default: not tried in the game yet.
 - GTAO: ground truth ambient occlusion in place of the game's SSAO, at half or full size.
 - Wide occlusion: soft shade under trucks, roofs and tree crowns, out to 6 metres.
 - Sky ambient: the fill light takes the sky's colour.

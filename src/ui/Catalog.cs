@@ -69,6 +69,9 @@ namespace SnowRunnerNextGen
             list.Add(M("contact", "SHADOWS", "Contact shadows", true,
                 "Fine sun shadows traced on screen where things touch or overlap, in detail the shadow texture is too coarse to hold.",
                 "shadows"));
+            list.Add(M("headshadow", "SHADOWS", "Headlight shadows", false,
+                "Your headlights cast shadows: posts, trees and rocks block the beam instead of letting it light what stands behind them.",
+                "shadows"));
 
             Module gtao = M("gtao", "LIGHT", "GTAO", true,
                 "Ground-truth ambient occlusion instead of the game's SSAO: soft contact shadows in corners, under trucks and in wheel arches.");

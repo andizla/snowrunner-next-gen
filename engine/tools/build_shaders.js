@@ -36,6 +36,7 @@ const BUILDS = [
     // output, so SnowRunner Shadows draws it at half size too
     ['gi/gtao_ao.cso', 'gi/gtao_gi.hlsl', [...GI, 'GI_OFF=1']],
     ['gi/gtao_ao_far.cso', 'gi/gtao_gi.hlsl', [...FAR, ...GI, 'GI_OFF=1']],
+    ['headlight/headshadow.cso', 'headlight/headshadow.hlsl'],
     ['puddles/puddle_ssr.cso', 'puddles/puddle_ssr.hlsl', ['PSSR_ADAPTIVE=1']],
     ['puddles/puddle_ssr_decal.cso', 'puddles/puddle_ssr.hlsl', ['PSSR_ADAPTIVE=1', 'PSSR_DECAL=1']],
     ['reflections/object_ssr.cso', 'reflections/object_ssr.hlsl'],
