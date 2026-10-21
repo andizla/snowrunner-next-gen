@@ -2,6 +2,8 @@
 
 ## [1.1.0] - not released yet
 
+- After test build 1: no old picture in the shadows after a video setting changes. A player saw the menu's picture there until F8 or a restart: the copy of the scene that the bounce light and the reflections read stayed bound when the copies stopped. It is now bound only within 250 ms of the last copy, otherwise every reader keeps the game's own result. Tested offline (a reader set 300 ms after the last copy gets nothing, the next copy brings it back); not yet seen in the game.
+
 - Skies (the card was Winter skies) is on by default and holds the full set: 43 of the game's sky domes and cloud bands, every region's, made anew from 22 photographs of real skies, each at the size and brightness of the texture it replaces, the photographs' sun taken out. The aurora, the Milky Way, the rainbow, the sun's glow and the treeline stay the game's. About 430 MB more in the download.
 - SnowRunner Shadows' start-up probe log is off (SSRProbe=0 in its ini, written once into an existing ini as well): it was a development aid that wrote a file next to the game on every start.
 

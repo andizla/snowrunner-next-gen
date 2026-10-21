@@ -1250,6 +1250,7 @@ static std::vector<IUnknown *> g_feedRetired;
 // above it alone, and the level as a compute shader's output; none = the runtime's GenerateMips makes the levels
 static std::vector<ID3D11ShaderResourceView *> g_feedMipAbove;
 static std::vector<ID3D11UnorderedAccessView *> g_feedMipLevel;
+static std::atomic<ULONGLONG> g_feedLastCopy{ 0 };   // GetTickCount64 of the last copy of the lit scene (FeedBind)
 static ID3D11ComputeShader *g_feedMipCS = nullptr;
 static ID3D11SamplerState *g_feedMipSampler = nullptr;
 static void FeedMipsBuild(ID3D11DeviceContext *ctx);
@@ -1487,6 +1488,7 @@ static void FeedCapture(ID3D11DeviceContext *ctx, ContextState *s)
             if (timer) GpuEnd(ctx, timer);
             ProfResume(ctx, s);
             if (g_feedCaptures++ == 0) Log("scene feed: first copy of the lit scene and its depth (on context %p)", (void *)ctx);
+            g_feedLastCopy.store(GetTickCount64(), std::memory_order_relaxed);
             copied = true;
         }
         else if (feed && g_feedCaptures == 0 && !colour)
@@ -1515,11 +1517,15 @@ static void FeedCapture(ID3D11DeviceContext *ctx, ContextState *s)
 
 // a shader that reads the feed is set (or the game reset its slots): bind the feed at t120 and t121. With the puddle
 // reflections switched off (F9) the scene colour is withheld from every reader but the AO pass (the bounce light gathers
-// from it); the puddle helper then keeps the stock cubemap sample.
+// from it); the puddle helper then keeps the stock cubemap sample. Only while the copies go on: 250 ms after the last one
+// (a menu, or the game's targets made anew when a video setting changes and no lit pass matched them yet) every reader
+// gets nothing and keeps the game's own result, never an old picture (a player saw the menu's in the shadows)
 static void FeedBind(ID3D11DeviceContext *ctx, const ContextOrig *o, uint32_t flags)
 {
     ID3D11ShaderResourceView *v[2] = { g_feedView[0].load(std::memory_order_acquire), g_feedView[1].load(std::memory_order_acquire) };
     if (!v[0] || !v[1]) return;
+    const ULONGLONG last = g_feedLastCopy.load(std::memory_order_relaxed);
+    if (!last || GetTickCount64() - last > 250) v[0] = v[1] = nullptr;
     if (!(flags & kFeedAO) && !g_puddlesOn.load(std::memory_order_relaxed)) v[0] = nullptr;
     o->psSRV(ctx, kFeedSlot, 2, v);
     g_feedBinds++;

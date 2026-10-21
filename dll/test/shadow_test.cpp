@@ -1735,6 +1735,14 @@ int main(int argc, char **argv)
             r.ctx->ExecuteCommandList(l2, FALSE);
             l1->Release(); l2->Release(); d1->Release(); d2->Release();
             Check(feedIs(pixel(), 0.125f, 0.625f, 0.375f), "scene feed: deferred contexts, the AO pass's shader set before its inputs");
+            // no copy for 300 ms (a menu, or the game's targets made anew after a video setting changed): a reader set now
+            // gets nothing at t120 and t121, never the old picture; the next frame's copy brings it back
+            Sleep(300);
+            readerDraw(r.ctx, false);
+            Check(is(pixel(), -1, -1, -1, -1), "scene feed: not bound 300 ms after the last copy, so no old picture reaches a reader");
+            frame(r.ctx, next, false);   // the colours the checks below expect
+            readerDraw(r.ctx, false);
+            Check(feedIs(pixel(), 0.125f, 0.625f, 0.375f), "scene feed: bound again with the next copy");
             // the colour copy's mip chain (ini FeedMips, default on): a reader asks the texture for its level count
             {
                 const char *kLevels = "Texture2D<float4> g_txPrevScene : register(t120); float4 main(float4 p : SV_Position) : SV_Target"
