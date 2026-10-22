@@ -47,6 +47,9 @@
 #ifndef HS_EDGE
 #define HS_EDGE 0.03          // fraction of the screen over which blocking fades out towards the border
 #endif
+#ifndef HS_PLANE
+#define HS_PLANE 0.3          // metres in front of the lamps' plane an obstacle must stand to block: whatever is behind a
+#endif                        // lamp (the truck's own cab, bed, roof rack) cannot be between the lamp and a lit point
 #ifndef HS_STRENGTH
 #define HS_STRENGTH 1.0       // 1 = a fully blocked lamp gives no light; less leaves some
 #endif
@@ -72,17 +75,20 @@ float4 Clip(float3 p)
     return float4(dot(q, g_vViewProjCol[0]), dot(q, g_vViewProjCol[1]), dot(q, g_vViewProjCol[2]), dot(q, g_vViewProjCol[3]));
 }
 
-// one lamp: 1 = its light arrives, 0 = blocked (one exit: the splice inlines the helper, which cannot return early)
-float Lamp(float3 P, float3 L, float2 size, float jitter)
+// one lamp: 1 = its light arrives, 0 = blocked (one exit: the splice inlines the helper, which cannot return early);
+// lampDir: the way the lamp points
+float Lamp(float3 P, float3 L, float3 lampDir, float2 size, float jitter)
 {
     const float3 toL = L - P;
     const float d = max(length(toL), 1e-3);
     const float span = d - HS_NEAR - HS_START;
     const float3 dir = toL / d;
-    const float4 c0 = Clip(P + dir * HS_START), c1 = Clip(P + dir * (HS_START + max(span, 0.0)));
-    // a ray end behind the camera: shortened to where it is still in front of it
+    const float3 w0 = P + dir * HS_START;
+    float3 w1 = P + dir * (HS_START + max(span, 0.0));
+    const float4 c0 = Clip(w0), c1 = Clip(w1);
+    // a ray end behind the camera: shortened to where it is still in front of it (the same share of the way in the world)
     float4 e1 = c1;
-    if (e1.w <= 0.05) e1 = lerp(c0, c1, (c0.w - 0.05) / max(c0.w - c1.w, 1e-4));
+    if (e1.w <= 0.05) { const float cut = (c0.w - 0.05) / max(c0.w - c1.w, 1e-4); e1 = lerp(c0, c1, cut); w1 = lerp(w0, w1, cut); }
     // screen positions and 1 / w of both ends: evenly in screen space, depth interpolated as 1 / w
     const float cw = max(c0.w, 0.05), ew = max(e1.w, 0.05);
     const float2 s0 = c0.xy / cw, s1 = e1.xy / ew;
@@ -102,7 +108,12 @@ float Lamp(float3 P, float3 L, float2 size, float jitter)
         const float inFront = w - z - bias;                 // > 0: the scene is in front of the step there
         const float thick = HS_THICK + 0.03 * w;
         const float2 edge = saturate(min(uv, 1.0 - uv) / HS_EDGE);
-        const float b = saturate(inFront / HS_SOFT) * (inFront < thick ? 1.0 : 0.0) * edge.x * edge.y;
+        // where the obstacle is in the world: on the camera's line through the step, at the scene's depth there (the step
+        // itself by its 1 / w share of the way); behind the lamps' plane it cannot block
+        const float3 S = lerp(w0 * iw0, w1 * iw1, f) * w;
+        const float3 O = g_vEyePos + (S - g_vEyePos) * (z / w);
+        const float ahead = dot(O - L, lampDir) > HS_PLANE ? 1.0 : 0.0;
+        const float b = saturate(inFront / HS_SOFT) * (inFront < thick ? 1.0 : 0.0) * ahead * edge.x * edge.y;
         blocked = max(blocked, b);
         if (blocked >= 0.999) break;
     }
@@ -115,6 +126,7 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
     g_txSceneZ.GetDimensions(w, h);
     const float3 P = posIn.xyz, L = g_vHeadLightPos[0].xyz;
     const float2 size = float2(w, h);
+    const float3 hd = g_vHeadLightDir[0].xyz, lampDir = dot(hd, hd) > 1e-6 ? normalize(hd) : float3(0.0, 0.0, 1.0);
     // the pixel's place on the screen, for the per-pixel offset of the steps
     const float4 cp = Clip(P);
     const float2 pix = (float2(cp.x / cp.w * 0.5 + 0.5, 0.5 - cp.y / cp.w * 0.5)) * size;
@@ -126,8 +138,8 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
         // the pair across the truck: sideways from the headlight's direction, level
         float3 side = cross(g_vHeadLightDir[0].xyz, float3(0.0, 1.0, 0.0));
         side = dot(side, side) > 1e-6 ? normalize(side) * (0.5 * HS_SPREAD) : float3(0.0, 0.0, 0.0);
-        v = 0.5 * (Lamp(P, L - side, size, jitter) + Lamp(P, L + side, size, frac(jitter + 0.5)));
+        v = 0.5 * (Lamp(P, L - side, lampDir, size, jitter) + Lamp(P, L + side, lampDir, size, frac(jitter + 0.5)));
     }
-    else v = Lamp(P, L, size, jitter);
+    else v = Lamp(P, L, lampDir, size, jitter);
     return float4(v, v, v, 1.0);
 }
