@@ -1,4 +1,5 @@
-// Photo grade: the colour part of the DLSS 5 look, folded into the game's own daytime colour LUTs. Measured on four
+// Photo grade: the colour part of the DLSS 5 look, folded into the game's own daytime colour LUTs, and the game's lens
+// dirt (env_camera_bokeh) taken out with it, see plan(). Measured on four
 // pairs of screenshots, the game's own against DLSS 5 shots of the same scenes: the neural pass takes 13-21 % of the
 // colour out, most from the greens (x0.70) and the autumn oranges (x0.75), less from sky blue (x0.86-0.9); whites land
 // a little lower. What it does to shade is the fill light's part (daytime_fill.js); what it redraws (faces, fine
@@ -158,6 +159,26 @@ function plan(file, parts)
             checkLut(data, name);
             const next = gradeLut(data, strength);
             jobs.set(ent, { head, crc: zlib.crc32(next), usize: next.length, length: next.length, comp: next, next, type: 'lut', group: 'lut', notes: [name] });
+        }
+        // the game's lens dirt goes with the grade: env_camera_bokeh holds soft discs the final post pass adds over the
+        // picture, scaled by its light (so they show over bright sky and clouds); its texels all zero (a compressed block
+        // of zeros is black with no alpha, so nothing is added), its 82-byte header and 6-byte tail kept. A texture of
+        // another shape (a game update) is left as it is
+        if (strength)
+        {
+            const ent = z.entries.find((e) => /[\\/]env_camera_bokeh\.pct$/i.test(e.name));
+            if (ent && ent.flags === 0)
+            {
+                const { head, data } = readEntry(fd, ent);
+                const raw = ent.method === 8 ? zlib.inflateRawSync(data) : data;
+                if (raw.length === 82 + 1024 * 512 + 6)
+                {
+                    const next = Buffer.from(raw);
+                    next.fill(0, 82, raw.length - 6);
+                    jobs.set(ent, { head, crc: zlib.crc32(next) >>> 0, usize: next.length, length: next.length, comp: next, next, method: 0, type: 'lens', group: 'lens', notes: ['env_camera_bokeh.pct'] });
+                    grow += next.length - ent.csize;
+                }
+            }
         }
         for (const [type, files] of [['particle', parts.particles ? particleFiles() : null], ['sky', parts.sky ? skyFiles() : null], ['cube', parts.cubes ? cubeFiles() : null], ['wsky', parts.skies ? skiesFiles() : null]])
         {
@@ -466,7 +487,7 @@ if (require.main === module)
             const strength = a2 === undefined ? 1 : Number(a2), rest = process.argv.slice(5), particles = rest.includes('particles'), sky = rest.includes('sky'), cubes = rest.includes('cubes'), skies = rest.includes('skies');
             const from = fs.existsSync(ORIG) ? ORIG : BOOT, p = plan(from, { grade: strength || null, particles, sky, cubes, skies });
             writePak(from, a1, p);
-            console.log('built ' + a1 + ' from ' + from + ': ' + (p.strength ? TARGETS.length + ' LUTs at ' + Math.round(p.strength * 100) + ' %' : 'no grade') + (p.particles ? ' and the particle set' : '') + (p.sky ? ' and the night sky' : '') + ', read back ok (' + verify(a1, p) + ' untouched entries sampled)');
+            console.log('built ' + a1 + ' from ' + from + ': ' + (p.strength ? TARGETS.length + ' LUTs at ' + Math.round(p.strength * 100) + ' %' + ([...p.jobs.values()].some((j) => j.type === 'lens') ? ', the lens dirt out' : '') : 'no grade') + (p.particles ? ' and the particle set' : '') + (p.sky ? ' and the night sky' : '') + ', read back ok (' + verify(a1, p) + ' untouched entries sampled)');
         }
         else if (cmd === 'list')
         {

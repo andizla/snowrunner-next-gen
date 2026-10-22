@@ -176,7 +176,7 @@ namespace SnowRunnerNextGen
             list.Add(M("tonemap", "IMAGE", "Tonemap", true, "Stronger contrast and a lighter bloom."));
             list.Add(M("bloom", "IMAGE", "Bloom soft cut", true, "No haze from bright snow and sky."));
             Module grade = M("grade", "IMAGE", "Photo grade", true,
-                "Colour closer to a photo: greens, autumn leaves and the violet haze less loud, whites a little lower. Built into the game's own colour grading.");
+                "Colour closer to a photo: greens, autumn leaves and the violet haze less loud, whites a little lower, no lens dirt over the sky. Built into the game's own colour grading.");
             grade.Options.Add(new OptionSet("Strength", new[] { "100 %", "50 %" }, new[] { "1", "0.5" }, 0));
             list.Add(grade);
 

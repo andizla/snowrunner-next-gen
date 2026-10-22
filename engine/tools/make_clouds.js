@@ -18,7 +18,7 @@
 //        clouds' edges: the soft step's width, the radius the alpha is softened over, patches of cloud left out below that size
 'use strict';
 const fs = require('fs'), zlib = require('zlib');
-const { readHdr, encodeBlock, removeSun } = require('./make_cube.js');
+const { readHdr, encodeBlock, removeSun, zenithCap } = require('./make_cube.js');
 
 const TAIL = 6, EDGE = 0.16, FOOT_MIN = 0.12;   // the .pct's last bytes; the share of the height each edge fades over; the least cloudiness that counts as cloud
 const srgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
@@ -175,6 +175,9 @@ if (require.main === module)
             const from = Number(opt('from')), to = Number(opt('to')), coverage = Number(opt('coverage') || 0.3), yaw = Number(opt('yaw') || 0);
             if (!(to > from && from >= -10 && to <= 90)) throw new Error('--from and --to: the band\'s lower and upper elevation in degrees');
             const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'), Number(opt('shade') || 0), { soft: Number(opt('soft') || 0), blur: Number(opt('blur') || 0), minIsland: Number(opt('min-island') || 0) });
+            // a band that reaches high gets make_cube.js's zenith cap (rows above 72 degrees blended towards their mean), unless
+            // --no-cap: its rows meet at the zenith as a dome's do
+            if (!args.includes('--no-cap')) zenithCap(r.rgba, w, h, (j) => to - (to - from) * (j + 0.5) / h);
             const parts = [stock.subarray(0, head)];
             let pic = r.rgba, pw = w, ph = h;
             for (let m = 0; m < mips; m++) { parts.push(blocks(pic, pw, ph)); if (m < mips - 1) { pic = halve(pic, pw, ph); pw = Math.max(pw >> 1, 4); ph = Math.max(ph >> 1, 4); } }

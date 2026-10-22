@@ -146,7 +146,7 @@ Check 'load list: the tool on a made-up list' ([string](& $node $listTest $level
 $introTest = Join-Path $env:TEMP 'ngen_gfx_intro_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'gfx_intro_test.js') -Destination $introTest -Force
 Check 'intro: the edits on a made-up bundle' ([string](& $node $introTest $levelTools | Select-Object -Last 1)) 'all passed'
-Check 'every part: boot.pak holds the grade, the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 234'
+Check 'every part: boot.pak holds the grade (its LUTs and the emptied lens dirt), the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 235'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'
 Check 'every part: the note in the game folder names the five paks' (Note) 'boot.pak gfx.pak initial.pak shader.pak shared.pak'
@@ -235,7 +235,7 @@ Check 'changed: done' (Last $r) 'done'
 Check 'changed: the ambient occlusion pass at full size' ((Get-Content -LiteralPath (Join-Path $bin 'SnowRunnerShadows.ini')) -contains 'AOHalf=0') 'True'
 Check 'changed: status (the weather parts in the tool''s order)' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3/0 scenery nature grass ours2 fill ours0.55 grade ours0.5 particles vanilla stars ours2 sky vanilla logos vanilla weather oursshadows,showers debris ours8 cubes vanilla skies vanilla')
 Check 'changed: gfx.pak is the original byte for byte' (Hash $gfx) (Hash (Join-Path $originals 'gfx.pak.orig'))
-Check 'changed: boot.pak holds the grade alone' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 4'
+Check 'changed: boot.pak holds the grade alone (four LUTs and the lens dirt)' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 5'
 Check 'changed: initial.pak is built again without the photo skies'' sky levels' ('{0} {1}' -f ((LastInitial $r) -match 'initial\.pak now has'), ((LastInitial $r) -match 'sky alpha')) 'True False'
 
 'another mod''s hid.dll'

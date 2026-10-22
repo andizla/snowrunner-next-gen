@@ -287,8 +287,8 @@ namespace SnowRunnerNextGen
                 Costs, "None to speak of.");
 
             d["grade"] = E(
-                Does, "The game finishes every picture with a colour grade for the time of day. This builds a photographic grade into it: greens, autumn leaves and the violet haze lose some of their loudness, and whites land a little lower instead of glaring. How much of each colour goes was measured against DLSS 5 shots of the same scenes. Greys stay grey, and the game's own grade stays underneath.",
-                Notice, "Foliage and hills in the calmer colours of a photo, a haze that reads grey-blue rather than lavender, less glare on white paint and snow.",
+                Does, "The game finishes every picture with a colour grade for the time of day. This builds a photographic grade into it: greens, autumn leaves and the violet haze lose some of their loudness, and whites land a little lower instead of glaring. How much of each colour goes was measured against DLSS 5 shots of the same scenes. Greys stay grey, and the game's own grade stays underneath. It also takes out the game's lens dirt: soft discs the camera adds over bright sky and clouds.",
+                Notice, "Foliage and hills in the calmer colours of a photo, a haze that reads grey-blue rather than lavender, less glare on white paint and snow, and no blurry discs over the clouds.",
                 Costs, "None: the game grades the picture anyway.",
                 Choices, "Strength: 100 % is the measured grade, 50 % half of it.",
                 Know, "It changes the four colour tables that the day, dusk and dawn light use (a few night scenes share them), inside boot.pak, where Sharper smoke and particles and Night sky go too; the garage, the map and the darkest night table keep theirs. Best together with Fill light, which does the shade: this one does the colour. When another mod has added its files to boot.pak (a texture pack, say), Apply asks before it builds on them, and they stay in (see How it works, Other mods).");

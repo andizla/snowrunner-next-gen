@@ -416,8 +416,26 @@ function writePct(file, faces, stockFile)
 // times their DiffuseMultiplier (4 to 8 by day), so the texture itself is darker than a cube: SKY_TEX_MEAN
 const HORIZON_FADE = 0.11, SKY_TEX_MEAN = 0.45;   // the stock Kola day skies: 0.42 and 0.47
 const RAW_HEAD = 82;   // the header of a one-level texture, compressed or not
+// the zenith cap: every column of a dome texture meets at the zenith, so what a row holds up there is squeezed into
+// wedges around a point, and the game closes its dome above about 81 degrees with a fan of triangles that shows as a
+// ring (seen in the game, 2026-10-23); from CAP_FROM up each row is blended towards its own mean colour and alpha, wholly
+// at CAP_TO, so the zenith holds a plain sky. elevationOf(j): the elevation in degrees of row j
+const CAP_FROM = 66, CAP_TO = 86;
+function zenithCap(rgba, w, h, elevationOf)
+{
+    for (let j = 0; j < h; j++)
+    {
+        const e = elevationOf(j);
+        if (e <= CAP_FROM) continue;
+        const t0 = Math.min(1, (e - CAP_FROM) / (CAP_TO - CAP_FROM)), t = t0 * t0 * (3 - 2 * t0), m = [0, 0, 0, 0];
+        for (let i = 0; i < w; i++) for (let c = 0; c < 4; c++) m[c] += rgba[(j * w + i) * 4 + c];
+        for (let c = 0; c < 4; c++) m[c] /= w;
+        for (let i = 0; i < w; i++) for (let c = 0; c < 4; c++) { const o = (j * w + i) * 4 + c; rgba[o] = Math.round(rgba[o] + (m[c] - rgba[o]) * t); }
+    }
+    return rgba;
+}
 // look: { fade: the share of the height the alpha fades over at the bottom (0: opaque), grey: luminance only (the
-// game's grey cloud skies, which a state tints) }
+// game's grey cloud skies, which a state tints), cap: false leaves the zenith as the panorama has it }
 function renderSky(p, exposure, yaw, w, h, look = { fade: HORIZON_FADE, grey: false })
 {
     const rgba = new Uint8Array(w * h * 4), out = [0, 0, 0];
@@ -432,7 +450,7 @@ function renderSky(p, exposure, yaw, w, h, look = { fade: HORIZON_FADE, grey: fa
             if (look.grey) rgba[o] = rgba[o + 1] = rgba[o + 2] = Math.round(0.2126 * rgba[o] + 0.7152 * rgba[o + 1] + 0.0722 * rgba[o + 2]);
         }
     }
-    return rgba;
+    return look.cap === false ? rgba : zenithCap(rgba, w, h, (j) => 90 * (1 - (j + 0.5) / h));
 }
 // the mean sRGB colour (0..1) of a sky texture at an exposure: the panorama's upper half, every row the same weight
 // as in the texture, from 256 x 64 samples
@@ -754,7 +772,7 @@ if (require.main === module)
                 for (let i = 0; i < p.data.length; i += 3) { p.data[i] *= t[0]; p.data[i + 1] *= t[1]; p.data[i + 2] *= t[2]; }
                 capOf(p);
             }
-            const look = { fade: opt('fade') === null ? HORIZON_FADE : Number(opt('fade')), grey: args.includes('--grey'), preview: args.includes('--preview') ? args[2].replace(/\.pct$/i, '') + '.png' : null };
+            const look = { fade: opt('fade') === null ? HORIZON_FADE : Number(opt('fade')), grey: args.includes('--grey'), cap: !args.includes('--no-cap'), preview: args.includes('--preview') ? args[2].replace(/\.pct$/i, '') + '.png' : null };
             const t = writeSkyPct(args[2], p, exposure, yaw, opt('header'), look);
             console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): ' + t.w + ' x ' + t.h + ', ' + t.mips + ' mips, exposure ' + exposure.toFixed(4) + ', mean ' + texColour(p, exposure).map((v) => v.toFixed(2)).join('/') + ', sun ' + (sunRadius ? 'taken out, ' + sunRadius + ' degrees' : 'left') + ', fade ' + look.fade + (look.grey ? ', grey' : '') + ', white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
         }
@@ -768,4 +786,4 @@ if (require.main === module)
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
-module.exports = { readHdr, renderFaces, encodeBlock, encodeFace, writePct, faceDir, dirToFace, removeSun, SIZE, MIPS };
+module.exports = { readHdr, renderFaces, encodeBlock, encodeFace, writePct, faceDir, dirToFace, removeSun, zenithCap, SIZE, MIPS };
