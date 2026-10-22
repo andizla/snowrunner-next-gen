@@ -1,4 +1,4 @@
-﻿// SnowRunner Shadows: renders SnowRunner's sun shadow map at a higher resolution, with no loader.
+// SnowRunner Shadows: renders SnowRunner's sun shadow map at a higher resolution, with no loader.
 //
 // The game keeps its three sun shadow cascades side by side in one depth texture, 4608 x 1536 at the top Shadows
 // setting. No game file sets that size (the daytime xml values and video.cfg were measured to do nothing; the size
@@ -135,6 +135,7 @@
 // SnowRunnerShadows.depth<i>.raw for tools\depth_probe.js.
 #include <windows.h>
 #include <d3d11_4.h>
+#include <dxgi1_6.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -143,6 +144,7 @@
 #include <cstring>
 #include <intrin.h>
 #include <mutex>
+#include <new>
 #include <share.h>
 #include <tlhelp32.h>
 #include <shared_mutex>
@@ -167,6 +169,7 @@
 
 extern "C" {
 void *g_hidReal[kHidCount]; // read by hid_stubs.asm
+extern const int kSlotPresent, kSlotPresent1, kSlotCreateSwapChain, kSlotCreateSwapChainForHwnd;
 extern const int kSlotCreateTexture2D, kSlotCreateDepthStencilView, kSlotCreateDeferredContext, kSlotGetImmediateContext,
     kSlotCreateDeferredContext1, kSlotCreateDeferredContext2, kSlotCreateDeferredContext3, kSlotCreateTexture2D1,
     kSlotOMSetRenderTargets, kSlotOMSetRenderTargetsAndUAVs, kSlotRSSetViewports, kSlotRSSetScissorRects,
@@ -5667,10 +5670,6 @@ typedef HRESULT(STDMETHODCALLTYPE *PFN_CreateSwapChainForHwnd)(IDXGIFactory2 *, 
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Present)(IDXGISwapChain *, UINT, UINT);
 typedef HRESULT(STDMETHODCALLTYPE *PFN_Present1)(IDXGISwapChain1 *, UINT, UINT, const DXGI_PRESENT_PARAMETERS *);
 static PFN_CreateDXGIFactory1 g_realCreateFactory1 = nullptr;
-static PFN_CreateSwapChain g_realCreateSwapChain = nullptr;
-static PFN_CreateSwapChainForHwnd g_realCreateSwapChainForHwnd = nullptr;
-static PFN_Present g_realPresent = nullptr;
-static PFN_Present1 g_realPresent1 = nullptr;
 static std::mutex g_frameLock;
 static std::vector<float> g_frameMs;          // this window's frame times
 static LARGE_INTEGER g_frameFreq = {}, g_frameLast = {}, g_frameStart = {};
@@ -5697,60 +5696,115 @@ static void FrameTick()
     g_frameMs.clear();
     g_frameStart = now;
 }
+// The swap chain's and the factory's method tables are DXGI's, one per class, shared by every object of it and hooked by
+// other modules too. Steam's client of 2026-10-21 hooks the shared Present and then hooks over hooks it finds there,
+// keeping one saved pointer: a hook that saved Steam's as its real function and is then hooked over calls Steam's, which
+// calls it back, until the stack overflows (a player's crash, found by the overseer in the dump). So nothing of ours goes
+// into those shared tables: the game's swap chain and factory each get a copy of their table of their own (with the slot
+// before it, where MSVC keeps the class's type information), our hook goes into that copy alone, and the real function is
+// the one the shared table held when the copy was made, kept per object. An object gets its copy once, when it is made.
+// (The D3D11 device and context hooks keep their shared tables: Steam's overlay hooks DXGI's Present and ResizeBuffers,
+// not those.)
+struct OwnTable { void *obj; void **table; void *real[2]; };
+static std::mutex g_ownLock;
+static std::vector<OwnTable> g_own;   // the objects with a table of their own, and the two real functions of each
+// gives obj a copy of its table: the slot before it and up to 512 after its start, as far as the same readable memory
+// goes (DXGI's classes have methods of their own after the interface's, which their code calls through the same table:
+// a copy of the interface's slots alone crashed DXGI's own thread in the test), keeping the functions in slots a and b
+// (-1: none) as its real ones; returns the copy (null when none could be made, obj then left as it was). The copy is
+// never freed: the object keeps it to its end
+static void **GiveOwnTable(void *obj, int a, int b)
+{
+    void **shared = *(void ***)obj;
+    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    MEMORY_BASIC_INFORMATION mi = {};
+    if (VirtualQuery(shared - 1, &mi, sizeof(mi)) != sizeof(mi) || mi.State != MEM_COMMIT || !(mi.Protect & readable) || (mi.Protect & PAGE_GUARD)) return nullptr;
+    size_t words = (size_t)((BYTE *)mi.BaseAddress + mi.RegionSize - (BYTE *)(shared - 1)) / sizeof(void *);
+    if (words > 513) words = 513;
+    if (words < (size_t)(a > b ? a : b) + 2) return nullptr;
+    void **copy = new (std::nothrow) void *[words];
+    if (!copy) return nullptr;
+    memcpy(copy, shared - 1, words * sizeof(void *));
+    {
+        std::lock_guard<std::mutex> lock(g_ownLock);
+        const OwnTable e = { obj, copy + 1, { a >= 0 ? shared[a] : nullptr, b >= 0 ? shared[b] : nullptr } };
+        bool reused = false;
+        for (auto &x : g_own) if (x.obj == obj) { x = e; reused = true; }   // a new object where an old one was
+        if (!reused) g_own.push_back(e);
+    }
+    *(void ***)obj = copy + 1;
+    return copy + 1;
+}
+static void *OwnReal(void *obj, int i)
+{
+    std::lock_guard<std::mutex> lock(g_ownLock);
+    for (const auto &x : g_own) if (x.obj == obj) return x.real[i];
+    return nullptr;
+}
+// whether o answers to iid with its own pointer (so that interface's slots are in o's table)
+static bool AnswersWithItself(IUnknown *o, REFIID iid)
+{
+    IUnknown *q = nullptr;
+    if (FAILED(o->QueryInterface(iid, (void **)&q)) || !q) return false;
+    const bool same = q == o;
+    q->Release();
+    return same;
+}
 static HRESULT STDMETHODCALLTYPE Hook_Present(IDXGISwapChain *sc, UINT sync, UINT flags)
 {
     if (!(flags & DXGI_PRESENT_TEST)) { if (g_frameLog) FrameTick(); if (g_gpuTimers) GpuFrame(sc); if (g_gpuProfile) ProfFrame(sc); if (g_cpuProfile) CpuFrame(); if (g_cpuThreads) ThreadTick(); if (g_memLog) MemTick(); if (g_depthProbe) DPFrame(sc); }
-    return TimedPresent([&] { return g_realPresent(sc, sync, flags); });
+    const PFN_Present real = (PFN_Present)OwnReal(sc, 0);
+    if (!real) return DXGI_ERROR_INVALID_CALL;
+    return TimedPresent([&] { return real(sc, sync, flags); });
 }
 static HRESULT STDMETHODCALLTYPE Hook_Present1(IDXGISwapChain1 *sc, UINT sync, UINT flags, const DXGI_PRESENT_PARAMETERS *p)
 {
     if (!(flags & DXGI_PRESENT_TEST)) { if (g_frameLog) FrameTick(); if (g_gpuTimers) GpuFrame(sc); if (g_gpuProfile) ProfFrame(sc); if (g_cpuProfile) CpuFrame(); if (g_cpuThreads) ThreadTick(); if (g_memLog) MemTick(); if (g_depthProbe) DPFrame(sc); }
-    return TimedPresent([&] { return g_realPresent1(sc, sync, flags, p); });
+    const PFN_Present1 real = (PFN_Present1)OwnReal(sc, 1);
+    if (!real) return DXGI_ERROR_INVALID_CALL;
+    return TimedPresent([&] { return real(sc, sync, flags, p); });
 }
-// the swap chain's Present (slot 8) and Present1 (slot 22 of IDXGISwapChain1), once: every swap chain of that class
-// shares the table
+// the swap chain's Present and Present1, in its own table
 static void HookSwapChain(IDXGISwapChain *sc)
 {
-    void **vt = *(void ***)sc;
-    const bool first = !g_realPresent && !g_realPresent1;
-    if (!g_realPresent && vt[8] != (void *)&Hook_Present) { g_realPresent = (PFN_Present)vt[8]; PatchSlot(vt, 8, (void *)&Hook_Present); }
-    IDXGISwapChain1 *sc1 = nullptr;
-    if (SUCCEEDED(sc->QueryInterface(__uuidof(IDXGISwapChain1), (void **)&sc1)) && sc1)
-    {
-        void **vt1 = *(void ***)sc1;
-        if (!g_realPresent1 && vt1[22] != (void *)&Hook_Present1) { g_realPresent1 = (PFN_Present1)vt1[22]; PatchSlot(vt1, 22, (void *)&Hook_Present1); }
-        sc1->Release();
-    }
-    if (first) Log("frame timer: Present hooked on the swap chain (a line every %u s)", g_frameLog);
+    const bool v1 = AnswersWithItself(sc, __uuidof(IDXGISwapChain1));
+    void **own = GiveOwnTable(sc, kSlotPresent, v1 ? kSlotPresent1 : -1);
+    if (!own) { Log("frame timer: no table of its own for the swap chain, Present not hooked"); return; }
+    own[kSlotPresent] = (void *)&Hook_Present;
+    if (v1) own[kSlotPresent1] = (void *)&Hook_Present1;
+    Log("frame timer: Present hooked in the swap chain's own method table (a line every %u s)", g_frameLog);
 }
 static HRESULT STDMETHODCALLTYPE Hook_CreateSwapChain(IDXGIFactory *f, IUnknown *dev, DXGI_SWAP_CHAIN_DESC *desc, IDXGISwapChain **out)
 {
-    const HRESULT hr = g_realCreateSwapChain(f, dev, desc, out);
+    const PFN_CreateSwapChain real = (PFN_CreateSwapChain)OwnReal(f, 0);
+    if (!real) return DXGI_ERROR_INVALID_CALL;
+    const HRESULT hr = real(f, dev, desc, out);
     if (SUCCEEDED(hr) && out && *out) HookSwapChain(*out);
     return hr;
 }
 static HRESULT STDMETHODCALLTYPE Hook_CreateSwapChainForHwnd(IDXGIFactory2 *f, IUnknown *dev, HWND wnd, const DXGI_SWAP_CHAIN_DESC1 *desc,
     const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fs, IDXGIOutput *output, IDXGISwapChain1 **out)
 {
-    const HRESULT hr = g_realCreateSwapChainForHwnd(f, dev, wnd, desc, fs, output, out);
+    const PFN_CreateSwapChainForHwnd real = (PFN_CreateSwapChainForHwnd)OwnReal(f, 1);
+    if (!real) return DXGI_ERROR_INVALID_CALL;
+    const HRESULT hr = real(f, dev, wnd, desc, fs, output, out);
     if (SUCCEEDED(hr) && out && *out) HookSwapChain(*out);
     return hr;
 }
-// the factory's CreateSwapChain (slot 10) and CreateSwapChainForHwnd (slot 15 of IDXGIFactory2), once
+// the factory's CreateSwapChain and CreateSwapChainForHwnd, in its own table (the factory comes from the game's own
+// import of CreateDXGIFactory1, PatchImport below)
 static HRESULT WINAPI Hook_CreateDXGIFactory1(REFIID riid, void **out)
 {
     const HRESULT hr = g_realCreateFactory1(riid, out);
     IDXGIFactory *f = nullptr;
     if (SUCCEEDED(hr) && out && *out && SUCCEEDED(((IUnknown *)*out)->QueryInterface(__uuidof(IDXGIFactory), (void **)&f)) && f)
     {
-        void **vt = *(void ***)f;
-        if (!g_realCreateSwapChain && vt[10] != (void *)&Hook_CreateSwapChain) { g_realCreateSwapChain = (PFN_CreateSwapChain)vt[10]; PatchSlot(vt, 10, (void *)&Hook_CreateSwapChain); }
-        IDXGIFactory2 *f2 = nullptr;
-        if (SUCCEEDED(f->QueryInterface(__uuidof(IDXGIFactory2), (void **)&f2)) && f2)
+        const bool v2 = AnswersWithItself(f, __uuidof(IDXGIFactory2));
+        void **own = GiveOwnTable(f, kSlotCreateSwapChain, v2 ? kSlotCreateSwapChainForHwnd : -1);
+        if (own)
         {
-            void **vt2 = *(void ***)f2;
-            if (!g_realCreateSwapChainForHwnd && vt2[15] != (void *)&Hook_CreateSwapChainForHwnd) { g_realCreateSwapChainForHwnd = (PFN_CreateSwapChainForHwnd)vt2[15]; PatchSlot(vt2, 15, (void *)&Hook_CreateSwapChainForHwnd); }
-            f2->Release();
+            own[kSlotCreateSwapChain] = (void *)&Hook_CreateSwapChain;
+            if (v2) own[kSlotCreateSwapChainForHwnd] = (void *)&Hook_CreateSwapChainForHwnd;
         }
         f->Release();
     }

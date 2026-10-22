@@ -1,4 +1,4 @@
-﻿// Offline test for SnowRunner Shadows. Imports hid.dll and d3d11.dll the way the game does, so the loader picks up
+// Offline test for SnowRunner Shadows. Imports hid.dll and d3d11.dll the way the game does, so the loader picks up
 // out\hid.dll from this program's folder and the DLL hooks this program's D3D11CreateDevice import. Runs on a WARP
 // device. Exit code 0 = every check passed.
 //   shadow_test            expects scaling (factor from SnowRunnerShadows.ini, default 2)
@@ -895,9 +895,18 @@ static std::string ReadDllLog()
     fclose(f);
     return text;
 }
+// whether addr lies in module m
+static bool InModule(void *addr, HMODULE m)
+{
+    HMODULE h = nullptr;
+    return m && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)addr, &h) && h == m;
+}
 // the frame timer: a factory from CreateDXGIFactory1 (the import the DLL hooks with FrameLog set), a swap chain made
 // through it on a hidden window, 2.6 s of Present every ~10 ms; with FrameLog=1 the log must name both hooks and carry
-// frames lines at about the rate presented, without it no frame timer at all
+// frames lines at about the rate presented, without it no frame timer at all. Either way DXGI's own method tables stay
+// untouched: a swap chain from a factory the hook never saw (DXGI's CreateDXGIFactory1 itself) keeps DXGI's Present, and
+// with the timer on the test's swap chain calls the DLL's Present from a table of its own (Steam's client of 2026-10-21
+// hooks over hooks in DXGI's shared table, which made a hook there call itself back until the stack overflowed)
 static int FramesTest(bool expectTimer)
 {
     IDXGIFactory1 *factory = nullptr;
@@ -928,12 +937,25 @@ static int FramesTest(bool expectTimer)
     Check(SUCCEEDED(hr) && sc, "frame timer: a swap chain made through the factory");
     int presented = 0;
     ULONGLONG took = 0;
+    bool ownTable = false, sharedClean = false;
+    const HMODULE hid = GetModuleHandleW(L"hid.dll");
     if (sc)
     {
         const ULONGLONG t0 = GetTickCount64();
         while (GetTickCount64() - t0 < 2600) { sc->Present(0, 0); presented++; Sleep(10); }
         took = GetTickCount64() - t0;
+        ownTable = InModule((*(void ***)sc)[8], hid) && (*(void ***)sc) != nullptr;
         sc->Release();
+        typedef HRESULT(WINAPI *CreateFactoryFn)(REFIID, void **);
+        const CreateFactoryFn direct = (CreateFactoryFn)GetProcAddress(GetModuleHandleW(L"dxgi.dll"), "CreateDXGIFactory1");
+        IDXGIFactory1 *f2 = nullptr;
+        IDXGISwapChain *sc2 = nullptr;
+        if (direct && SUCCEEDED(direct(__uuidof(IDXGIFactory1), (void **)&f2)) && f2 && SUCCEEDED(f2->CreateSwapChain(dev, &sd, &sc2)) && sc2)
+        {
+            sharedClean = hid && !InModule((*(void ***)sc2)[8], hid);
+            sc2->Release();
+        }
+        if (f2) f2->Release();
     }
     if (ctx) ctx->Release();
     if (dev) dev->Release();
@@ -941,7 +963,8 @@ static int FramesTest(bool expectTimer)
     if (wnd) DestroyWindow(wnd);
     const std::string log = ReadDllLog();
     const bool hooked = log.find("frame timer: a line every 1 s; CreateDXGIFactory1 import hooked") != std::string::npos;
-    const bool present = log.find("frame timer: Present hooked on the swap chain") != std::string::npos;
+    const bool present = log.find("frame timer: Present hooked in the swap chain's own method table") != std::string::npos;
+    Check(sharedClean, "DXGI's shared method table untouched: a swap chain from a factory the hook never saw keeps DXGI's Present");
     // the frames lines: count them and take the rates
     std::vector<double> rates;
     for (size_t at = log.find("frames: "); at != std::string::npos; at = log.find("frames: ", at + 8))
@@ -957,7 +980,8 @@ static int FramesTest(bool expectTimer)
         return g_failures ? 1 : 0;
     }
     Check(hooked, "frame timer: the CreateDXGIFactory1 import hooked (ini FrameLog=1)");
-    Check(present, "frame timer: Present hooked on the swap chain made through the factory");
+    Check(present, "frame timer: Present hooked in the own method table of the swap chain made through the factory");
+    Check(ownTable, "frame timer: that swap chain calls the DLL's Present through its own table");
     snprintf(line, sizeof line, "frame timer: %zu frames lines over %.1f s of Present (2 expected)", rates.size(), took / 1000.0);
     Check(rates.size() >= 2, line);
     const double expected = presented * 1000.0 / (took ? took : 1);

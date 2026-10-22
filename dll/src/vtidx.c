@@ -51,3 +51,12 @@ const int kSlotDrawIndexedInstancedIndirect = SLOT(ID3D11DeviceContextVtbl, Draw
 const int kSlotDrawInstancedIndirect = SLOT(ID3D11DeviceContextVtbl, DrawInstancedIndirect);
 const int kSlotDrawAuto = SLOT(ID3D11DeviceContextVtbl, DrawAuto);
 const int kSlotCreateVertexShader = SLOT(ID3D11DeviceVtbl, CreateVertexShader);
+
+// the diagnostics' DXGI hooks (FrameLog, GpuTimers, the profiles, DepthProbe): the swap chain's Present and Present1 and
+// the factory's CreateSwapChain and CreateSwapChainForHwnd; the swap chain and the factory get a private copy of their
+// table (OwnTable in shadows.cpp)
+#include <dxgi1_6.h>
+const int kSlotPresent = SLOT(IDXGISwapChainVtbl, Present);
+const int kSlotPresent1 = SLOT(IDXGISwapChain1Vtbl, Present1);
+const int kSlotCreateSwapChain = SLOT(IDXGIFactoryVtbl, CreateSwapChain);
+const int kSlotCreateSwapChainForHwnd = SLOT(IDXGIFactory2Vtbl, CreateSwapChainForHwnd);

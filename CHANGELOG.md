@@ -2,6 +2,8 @@
 
 ## [1.1.0] - not released yet
 
+- After test build 3: SnowRunner Shadows never writes into DXGI's shared method tables. Its diagnostic options (frame log, GPU timers, profiles; all off by default) hooked Present and CreateSwapChain there, and Steam's client of 2026-10-21 hooks over hooks it finds in that table, which can make the two call each other until the game crashes (found in a player's crash dump with another mod that did the same). The game's swap chain and factory now get method tables of their own with the hook in them. Tested offline: every configuration of the DLL's tests passes, and a swap chain made through a factory the DLL never saw keeps DXGI's own Present. Not looked at in the game yet.
+
 - After test build 3: Photo grade also takes out the game's lens dirt: the soft blurry discs the camera adds over bright sky and clouds. The post pass adds that texture over the picture, so it is written empty; Restore or the grade switched off put it back. Not looked at in the game yet.
 - After test build 3: Skies without the pinch overhead. Every column of a sky dome meets at the zenith, where the photographs' clouds were squeezed into wedges around a point with a ring around it (seen in the game looking straight up, and as streaks on the overcast skies); from 66 degrees up each row now fades to its own average, plain at 86. Two domes, Yukon's night and one of Kola's days, keep their first build until their build options are found again. The near cloud band most maps use is cut with softer edges and without its smallest fragments, which at night showed as hard-edged specks against the stars. Not looked at in the game yet.
 
