@@ -1,16 +1,18 @@
 // Headlight shadows spliced into SnowRunner's lit shaders (replacements\headlight\headshadow.hlsl, compiled to
-// headshadow.cso next to it). Every lit pixel shader that takes the truck's headlight samples its light pattern once:
-// sample_d ... t54 (g_txHeadLightMap), s2, at the pixel's place in the lamp's projection, inside the branch where the
-// pixel is within the lamp's reach and cone. Right after that sample the helper runs, fed the pixel's world position
-// (the input the shader subtracts g_vHeadLightPos[0], cb2[24], from), and the sample's colour is multiplied by what the
-// helper returns: the share of the lamp's light that gets past what stands in the way. Everything the shader does with
-// the pattern afterwards (distance falloff, colour, the surface's response) stays.
+// headshadow.cso next to it). The lit pixel shaders take the truck's headlight in one of two ways, both inside the branch
+// where the pixel is within the lamp's reach and cone: most objects sample its light pattern once (sample_d ... t54,
+// g_txHeadLightMap, s2), and the terrain (about 2300 shaders) works out an intensity alone and multiplies the lamp's
+// colour (g_cHeadLightColor[0], cb2[16]) by it. The helper runs right after the pattern's sample, whose colour it then
+// scales, or right before that colour multiply, whose intensity it scales; fed the pixel's world position (what the
+// shader subtracts g_vHeadLightPos[0], cb2[24], from: an input, or a temp that still holds it there), it returns the
+// share of the lamp's light that gets past what stands in the way. Everything else the shader does with the light stays.
 // The shader also gets what the helper reads and it lacked: t121 (this frame's linear depth, which SnowRunner Shadows
 // binds when it sees it declared; declared in front of dcl_temps, where fxc puts textures) and cb1 up to register 5
 // (the view-projection: the declaration is widened in place).
-// A shader is left as it is unless: exactly one such sample, writing a temp; the world position an input declared with
-// x, y and z (an input read beyond its declaration crashes NVIDIA's compiler, see patch_puddle.js), so its value at the
-// sample is the one the shader measured from the lamp; cb2 declared to register 24 or more.
+// A shader is left as it is unless: one such sample writing a temp, or none and a colour multiply by one temp component;
+// the world position a plain input declared with x, y and z (an input read beyond its declaration crashes NVIDIA's
+// compiler, see patch_puddle.js) or a plain temp no instruction writes before the helper runs, and no loop in between;
+// cb2 declared to register 24 or more.
 // Works on a stock shader or on one the other modules patched already (they touch other instructions).
 // Library: patchHeadShadow(blob[, helper]) -> { blob, note } or { reason }; targets() -> the hashes in dump\.
 // usage: node patch_headshadow.js [outDir]    the set built on the stock shaders (default replacements\headlight\set)
@@ -32,7 +34,6 @@ const mulInst = (dest, a, c) => Buffer.concat([words((OP.mul | ((1 + (dest.lengt
 const tempDest = (reg, mask) => words(0x00100002 | (mask << 4), reg);
 const tempSrc = (reg) => words(0x00100e46, reg);   // rN.xyzw
 const tempSrcX = (reg) => words(0x00100006, reg);  // rN.xxxx
-const inputSrc = (reg) => words(0x00101246, reg);  // vN.xyzx
 const tokens = (b, o) => b.subarray(o.off, o.off + o.size);
 // dcl_resource_texture2d (float,float,float,float) tN: opcode 88, dimension texture2d in bits 11..15, 4 tokens
 const dclTexture2D = (slot) => words(OP.dcl_resource | (3 << 11) | (4 << 24), 0x00107000, slot, 0x00005555);
@@ -52,11 +53,24 @@ function insertAt(b, at, bytes)
     return out;
 }
 
+const isCb2 = (p, reg) => p && p.type === 8 && p.idx[0] === 2 && p.idx[1] === reg;
+// a plain operand: one token and one immediate index, no modifier (its bytes can be copied as a source elsewhere)
+const plain = (p) => p && !p.ext && p.dim === 1 && p.rep[0] === 0 && p.size === 8;
+// the component a source operand replicates (rN.wwww or rN.w), or -1
+function replicated(p)
+{
+    if (p.mode === 2) return p.sel & 3;
+    if (p.mode === 1) { const c = p.sel & 3; return ((p.sel >> 2) & 3) === c && ((p.sel >> 4) & 3) === c && ((p.sel >> 6) & 3) === c ? c : -1; }
+    return -1;
+}
+// whether an instruction writes any of the x, y, z of temp n (destinations are the operands in mask mode)
+const writesXyz = (e, n) => e.o.some((p) => p.type === 0 && p.mode === 0 && p.idx[0] === n && (p.sel & 7) !== 0);
+
 function patchHeadShadow(b, helper = fs.readFileSync(HELPER))
 {
     const w = walk(b);
     const L = w.insts.map((x, i) => ({ x, i, o: operands(b, x) }));
-    let world = null, cb1 = null, cb2 = 0;
+    let world = null, worldAt = -1, cb1 = null, cb2 = 0;
     const patterns = [], textures = new Set();
     for (const e of L)
     {
@@ -67,46 +81,87 @@ function patchHeadShadow(b, helper = fs.readFileSync(HELPER))
         // the pixel minus g_vHeadLightPos[0]: add rX, <p>, -cb2[24]
         if (x.op === OP.add && o.length === 3 && !world)
         {
-            const lamp = (p) => p.type === 8 && p.idx[0] === 2 && p.idx[1] === 24;
-            if (lamp(o[2])) world = o[1]; else if (lamp(o[1])) world = o[2];
+            if (isCb2(o[2], 24)) world = o[1]; else if (isCb2(o[1], 24)) world = o[2];
+            if (world) worldAt = e.i;
         }
     }
-    if (patterns.length !== 1) return { reason: 'light pattern samples: ' + patterns.length };
     if (!world) return { reason: 'no world position' };
-    if (world.type !== 1) return { reason: 'the world position is a temp, not an input' };
+    if (!plain(world) || (world.type !== 0 && world.type !== 1)) return { reason: 'the world position is not a plain temp or input' };
     if (!cb1) return { reason: 'no cb1' };
     if (cb2 < 25) return { reason: 'cb2 declared with ' + cb2 + ' registers' };
-    const dcl = L.find((e) => e.x.op >= 95 && e.x.op <= 100 && e.o[0].type === 1 && e.o[0].idx[0] === world.idx[0]);
-    if (!dcl || (dcl.o[0].sel & 7) !== 7) return { reason: 'the world position input is not declared with x, y and z' };
-    const { i, o } = patterns[0];
-    if (o[3].idx[0] !== PATTERN_SAMPLER) return { reason: 'the light pattern sampler is s' + o[3].idx[0] };
-    if (o[0].type !== 0) return { reason: 'the sample does not write a temp' };
+    if (world.type === 1)
+    {
+        const dcl = L.find((e) => e.x.op >= 95 && e.x.op <= 100 && e.o[0].type === 1 && e.o[0].idx[0] === world.idx[0]);
+        if (!dcl || (dcl.o[0].sel & 7) !== 7) return { reason: 'the world position input is not declared with x, y and z' };
+    }
+    // where the helper goes: right after the light pattern's sample (scaling the sample), or, in the shaders that light
+    // the headlight without a pattern (the terrain's), right before the lamp's colour is multiplied by its intensity
+    // (mul rC, rI.c, cb2[16]: scaling the intensity, so the colour and the light's direction both take the shadow)
+    let at, mode;
+    if (patterns.length === 1)
+    {
+        const { o } = patterns[0];
+        if (patterns[0].i < worldAt) return { reason: 'the pattern is sampled before the world position is measured' };
+        if (o[3].idx[0] !== PATTERN_SAMPLER) return { reason: 'the light pattern sampler is s' + o[3].idx[0] };
+        if (o[0].type !== 0) return { reason: 'the sample does not write a temp' };
+        at = patterns[0]; mode = 'pattern';
+    }
+    else if (patterns.length === 0)
+    {
+        at = L.find((e) => e.i > worldAt && e.x.op === OP.mul && e.o.length === 3 && !e.x.sat && (isCb2(e.o[1], 16) || isCb2(e.o[2], 16)));
+        if (!at) return { reason: 'no light pattern and no colour of headlight 0' };
+        const s = isCb2(at.o[1], 16) ? at.o[2] : at.o[1];
+        if (s.type !== 0 || !plain(s) || replicated(s) < 0) return { reason: 'the intensity of headlight 0 is not one temp component' };
+        mode = 'intensity';
+    }
+    else return { reason: 'light pattern samples: ' + patterns.length };
+    // a temp position must still hold the pixel where the helper reads it, and neither may be inside a loop
+    for (const e of L.slice(worldAt + 1, at.i))
+    {
+        if (e.x.op === 48 || e.x.op === 22) return { reason: 'a loop between the world position and the light' };
+        if (world.type === 0 && writesXyz(e, world.idx[0])) return { reason: 'the world position temp is overwritten before the light' };
+    }
     const base = b.readUInt32LE(w.insts.find((x) => x.op === OP.dcl_temps).off + 4);
     const h = helperBody(helper, base, 1);
-    const x = w.insts[i];
-    const sample = b.subarray(x.off, x.off + x.len * 4);
-    // the sample as it was, then the helper, then the sample's colour times the helper's share (its own components)
-    const atSample = Buffer.concat([
-        sample,
-        movInst(tempDest(h.IN(0), 7), inputSrc(world.idx[0])),   // the world position
-        ...h.body,
-        mulInst(tokens(b, o[0]), tempSrc(o[0].idx[0]), tempSrcX(h.RES)),
-    ]);
-    let out = replaceRange(b, x.off, x.off + x.len * 4, atSample, h.temps, h.body.length + 2);
+    const x = at.x, orig = b.subarray(x.off, x.off + x.len * 4);
+    const feed = movInst(tempDest(h.IN(0), 7), tokens(b, world));   // the world position, as the shader measures it
+    let spliced, note;
+    if (mode === 'pattern')
+    {
+        // the sample as it was, then the helper, then the sample's colour times the helper's share (its own components)
+        const o = at.o;
+        spliced = Buffer.concat([orig, feed, ...h.body, mulInst(tokens(b, o[0]), tempSrc(o[0].idx[0]), tempSrcX(h.RES))]);
+        note = 'pattern r' + o[0].idx[0];
+    }
+    else
+    {
+        // the helper, the intensity times its share, then the colour multiply as it was
+        const s = isCb2(at.o[1], 16) ? at.o[2] : at.o[1], c = replicated(s), r = s.idx[0];
+        const rep = words(0x00100006 | ((c | (c << 2) | (c << 4) | (c << 6)) << 4), r);   // rN.cccc
+        spliced = Buffer.concat([feed, ...h.body, mulInst(tempDest(r, 1 << c), rep, tempSrcX(h.RES)), orig]);
+        note = 'intensity r' + r + '.' + 'xyzw'[c];
+    }
+    let out = replaceRange(b, x.off, x.off + x.len * 4, spliced, h.temps, h.body.length + 2);
     // cb1 widened to 6 registers in place (its size is the operand's last index token; before the code, so the offset holds)
     if (cb1.o[0].idx[1] < 6) out.writeUInt32LE(6, cb1.o[0].off + cb1.o[0].size - 4);
     // t121 declared in front of dcl_temps (the spliced code lies after it, so this offset holds too)
     if (!textures.has(DEPTH_SLOT)) out = insertAt(out, w.insts.find((y) => y.op === OP.dcl_temps).off, dclTexture2D(DEPTH_SLOT));
     dxbcChecksum(out.subarray(20)).copy(out, 4);
-    return { blob: out, note: 'sample r' + o[0].idx[0] + ' at ' + i + ', world v' + world.idx[0] + ', cb1 ' + cb1.o[0].idx[1] + (cb1.o[0].idx[1] < 6 ? ' -> 6' : '') + (textures.has(DEPTH_SLOT) ? '' : ', t121 added') };
+    return { blob: out, note: note + ' at ' + at.i + ', world ' + (world.type ? 'v' : 'r') + world.idx[0] + ', cb1 ' + cb1.o[0].idx[1] + (cb1.o[0].idx[1] < 6 ? ' -> 6' : '') + (textures.has(DEPTH_SLOT) ? '' : ', t121 added') };
 }
 
 const index = () => JSON.parse(fs.readFileSync(path.join(DUMP, 'index.json')));
 const binds = (r, name) => (r.res || []).some((x) => x.name === name);
-// the lit pixel shaders that project the headlight's pattern
+// the lit pixel shaders that take headlight 0: those that bind its pattern, and those whose code holds the index pair of
+// g_vHeadLightPos[0] (cb2[24]); patchHeadShadow decides on each
+let cached = null;
 function targets()
 {
-    return index().filter((r) => /^ps/.test(r.profile) && binds(r, 'g_txHeadLightMap')).map((r) => r.hash.toUpperCase());
+    if (cached) return cached;
+    const pair = Buffer.from([2, 0, 0, 0, 24, 0, 0, 0]);
+    cached = index().filter((r) => /^ps/.test(r.profile) && (binds(r, 'g_txHeadLightMap') || fs.readFileSync(path.join(DUMP, '0x' + r.hash + '.cso')).includes(pair)))
+        .map((r) => r.hash.toUpperCase());
+    return cached;
 }
 
 module.exports = { patchHeadShadow, targets };

@@ -65,8 +65,9 @@
 //            uses for its contact shadows (screen-space sun shadows at the AO pass, darkening each pixel's sunlight; F4);
 //            patched last, on top of whatever the other modules made of each receiver; without the DLL the write goes
 //            nowhere; in DEFAULT
-//   headshadow tools\patch_headshadow.js + headlight\headshadow.cso: the ~2600 lit shaders that take the truck's headlight:
-//            after their one sample of the headlight's pattern, a walk from the pixel to each lamp of the pair through
+//   headshadow tools\patch_headshadow.js + headlight\headshadow.cso: the ~4900 lit shaders that take the truck's headlight
+//            (the objects' through its light pattern, the terrain's through an intensity alone): where the lamp's light is
+//            worked out, a walk from the pixel to each lamp of the pair through
 //            this frame's depth (SnowRunner Shadows' t121) says how much of the light gets past what stands in the way,
 //            and the pattern is scaled by it; patched last, after contact; without the DLL t121 is unbound and the light
 //            is the game's own; not looked at in the game yet, off by default
@@ -521,7 +522,7 @@ function build(orig, modules)
         }
         // headlight shadows (module headshadow): the lit shaders that take the headlight's pattern get the walk to the
         // lamps after their pattern sample (tools\patch_headshadow.js), last, on top of whatever the other modules made of
-        // each; a shader it does not take (its world position a temp: 84 of 2597) keeps what it had
+        // each; a shader it does not take (about 290 of 5140, most without camera constants) keeps what it had
         if (headShadow)
         {
             const head = require('./patch_headshadow.js'); // here, not at the top: a package without it still builds every other module
