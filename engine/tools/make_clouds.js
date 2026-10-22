@@ -11,10 +11,11 @@
 // the game's bands do. The colour is the texel's luminance over the brightest cloud's, so a state's tint works on it
 // as on the game's. The header and the tail come from the stock texture, so size, mips and format are the game's.
 // usage: node make_clouds.js band <panorama.hdr> <out.pct> --header <stock.pct> --from <deg> --to <deg>
-//            [--coverage <0..1>] [--shade <0..1>] [--white] [--yaw <degrees>] [--preview]
+//            [--coverage <0..1>] [--shade <0..1>] [--white] [--yaw <degrees>] [--soft <w>] [--blur <texels>] [--min-island <texels>] [--preview]
 //        --from and --to: the elevation of the band's lower and upper edge; --shade: the clouds' mean grey (the stock
 //        band's, weighted by its alpha); --white: plain white colour;
-//        --preview writes <out>.png, the band over a mid grey
+//        --preview writes <out>.png, the band over a mid grey; --soft (0.3), --blur (1) and --min-island (0) shape the
+//        clouds' edges: the soft step's width, the radius the alpha is softened over, patches of cloud left out below that size
 'use strict';
 const fs = require('fs'), zlib = require('zlib');
 const { readHdr, encodeBlock, removeSun } = require('./make_cube.js');
@@ -62,12 +63,16 @@ function readBand(p, w, h, from, to, yaw)
     }
     return { lum, cloud };
 }
-// the band as RGBA8: the alpha a soft step over the cloudiness whose foot is found so the mean alpha is `coverage`
-function renderBand(band, w, h, coverage, white, shade = 0)
+// the band as RGBA8: the alpha a soft step over the cloudiness whose foot is found so the mean alpha is `coverage`;
+// look.soft: the step's width (0.3), look.blur: the radius in texels the alpha is softened over (1), look.minIsland: a
+// patch of cloud of fewer texels than this, not touching another, is left out (0: none); the defaults are the bands as
+// first built
+function renderBand(band, w, h, coverage, white, shade = 0, look = {})
 {
+    const soft = look.soft || 0.3, blur = look.blur || 1, minIsland = look.minIsland || 0;
     const env = new Float32Array(h);
     for (let j = 0; j < h; j++) { const t = (j + 0.5) / h; env[j] = smooth(0, EDGE, t) * smooth(0, EDGE, 1 - t); }
-    const alphaAt = (k, j, foot) => smooth(foot, foot + 0.3, band.cloud[k]) * env[j];
+    const alphaAt = (k, j, foot) => smooth(foot, foot + soft, band.cloud[k]) * env[j];
     const meanAlpha = (foot) => { let s = 0; for (let j = 0; j < h; j += 2) for (let i = 0; i < w; i += 2) s += alphaAt(j * w + i, j, foot); return s / (Math.ceil(h / 2) * Math.ceil(w / 2)); };
     // the foot never goes under FOOT_MIN: below it the clear sky's own haze would come in as a veil, so a sky with
     // fewer clouds than the coverage asks for gives a thinner band
@@ -75,6 +80,25 @@ function renderBand(band, w, h, coverage, white, shade = 0)
     for (let k = 0; k < 24; k++) { const mid = (lo + hi) / 2; if (meanAlpha(mid) > coverage) lo = mid; else hi = mid; }
     const foot = (lo + hi) / 2, alpha = new Float32Array(w * h), bright = [];
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = j * w + i; alpha[k] = alphaAt(k, j, foot); if (alpha[k] > 0.8 && (i & 3) === 0 && (j & 3) === 0) bright.push(band.lum[k]); }
+    // small patches of cloud, each on its own (texels over 0.05 alpha joined to their four neighbours, the band wrapping
+    // around), left out: the broken edge of a cloud field would show as hard specks
+    if (minIsland > 0)
+    {
+        const seen = new Uint8Array(w * h), stack = [];
+        for (let s = 0; s < w * h; s++)
+        {
+            if (seen[s] || alpha[s] <= 0.05) continue;
+            const part = []; seen[s] = 1; stack.push(s);
+            while (stack.length)
+            {
+                const k = stack.pop(), i = k % w, j = (k - i) / w;
+                part.push(k);
+                for (const q of [j * w + (i + 1) % w, j * w + (i + w - 1) % w, j > 0 ? k - w : -1, j < h - 1 ? k + w : -1])
+                    if (q >= 0 && !seen[q] && alpha[q] > 0.05) { seen[q] = 1; stack.push(q); }
+            }
+            if (part.length < minIsland) for (const k of part) alpha[k] = 0;
+        }
+    }
     bright.sort((a, b) => a - b);
     const top = bright.length ? bright[Math.floor(bright.length * 0.97)] : 1, rgba = new Uint8Array(w * h * 4), grey = new Float32Array(w * h);
     // the clouds' grey, and its mean weighted by the alpha: with a shade given the grey is scaled so that this mean
@@ -85,9 +109,9 @@ function renderBand(band, w, h, coverage, white, shade = 0)
     for (let j = 0; j < h; j++)
         for (let i = 0; i < w; i++)
         {
-            // the alpha softened over its eight neighbours: no single hard texels at a cloud's edge
+            // the alpha softened over its neighbours (eight at radius 1): no single hard texels at a cloud's edge
             let a = 0, n = 0;
-            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const y = j + dy; if (y < 0 || y >= h) continue; a += alpha[y * w + (i + dx + w) % w]; n++; }
+            for (let dy = -blur; dy <= blur; dy++) for (let dx = -blur; dx <= blur; dx++) { const y = j + dy; if (y < 0 || y >= h) continue; a += alpha[y * w + (i + dx + w) % w]; n++; }
             const k = j * w + i, g = white ? 255 : Math.round(Math.max(0, Math.min(1, grey[k] * scale)) * 255);
             rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = g; rgba[k * 4 + 3] = Math.round(a / n * 255);
         }
@@ -150,7 +174,7 @@ if (require.main === module)
             removeSun(p);   // the sun and its glare are as white as a cloud: out with them before the clouds are told from the sky
             const from = Number(opt('from')), to = Number(opt('to')), coverage = Number(opt('coverage') || 0.3), yaw = Number(opt('yaw') || 0);
             if (!(to > from && from >= -10 && to <= 90)) throw new Error('--from and --to: the band\'s lower and upper elevation in degrees');
-            const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'), Number(opt('shade') || 0));
+            const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'), Number(opt('shade') || 0), { soft: Number(opt('soft') || 0), blur: Number(opt('blur') || 0), minIsland: Number(opt('min-island') || 0) });
             const parts = [stock.subarray(0, head)];
             let pic = r.rgba, pw = w, ph = h;
             for (let m = 0; m < mips; m++) { parts.push(blocks(pic, pw, ph)); if (m < mips - 1) { pic = halve(pic, pw, ph); pw = Math.max(pw >> 1, 4); ph = Math.max(ph >> 1, 4); } }
