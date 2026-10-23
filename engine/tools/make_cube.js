@@ -846,4 +846,4 @@ if (require.main === module)
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
-module.exports = { readHdr, renderFaces, encodeBlock, encodeFace, writePct, faceDir, dirToFace, removeSun, zenithCap, pctHeader, SIZE, MIPS };
+module.exports = { readHdr, renderFaces, encodeBlock, encodeFace, encodeRect, halveRect, writePct, faceDir, dirToFace, removeSun, zenithCap, pctHeader, SIZE, MIPS, TAIL };
