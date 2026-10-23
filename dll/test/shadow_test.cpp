@@ -989,7 +989,7 @@ static void **ImportSlot(HMODULE module, const char *dll, const char *func)
     return nullptr;
 }
 static bool Ascii(const char *s) { if (!s || !*s) return false; for (; *s; s++) if ((unsigned char)*s < 32 || (unsigned char)*s > 126) return false; return true; }
-static int GraphicsTest(int expected)
+static int GraphicsTest(int expected, bool keys)
 {
     const HMODULE dll = GetModuleHandleW((ExeDir() + L"hid.dll").c_str());
     typedef const NgGraphicsApi *(*PFN_Get)(int);
@@ -1015,6 +1015,7 @@ static int GraphicsTest(int expected)
         printf("     %s = %d: %s\n", api->name(i), was, api->help(i));
     }
     Check(named, "graphics tab: every switch has an ASCII name and tip");
+    if (api->count) Check((strstr(api->help(0), "(key ") != nullptr) == keys, keys ? "graphics tab: the tips name the keys (KeysWithMenu=1)" : "graphics tab: the tips name no key (silent beside the tab)");
     Check(flips, "graphics tab: every switch set off and on reads back what was set");
     Check(*api->name(-1) == 0 && *api->name(api->count) == 0 && *api->help(api->count) == 0 && api->get(api->count) == 0, "graphics tab: indices out of range answer empty and 0");
     api->set(api->count, 1);   // must do nothing
@@ -1062,6 +1063,30 @@ static int GraphicsTest(int expected)
             InterlockedCompareExchangePointer(slot, (void *)g_nextCreateDevice, (void *)&FrontCreateDevice);
             VirtualProtect(slot, sizeof(void *), old, &old);
         }
+        // the switch keys beside a NEXT GEN menu: a stand-in of its shared block (version 3, the Graphics tab's slot at
+        // byte 192) with the tab claimed, then let go; the DLL's hotkey thread looks once a second
+        swprintf_s(name, L"Local\\NextGen.Menu.%lu", GetCurrentProcessId());
+        HANDLE menu = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, 4096, name);
+        uint8_t *block = menu ? (uint8_t *)MapViewOfFile(menu, FILE_MAP_ALL_ACCESS, 0, 0, 4096) : nullptr;
+        Check(block != nullptr, "switch keys: a stand-in NEXT GEN menu block made");
+        if (block)
+        {
+            *(volatile LONG *)block = 3;
+            *(volatile LONG64 *)(block + 192) = 1;
+            Sleep(2500);
+            const bool quiet = ReadDllLog().find("keys: the switch keys are silent while the NEXT GEN menu has the Graphics tab") != std::string::npos;
+            *(volatile LONG64 *)(block + 192) = 0;
+            Sleep(2500);
+            const bool back = ReadDllLog().find("keys: the switch keys work again") != std::string::npos;
+            if (keys) Check(!quiet && !back, "switch keys: KeysWithMenu=1 keeps them beside the menu's Graphics tab");
+            else
+            {
+                Check(quiet, "switch keys: silent while a NEXT GEN menu has the Graphics tab");
+                Check(back, "switch keys: back when the menu lets the tab go");
+            }
+            UnmapViewOfFile(block);
+        }
+        if (menu) CloseHandle(menu);
         if (tex) tex->Release();
         if (dev) dev->Release();
         if (lock) CloseHandle(lock);
@@ -1625,7 +1650,7 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "gpuprofile") == 0) return GpuTimersTest(true);
         if (strcmp(argv[i], "aohalfodd") == 0) return AOHalfOddTest();
         if (strcmp(argv[i], "retable") == 0) return RetableTest();
-        if (strcmp(argv[i], "graphics") == 0 && i + 1 < argc) return GraphicsTest(atoi(argv[i + 1]));
+        if (strcmp(argv[i], "graphics") == 0 && i + 1 < argc) return GraphicsTest(atoi(argv[i + 1]), i + 2 < argc && strcmp(argv[i + 2], "keys") == 0);
         if (strcmp(argv[i], "zmips") == 0) return ZMipsTest(false);
         if (strcmp(argv[i], "zmipsoff") == 0) return ZMipsTest(true);
     }

@@ -75,7 +75,9 @@ $configs = @(
     @{ name = 'graphics';       ini = @();                          args = @('graphics', '6') },
     @{ name = 'graphics twins'; ini = @();                          args = @('graphics', '7'); table = $true },
     @{ name = 'graphics no gi ssr'; ini = @('GI=0', 'SSR=0');       args = @('graphics', '3') },
-    @{ name = 'graphics none';  ini = @('Factor=1', 'Feed=0');      args = @('graphics', '0') }
+    @{ name = 'graphics none';  ini = @('Factor=1', 'Feed=0');      args = @('graphics', '0') },
+    # the switch keys: silent while a NEXT GEN menu (a stand-in block) has the Graphics tab, unless KeysWithMenu=1
+    @{ name = 'graphics keys';  ini = @('KeysWithMenu=1');          args = @('graphics', '6', 'keys') }
 )
 $dumps = Join-Path $out 'SnowRunnerShadows_dump_*'
 Set-Content -Path $report -Value '' -Encoding UTF8

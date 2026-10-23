@@ -89,7 +89,8 @@
 // The same switches as buttons: the NEXT GEN overlay (the shared menu of the Next Gen mods) draws a Graphics tab from
 // the list this DLL exports, NgGraphicsGetApi(1): each switch whose feature the ini turned on, with its name, a tip,
 // get and set, and status lines (device hooked, shadow map size, stock twins, ReShade). A button and its key flip one
-// flag. The import slots this DLL writes (D3D11CreateDevice and the diagnostics' imports) go through the mods' shared
+// flag. While a NEXT GEN menu has that tab the switch keys are silent (other mods use some of F4 to F11 too);
+// KeysWithMenu=1 keeps them, and with Next Gen Graphics alone they work as before. The import slots this DLL writes (D3D11CreateDevice and the diagnostics' imports) go through the mods' shared
 // lock, Local\NextGen.Slots.<pid>, with a compare-exchange, so a mod hooking the same import keeps its hook either way.
 // Dump (KeyDump=<virtual-key code>, 118 = F7, no key unless the ini names one: a dump is about 150 MB at 4K;
 // DumpAfter=<seconds>: once, that long after the AO pass first runs, 0 = off; DumpDir=<folder>, default this DLL's):
@@ -260,6 +261,7 @@ static float g_contactStrength = 1.0f, g_contactThickness = 0.005f, g_contactCon
 // as ini AOHalf (the AO pass at half size)
 static std::atomic<bool> g_stockAll{ false }, g_puddlesOn{ true }, g_bounceOn{ true }, g_stockAO{ false }, g_ssrOn{ true }, g_aoHalfOn{ false }, g_contactOn{ true };
 static UINT g_keyStock = VK_F8, g_keyPuddles = VK_F9, g_keyBounce = VK_F10, g_keyAO = VK_F11, g_keySSR = VK_F6, g_keyAOHalf = VK_F5, g_keyContact = VK_F4;
+static bool g_keysWithMenu = false; // ini KeysWithMenu: the switch keys also work while the NEXT GEN menu has the Graphics tab
 // dump (see the top): the key, the timer, the folder, and what the feed needs of it; the machinery follows the bounce light
 static UINT g_keyDump = VK_F7;
 static float g_dumpAfter = 0;
@@ -427,7 +429,34 @@ static void KeyName(UINT vk, char *out, size_t n)
     else if (vk >= VK_F1 && vk <= VK_F24) snprintf(out, n, "F%u", vk - VK_F1 + 1);
     else snprintf(out, n, "key 0x%02X", vk);
 }
-// watches the hotkeys while a window of this process is in front; each press flips its switch
+// whether a NEXT GEN menu (the shared menu of the Next Gen mods, from the Gameplay or Tire Inflation mod) has the Graphics
+// tab: its shared block, Local\NextGen.Menu.<pid> at version 3, names the slot of the mod drawing that tab in the 64-bit
+// field at byte 192 (NgShared::graphics in their src/ng_overlay.cpp), 0 while none has it. Looked at once a second, from
+// the hotkey thread alone; the view stays mapped once the block is found. Another version is not read
+static bool MenuHasGraphicsTab()
+{
+    static const uint8_t *block = nullptr;
+    static ULONGLONG last = 0;
+    static bool has = false;
+    const ULONGLONG now = GetTickCount64();
+    if (last && now - last < 1000) return has;
+    last = now;
+    if (!block)
+    {
+        wchar_t name[64];
+        swprintf_s(name, L"Local\\NextGen.Menu.%lu", GetCurrentProcessId());
+        const HANDLE m = OpenFileMappingW(FILE_MAP_READ, FALSE, name);
+        if (!m) return has = false;
+        block = (const uint8_t *)MapViewOfFile(m, FILE_MAP_READ, 0, 0, 200);
+        CloseHandle(m);   // the view keeps the block
+        if (!block) return has = false;
+    }
+    has = *(const volatile LONG *)block == 3 && *(const volatile LONG64 *)(block + 192) != 0;
+    return has;
+}
+// watches the hotkeys while a window of this process is in front; each press flips its switch. The switch keys are silent
+// while a NEXT GEN menu has the Graphics tab, whose buttons flip the same switches (other mods use some of F4 to F11, so
+// a key could do two things), unless the ini says KeysWithMenu=1; the dump key always works
 static DWORD WINAPI HotkeyThread(void *)
 {
     struct Switch { UINT key; std::atomic<bool> *state; const char *what, *whenTrue, *whenFalse; bool down; };
@@ -440,10 +469,17 @@ static DWORD WINAPI HotkeyThread(void *)
         { g_gi ? g_keyAOHalf : 0, &g_aoHalfOn, "AO pass", "at half size (upsampled)", "at full size", false },
         { g_contact ? g_keyContact : 0, &g_contactOn, "contact shadows", "on", "off", false },
     };
-    bool dumpDown = false;
+    bool dumpDown = false, silent = false;
     for (;;)
     {
         Sleep(30);
+        const bool quiet = !g_keysWithMenu && MenuHasGraphicsTab();
+        if (quiet != silent)
+        {
+            silent = quiet;
+            Log(silent ? "keys: the switch keys are silent while the NEXT GEN menu has the Graphics tab (KeysWithMenu=1 keeps them)"
+                       : "keys: the switch keys work again (no Graphics tab in a NEXT GEN menu)");
+        }
         DWORD pid = 0;
         const HWND fg = GetForegroundWindow();
         if (fg) GetWindowThreadProcessId(fg, &pid);
@@ -455,7 +491,7 @@ static DWORD WINAPI HotkeyThread(void *)
         for (Switch &s : sw)
         {
             const bool down = s.key && (GetAsyncKeyState((int)s.key) & 0x8000) != 0;
-            if (down && !s.down && mine)
+            if (down && !s.down && mine && !silent)
             {
                 const bool now = !s.state->load();
                 s.state->store(now);
@@ -6239,6 +6275,7 @@ static void ReadSettings()
     g_bounceOn = GetPrivateProfileIntW(L"Shadows", L"BounceOn", 1, ini.c_str()) != 0;
     g_stockAO = GetPrivateProfileIntW(L"Shadows", L"StockAO", 0, ini.c_str()) != 0;
     g_keySSR = GetPrivateProfileIntW(L"Shadows", L"KeySSR", VK_F6, ini.c_str());
+    g_keysWithMenu = GetPrivateProfileIntW(L"Shadows", L"KeysWithMenu", 0, ini.c_str()) != 0;
     g_ssrOn = GetPrivateProfileIntW(L"Shadows", L"SSROn", 1, ini.c_str()) != 0;
     // dump: the key, the timer (seconds after the AO pass first runs, 0 = none), the folder (default this DLL's; a relative one is under it)
     g_keyDump = GetPrivateProfileIntW(L"Shadows", L"KeyDump", 0, ini.c_str());   // no key unless the ini names one (118 = F7)
@@ -6280,14 +6317,14 @@ static GfxSwitch g_gfx[8];
 static int g_gfxCount = 0;
 static std::atomic<bool> g_gfxReady{ false };
 static bool g_importHooked = false;   // the D3D11CreateDevice import
-static char g_gfxStatus[5][128];
+static char g_gfxStatus[6][128];
 static void GfxAdd(const char *name, const char *tip, UINT key, std::atomic<bool> *state, bool on)
 {
     GfxSwitch &s = g_gfx[g_gfxCount++];
     s.name = name; s.state = state; s.on = on;
     char k[16];
     KeyName(key, k, sizeof k);
-    if (key) snprintf(s.help, sizeof s.help, "%s (key %s)", tip, k);
+    if (key && g_keysWithMenu) snprintf(s.help, sizeof s.help, "%s (key %s)", tip, k);   // else the keys are silent beside the tab
     else snprintf(s.help, sizeof s.help, "%s", tip);
 }
 static void GfxBuild()
@@ -6336,6 +6373,8 @@ static int GfxStatusCount()
     if (g_twinCount) snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Stock shaders for the switches: %u (%u of the AO pass)", g_twinCount, g_twinAO);
     else snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Stock shaders for the switches: none (no SnowRunnerShadows.stock)");
     snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "ReShade: %s", ReShadeLoaded() ? "loaded" : "not loaded");
+    snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], g_keysWithMenu ? "Keys F4 to F11: they work beside this tab (KeysWithMenu=1)"
+                                                                      : "Keys F4 to F11: silent while this tab is here (KeysWithMenu=1 keeps them)");
     snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Changes here last until the game closes; SnowRunnerShadows.ini sets the start");
     return n;
 }
