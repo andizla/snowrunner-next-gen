@@ -18,7 +18,7 @@
 //        clouds' edges: the soft step's width, the radius the alpha is softened over, patches of cloud left out below that size
 'use strict';
 const fs = require('fs'), zlib = require('zlib');
-const { readHdr, encodeBlock, removeSun, zenithCap } = require('./make_cube.js');
+const { readHdr, encodeBlock, removeSun, zenithCap, pctHeader } = require('./make_cube.js');
 
 const TAIL = 6, EDGE = 0.16, FOOT_MIN = 0.12;   // the .pct's last bytes; the share of the height each edge fades over; the least cloudiness that counts as cloud
 const srgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
@@ -109,10 +109,12 @@ function renderBand(band, w, h, coverage, white, shade = 0, look = {})
     for (let j = 0; j < h; j++)
         for (let i = 0; i < w; i++)
         {
-            // the alpha softened over its neighbours (eight at radius 1): no single hard texels at a cloud's edge
-            let a = 0, n = 0;
-            for (let dy = -blur; dy <= blur; dy++) for (let dx = -blur; dx <= blur; dx++) { const y = j + dy; if (y < 0 || y >= h) continue; a += alpha[y * w + (i + dx + w) % w]; n++; }
-            const k = j * w + i, g = white ? 255 : Math.round(Math.max(0, Math.min(1, grey[k] * scale)) * 255);
+            // the alpha softened over its neighbours (eight at radius 1): no single hard texels at a cloud's edge. The grey
+            // over the same neighbours, each by its alpha squared: the softened edge reaches out over sky, whose own
+            // darker grey there showed as a dark rim round every cloud (seen in the game at night, 2026-10-23)
+            let a = 0, n = 0, ga = 0, wa = 0;
+            for (let dy = -blur; dy <= blur; dy++) for (let dx = -blur; dx <= blur; dx++) { const y = j + dy; if (y < 0 || y >= h) continue; const q = y * w + (i + dx + w) % w, aq = alpha[q]; a += aq; n++; ga += grey[q] * aq * aq; wa += aq * aq; }
+            const k = j * w + i, g = white ? 255 : Math.round(Math.max(0, Math.min(1, (wa > 1e-6 ? ga / wa : grey[k]) * scale)) * 255);
             rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = g; rgba[k * 4 + 3] = Math.round(a / n * 255);
         }
     return { rgba, foot, mean: meanAlpha(foot), shade: sum > 0 ? sum / weight * scale : 0 };
@@ -185,7 +187,7 @@ if (require.main === module)
             const out = Buffer.concat(parts);
             if (out.length !== stock.length) throw new Error('the band came out at ' + out.length + ' bytes, the stock one has ' + stock.length);
             fs.writeFileSync(args[2], out);
-            fs.writeFileSync(args[2] + '_header', stock.subarray(0, head));
+            fs.writeFileSync(args[2] + '_header', pctHeader(stock.subarray(0, head)));
             if (args.includes('--preview'))
             {
                 const pwv = Math.min(w, 1024), phv = Math.max(1, Math.round(h * pwv / w)), rgb = new Uint8Array(pwv * phv * 3);

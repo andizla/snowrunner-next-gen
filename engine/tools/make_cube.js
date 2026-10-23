@@ -405,7 +405,16 @@ function writePct(file, faces, stockFile)
     const out = Buffer.concat(parts);
     if (out.length !== stock.length) throw new Error('the cube came out at ' + out.length + ' bytes, the stock one has ' + stock.length);
     fs.writeFileSync(file, out);
-    fs.writeFileSync(file + '_header', stock.subarray(0, HEAD));
+    fs.writeFileSync(file + '_header', pctHeader(stock.subarray(0, HEAD)));
+}
+// the .pct_header the game keeps beside a .pct: the .pct's header with its last record (type 0xff, the length of the data
+// after it) turned into type 1 with the header's own length, as every pair in the stock boot.pak has it (349 of them,
+// checked 2026-10-23; written as the .pct's head before then)
+function pctHeader(head)
+{
+    const h = Buffer.from(head);
+    if (h.length >= 8 && h[h.length - 6] === 0xff) { h[h.length - 6] = 1; h.writeUInt32LE(h.length, h.length - 4); }
+    return h;
 }
 
 // ---- a sky texture: the sphere_sky layer of a region's sky (classes\skies\sky_<region>.xml) is a panorama of the
@@ -469,8 +478,10 @@ function texColour(p, exposure)
 // upper half is the sun when it stands far above the sky's median. Its glare is measured as a gain over each row's
 // sky on the far side, by the angle from the sun, and divided out as far as SUN_REACH degrees, so the clouds near
 // the sun stay and the sky around it comes down to the far side's; the disc itself, where the glare is over SUN_GLARE,
-// takes the far sky's colour. Returns the disc's radius in degrees, 0 when the sky has no sun to take out
-const SUN_GLARE = 30, SUN_REACH = 100, SUN_REACH_COS = Math.cos(SUN_REACH * Math.PI / 180), SUN_CLEAR = 0.12;
+// is filled from around it. Returns the disc's radius in degrees, 0 when the sky has no sun to take out. SUN_LOW: the
+// share of a ring under its glare gain (clouds lit by the sun stand above the sky; the median of a ring half covered
+// by them took the sky beside them too far down, a dark ring around the sun seen in the game, 2026-10-23)
+const SUN_GLARE = 30, SUN_REACH = 100, SUN_REACH_COS = Math.cos(SUN_REACH * Math.PI / 180), SUN_CLEAR = 0.12, SUN_LOW = 0.25, SUN_EDGE = 4;
 function removeSun(p)
 {
     const lumAt = (i) => 0.2126 * p.data[i] + 0.7152 * p.data[i + 1] + 0.0722 * p.data[i + 2], half = p.h >> 1, lums = [];
@@ -507,34 +518,45 @@ function removeSun(p)
         const m = far[far.length >> 1][1];
         farSky[y * 3] = p.data[m]; farSky[y * 3 + 1] = p.data[m + 1]; farSky[y * 3 + 2] = p.data[m + 2];
     }
-    // the glare by its angle from the sun, a gain per channel: for each degree the median, around the ring, of a texel
-    // over its row's far sky. Made to fall steadily outwards, and to end at 1 at SUN_REACH
+    // the glare by its angle from the sun, a gain per channel: for each degree, around the ring, the texels over their
+    // row's far sky, ranked by brightness, the mean of the ones about SUN_LOW up (each channel from the same texels, so
+    // the gain keeps one hue). Made to fall steadily outwards, eased over the degrees (a step from one degree to the
+    // next showed as a coloured ring), and to end at 1 at SUN_REACH
     const glare = [];
     for (let deg = 1; deg <= SUN_REACH; deg++)
     {
-        const ratios = [[], [], []];
+        const ratios = [];
         for (let k = 0; k < SECTORS; k++)
         {
             const r = deg * Math.PI / 180, f = (k / SECTORS) * 2 * Math.PI, d = [0, 1, 2].map((c) => Math.cos(r) * sun[c] + Math.sin(r) * (Math.cos(f) * e1[c] + Math.sin(f) * e2[c]));
             const [u, v] = uvOf(d);
             if (v >= 0.5) continue;   // below the horizon
             sample(p, u, v, out);
-            const y = Math.min(half - 1, Math.floor(v * p.h));
-            for (let c = 0; c < 3; c++) ratios[c].push(out[c] / Math.max(1e-9, farSky[y * 3 + c]));
+            const y = Math.min(half - 1, Math.floor(v * p.h)), g = [0, 1, 2].map((c) => out[c] / Math.max(1e-9, farSky[y * 3 + c]));
+            ratios.push([0.2126 * g[0] + 0.7152 * g[1] + 0.0722 * g[2], g]);
         }
-        glare.push(ratios[0].length >= 8 ? ratios.map((list) => { list.sort((a, b) => a - b); return Math.max(1, list[list.length >> 1]); }) : null);
+        if (ratios.length < 8) { glare.push(null); continue; }
+        ratios.sort((a, b) => a[0] - b[0]);
+        const lo = Math.floor(ratios.length * (SUN_LOW - 0.1)), hi = Math.max(lo + 1, Math.floor(ratios.length * (SUN_LOW + 0.1))), g = [0, 0, 0];
+        for (let i = lo; i < hi; i++) for (let c = 0; c < 3; c++) g[c] += ratios[i][1][c] / (hi - lo);
+        glare.push(g.map((x) => Math.max(1, x)));
     }
     for (let i = glare.length - 1; i >= 0; i--)
     {
         if (!glare[i]) glare[i] = i + 1 < glare.length ? glare[i + 1].slice() : [1, 1, 1];
         if (i + 1 < glare.length) for (let c = 0; c < 3; c++) glare[i][c] = Math.max(glare[i][c], glare[i + 1][c]);
     }
+    for (let pass = 0; pass < 3; pass++)
+    {
+        const was = glare.map((g) => g.map(Math.log));
+        for (let i = 2; i < glare.length - 1; i++) for (let c = 0; c < 3; c++) glare[i][c] = Math.exp((was[i - 1][c] + 2 * was[i][c] + was[i + 1][c]) / 4);
+    }
     // under a cloud sheet the light around the sun is the sheet's own, not a glare over a clear sky: there only the
     // disc is filled. A sky counts as clear when the median blueness of its far side is over SUN_CLEAR
     const blues = [];
     for (let y = 0; y < half; y += 8) blues.push((farSky[y * 3 + 2] - farSky[y * 3]) / (farSky[y * 3 + 2] + farSky[y * 3] + 1e-9));
     blues.sort((a, b) => a - b);
-    const clear = blues[blues.length >> 1] > SUN_CLEAR, core = glare.slice(0, 6).map((g) => g.slice());
+    const clear = blues[blues.length >> 1] > SUN_CLEAR, core = glare.slice(0, 6).map((g) => g.slice()), glow = glare.map((g) => 0.2126 * g[0] + 0.7152 * g[1] + 0.0722 * g[2]);
     if (!clear) for (const g of glare) g[0] = g[1] = g[2] = 1;
     const step = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     for (let y = 0; y < half; y++)
@@ -547,30 +569,68 @@ function removeSun(p)
             for (let c = 0; c < 3; c++) p.data[o + c] /= 1 + (glare[i0][c] * (1 - t) + glare[i0 + 1][c] * t - 1) * keep;
         }
     // the disc itself, out to where the glare was under SUN_GLARE times the far sky (2 to 6 degrees): what is left
-    // there is noise, and it takes the median colour of the ring just outside it, as the picture is now
+    // there is noise, and it is filled from what stands around it, as the picture is now
     let radius = 6;
     for (let i = 1; i < 6; i++) if (0.2126 * core[i][0] + 0.7152 * core[i][1] + 0.0722 * core[i][2] < SUN_GLARE) { radius = Math.max(2, i + 1); break; }
-    // (each direction from the centre its own colour, so the disc carries on what stands around it, sky or cloud)
-    let around = [];
-    for (let k = 0; k < SECTORS; k++)
+    // (a membrane stretched over the ring just outside it: at the rim each direction has the colour that stands there, sky
+    // or cloud, and towards the middle the differences fade, faster the finer they are, to the ring's mean at the centre;
+    // carrying each direction's colour straight in met at the centre as a pinwheel, seen in the game, 2026-10-23. On it
+    // goes the detail of a patch as big at the same elevation far round the sky, as its brightness over that patch's own
+    // membrane, so a cloud deck carries on through the disc; of the patches the one whose ring varies most like the
+    // disc's. Under a cloud sheet the glow stays, and the fill rises with it towards the middle, level from the disc's
+    // edge in: a level fill under the glow came out as a dark spot)
+    const edge = clear ? SUN_EDGE : 1.5, rim = radius + edge + 0.5, HARM = SECTORS >> 1;
+    const glowAt = (deg) => { const at = Math.max(0, Math.min(glow.length - 1.001, deg - 1)), i0 = Math.floor(at); return glow[i0] + (glow[i0 + 1] - glow[i0]) * (at - i0); };
+    const rise = (deg) => (clear ? 1 : glowAt(Math.max(deg, radius)) / glowAt(rim));
+    const lum = (q) => 0.2126 * q[0] + 0.7152 * q[1] + 0.0722 * q[2];
+    const spin = (d, a) => [Math.cos(a) * d[0] + Math.sin(a) * d[2], d[1], -Math.sin(a) * d[0] + Math.cos(a) * d[2]];
+    const ringOf = (turn) => { const ring = []; for (let k = 0; k < SECTORS; k++) { const r = rim * Math.PI / 180, f = (k / SECTORS) * 2 * Math.PI, d = spin([0, 1, 2].map((c) => Math.cos(r) * sun[c] + Math.sin(r) * (Math.cos(f) * e1[c] + Math.sin(f) * e2[c])), turn), [u, v] = uvOf(d); sample(p, u, Math.min(v, 0.499), out); ring.push([out[0], out[1], out[2]]); } return ring; };
+    const membraneOf = (ring) =>
     {
-        const r = (radius + 2.5) * Math.PI / 180, f = (k / SECTORS) * 2 * Math.PI, d = [0, 1, 2].map((c) => Math.cos(r) * sun[c] + Math.sin(r) * (Math.cos(f) * e1[c] + Math.sin(f) * e2[c]));
-        const [u, v] = uvOf(d);
-        sample(p, u, Math.min(v, 0.499), out);   // a direction below the horizon takes the horizon's row
-        around.push([out[0], out[1], out[2]]);
+        const ca = [], sa = [];
+        for (let n = 0; n <= HARM; n++)
+        {
+            const a = [0, 0, 0], b = [0, 0, 0], s = n === 0 || n === HARM ? 1 / SECTORS : 2 / SECTORS;
+            for (let k = 0; k < SECTORS; k++) { const f = 2 * Math.PI * n * k / SECTORS; for (let c = 0; c < 3; c++) { a[c] += ring[k][c] * Math.cos(f) * s; b[c] += ring[k][c] * Math.sin(f) * s; } }
+            ca.push(a); sa.push(b);
+        }
+        return (rho, f, c) => { let v = ca[0][c], pw = 1; for (let n = 1; n <= HARM; n++) { pw *= rho; if (pw < 1e-4) break; v += pw * (ca[n][c] * Math.cos(n * f) + sa[n][c] * Math.sin(n * f)); } return v; };
+    };
+    const around = ringOf(0), membrane = membraneOf(around);
+    // the patch: turned about the vertical 60 to 300 degrees, clear of the glare (none near the zenith, where a turn
+    // moves little)
+    const spread = (ring) => { const l = ring.map(lum), m = l.reduce((s, x) => s + x, 0) / l.length; return Math.sqrt(l.reduce((s, x) => s + (x - m) ** 2, 0) / l.length) / Math.max(1e-9, m); };
+    const elev = Math.asin(Math.max(-1, Math.min(1, sun[1]))), want = spread(around);
+    let patch = null;
+    if (Math.cos(elev) * Math.sin(Math.PI / 6) > Math.sin((2 * rim + 1) / 2 * Math.PI / 180))
+    {
+        let bestErr = Infinity;
+        for (let deg = 60; deg <= 300; deg += 30)
+        {
+            const turn = deg * Math.PI / 180, ring = ringOf(turn), err = Math.abs(spread(ring) - want);
+            if (err < bestErr) { bestErr = err; patch = { turn, membrane: membraneOf(ring) }; }
+        }
     }
-    for (let pass = 0; pass < 4; pass++) around = around.map((_, k) => [0, 1, 2].map((c) => (around[(k + SECTORS - 1) % SECTORS][c] + 2 * around[k][c] + around[(k + 1) % SECTORS][c]) / 4));
-    const rows = Math.ceil((radius + 3) / 180 * p.h), cosEdge = Math.cos((radius + 2) * Math.PI / 180);
+    const rows = Math.ceil((rim + 1) / 180 * p.h), cosEdge = Math.cos((radius + edge) * Math.PI / 180), src = [0, 0, 0], pm = [0, 0, 0];
     for (let y = Math.max(0, by - rows); y <= Math.min(half - 1, by + rows); y++)
         for (let x = 0; x < p.w; x++)
         {
             const d = dirOf((x + 0.5) / p.w, (y + 0.5) / p.h), dot = d[0] * sun[0] + d[1] * sun[1] + d[2] * sun[2];
             if (dot <= cosEdge) continue;
-            const f = (Math.atan2(d[0] * e2[0] + d[1] * e2[1] + d[2] * e2[2], d[0] * e1[0] + d[1] * e1[1] + d[2] * e1[2]) / (2 * Math.PI) + 1) % 1 * SECTORS;
-            const k0 = Math.floor(f) % SECTORS, k1 = (k0 + 1) % SECTORS, t = f - Math.floor(f), w = 1 - step(radius, radius + 2, Math.acos(Math.min(1, dot)) * 180 / Math.PI), o = (y * p.w + x) * 3;
-            for (let c = 0; c < 3; c++) p.data[o + c] += (around[k0][c] * (1 - t) + around[k1][c] * t - p.data[o + c]) * w;
+            const f = Math.atan2(d[0] * e2[0] + d[1] * e2[1] + d[2] * e2[2], d[0] * e1[0] + d[1] * e1[1] + d[2] * e1[2]), deg = Math.acos(Math.min(1, dot)) * 180 / Math.PI;
+            const w = 1 - step(radius, radius + edge, deg), o = (y * p.w + x) * 3;
+            let detail = 1;
+            if (patch)
+            {
+                const [u, v] = uvOf(spin(d, patch.turn));
+                sample(p, u, Math.min(v, 0.499), src);
+                for (let c = 0; c < 3; c++) pm[c] = patch.membrane(deg / rim, f, c);
+                detail = Math.max(0.5, Math.min(2, lum(src) / Math.max(1e-9, lum(pm))));
+            }
+            const gain = rise(deg) * detail;
+            for (let c = 0; c < 3; c++) p.data[o + c] += (Math.max(0, membrane(deg / rim, f, c)) * gain - p.data[o + c]) * w;
         }
-    p.sun = { dir: sun, radius, outer: radius + 3 };   // where it was and how far the disc's fill reaches, for a caller that cuts clouds out
+    p.sun = { dir: sun, radius, outer: radius + edge + 1 };   // where it was and how far the disc's fill reaches, for a caller that cuts clouds out
     return radius;
 }
 // the texture's mip sizes as the game stores them: each dimension halves, a level is at least 4 x 4 (one block)
@@ -618,7 +678,7 @@ function writeSkyPct(file, p, exposure, yaw, stockFile, look)
         for (let i = 0; i < w * h; i++) { raw[i * 4] = rgba[i * 4 + 2]; raw[i * 4 + 1] = rgba[i * 4 + 1]; raw[i * 4 + 2] = rgba[i * 4]; raw[i * 4 + 3] = rgba[i * 4 + 3]; }
         if (look && look.preview) { const pv = renderSky(p, exposure, yaw, 1024, 256, look), rgb = new Uint8Array(1024 * 256 * 3); for (let i = 0; i < 1024 * 256; i++) { rgb[i * 3] = pv[i * 4]; rgb[i * 3 + 1] = pv[i * 4 + 1]; rgb[i * 3 + 2] = pv[i * 4 + 2]; } png(look.preview, 1024, 256, rgb); }
         fs.writeFileSync(file, Buffer.concat([stock.subarray(0, RAW_HEAD), raw, stock.subarray(stock.length - TAIL)]));
-        fs.writeFileSync(file + '_header', stock.subarray(0, RAW_HEAD));
+        fs.writeFileSync(file + '_header', pctHeader(stock.subarray(0, RAW_HEAD)));
         return { w, h, mips: 1 };
     }
     const dims = mipDims(w, h, mips), dataLen = dims.reduce((s, [mw, mh]) => s + Math.ceil(mw / 4) * Math.ceil(mh / 4) * 16, 0), head = stock.length - dataLen - TAIL;   // whole blocks: a level 550 texels high has 138 rows of them
@@ -635,7 +695,7 @@ function writeSkyPct(file, p, exposure, yaw, stockFile, look)
     const out = Buffer.concat(parts);
     if (out.length !== stock.length) throw new Error('the sky came out at ' + out.length + ' bytes, the stock one has ' + stock.length);
     fs.writeFileSync(file, out);
-    fs.writeFileSync(file + '_header', stock.subarray(0, head));
+    fs.writeFileSync(file + '_header', pctHeader(stock.subarray(0, head)));
     return { w, h, mips };
 }
 
@@ -786,4 +846,4 @@ if (require.main === module)
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
-module.exports = { readHdr, renderFaces, encodeBlock, encodeFace, writePct, faceDir, dirToFace, removeSun, zenithCap, SIZE, MIPS };
+module.exports = { readHdr, renderFaces, encodeBlock, encodeFace, writePct, faceDir, dirToFace, removeSun, zenithCap, pctHeader, SIZE, MIPS };
