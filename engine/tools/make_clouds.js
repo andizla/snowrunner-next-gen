@@ -47,21 +47,72 @@ function readBand(p, w, h, from, to, yaw)
         }
         // the row's clear sky: its 85th percentile of blueness; a row without any blue is all cloud
         const sorted = Float32Array.from(row).sort(), sky = sorted[Math.floor(w * 0.85)];
-        for (let i = 0; i < w; i++)
+        for (let i = 0; i < w; i++) cloud[j * w + i] = sky > 0.06 ? 1 - Math.max(0, Math.min(1, blue[j * w + i] / sky)) : 1;
+        if (p.sun)
         {
-            let c = sky > 0.06 ? 1 - Math.max(0, Math.min(1, blue[j * w + i] / sky)) : 1;
-            if (p.sun)
+            // around the sun that was taken out the picture is a fill with no cloud of its own in it. Cut clear, it was a
+            // round hole with a hard edge in the band (seen against the night sky): it now takes the band's clouds from
+            // the far side, half way round at the same height, faded in over the fill's edge
+            const theta = v * Math.PI, reach = Math.max(12, p.sun.outer) * Math.PI / 180;
+            const own = cloud.slice(j * w, j * w + w), ownLum = lum.slice(j * w, j * w + w);
+            for (let i = 0; i < w; i++)
             {
-                // around the sun that was taken out the picture is a fill: no cloud is cut from there
-                const phi = ((i + 0.5) / w - yaw / 360) * 2 * Math.PI, theta = v * Math.PI;
+                const phi = ((i + 0.5) / w - yaw / 360) * 2 * Math.PI;
                 const dot = Math.sin(theta) * Math.sin(phi) * p.sun.dir[0] + Math.cos(theta) * p.sun.dir[1] + Math.sin(theta) * Math.cos(phi) * p.sun.dir[2];
-                const reach = Math.max(12, p.sun.outer) * Math.PI / 180;
-                c *= smooth(reach, reach * 1.35, Math.acos(Math.max(-1, Math.min(1, dot))));
+                const m = 1 - smooth(reach, reach * 1.35, Math.acos(Math.max(-1, Math.min(1, dot)))), far = (i + (w >> 1)) % w;
+                if (m <= 0) continue;
+                cloud[j * w + i] = own[i] * (1 - m) + own[far] * m;
+                lum[j * w + i] = ownLum[i] * (1 - m) + ownLum[far] * m;
             }
-            cloud[j * w + i] = c;
         }
     }
     return { lum, cloud };
+}
+// the colour every texel carries is the clouds' own nearby: each texel's grey weighted by its alpha to the fourth (the
+// solid cloud counts, a thin edge hardly), summed down a pyramid of 2 x 2 cells and pulled back up, so a thin edge and
+// the clear sky around a cloud carry the grey of the cloud next to them. Taken from the photograph's own brightness, a
+// thin edge, part sky, came out darker than its cloud (219 inside, 186 at the edge, 173 just outside in a near band),
+// and filtering between texels and every smaller mip mixed that in: a dark edge round every cloud, seen in the game
+// against the night sky (2026-10-23). A cloud now fades out by its alpha alone
+function coreGrey(grey, alpha, w, h)
+{
+    const levels = [];
+    let lw = w, lh = h, gw = new Float32Array(w * h), ww = new Float32Array(w * h);
+    for (let k = 0; k < w * h; k++) { const a = alpha[k], a4 = a * a * a * a; gw[k] = grey[k] * a4; ww[k] = a4; }
+    levels.push({ w: lw, h: lh, gw, ww });
+    while (lw > 1 || lh > 1)
+    {
+        const nw = Math.max(1, lw >> 1), nh = Math.max(1, lh >> 1), ngw = new Float32Array(nw * nh), nww = new Float32Array(nw * nh);
+        for (let j = 0; j < nh; j++)
+            for (let i = 0; i < nw; i++)
+                for (let dy = 0; dy < 2; dy++)
+                    for (let dx = 0; dx < 2; dx++)
+                    {
+                        const q = Math.min(lh - 1, j * 2 + dy) * lw + Math.min(lw - 1, i * 2 + dx);
+                        ngw[j * nw + i] += gw[q]; nww[j * nw + i] += ww[q];
+                    }
+        lw = nw; lh = nh; gw = ngw; ww = nww;
+        levels.push({ w: lw, h: lh, gw, ww });
+    }
+    // the coarsest cell: the clouds' mean grey (the band's mean when it holds no cloud at all)
+    const top = levels[levels.length - 1];
+    let col = Float32Array.from([top.ww[0] > 1e-6 ? top.gw[0] / top.ww[0] : grey.reduce((s, x) => s + x, 0) / grey.length]);
+    for (let L = levels.length - 2; L >= 0; L--)
+    {
+        const { w: cw, h: ch, gw: cgw, ww: cww } = levels[L], up = levels[L + 1], next = new Float32Array(cw * ch);
+        for (let j = 0; j < ch; j++)
+            for (let i = 0; i < cw; i++)
+            {
+                // the coarser level bilinear at this cell's centre
+                const x = Math.max(0, Math.min(up.w - 1, (i + 0.5) / 2 - 0.5)), y = Math.max(0, Math.min(up.h - 1, (j + 0.5) / 2 - 0.5));
+                const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(up.w - 1, x0 + 1), y1 = Math.min(up.h - 1, y0 + 1), fx = x - x0, fy = y - y0;
+                const c = (col[y0 * up.w + x0] * (1 - fx) + col[y0 * up.w + x1] * fx) * (1 - fy) + (col[y1 * up.w + x0] * (1 - fx) + col[y1 * up.w + x1] * fx) * fy;
+                const k = j * cw + i, wk = cww[k];
+                next[k] = wk >= 1 ? cgw[k] / wk : cgw[k] + (1 - wk) * c;
+            }
+        col = next;
+    }
+    return col;
 }
 // the band as RGBA8: the alpha a soft step over the cloudiness whose foot is found so the mean alpha is `coverage`;
 // look.soft: the step's width (0.3), look.blur: the radius in texels the alpha is softened over (1), look.minIsland: a
@@ -106,31 +157,45 @@ function renderBand(band, w, h, coverage, white, shade = 0, look = {})
     let sum = 0, weight = 0;
     for (let k = 0; k < w * h; k++) { grey[k] = srgb(Math.max(0, Math.min(1, band.lum[k] / top))); sum += grey[k] * alpha[k]; weight += alpha[k]; }
     const scale = shade > 0 && sum > 0 ? shade / (sum / weight) : 1;
+    // the alpha softened over its neighbours (eight at radius 1): no single hard texels at a cloud's edge
+    const softA = new Float32Array(w * h);
     for (let j = 0; j < h; j++)
         for (let i = 0; i < w; i++)
         {
-            // the alpha softened over its neighbours (eight at radius 1): no single hard texels at a cloud's edge. The grey
-            // over the same neighbours, each by its alpha squared: the softened edge reaches out over sky, whose own
-            // darker grey there showed as a dark rim round every cloud (seen in the game at night, 2026-10-23)
-            let a = 0, n = 0, ga = 0, wa = 0;
-            for (let dy = -blur; dy <= blur; dy++) for (let dx = -blur; dx <= blur; dx++) { const y = j + dy; if (y < 0 || y >= h) continue; const q = y * w + (i + dx + w) % w, aq = alpha[q]; a += aq; n++; ga += grey[q] * aq * aq; wa += aq * aq; }
-            const k = j * w + i, g = white ? 255 : Math.round(Math.max(0, Math.min(1, (wa > 1e-6 ? ga / wa : grey[k]) * scale)) * 255);
-            rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = g; rgba[k * 4 + 3] = Math.round(a / n * 255);
+            let a = 0, n = 0;
+            for (let dy = -blur; dy <= blur; dy++) for (let dx = -blur; dx <= blur; dx++) { const y = j + dy; if (y < 0 || y >= h) continue; a += alpha[y * w + (i + dx + w) % w]; n++; }
+            softA[j * w + i] = a / n;
         }
+    // the grey: the clouds' own carried out over their edges and the clear sky (coreGrey)
+    const core = white ? null : coreGrey(grey, softA, w, h);
+    for (let k = 0; k < w * h; k++)
+    {
+        const g = white ? 255 : Math.round(Math.max(0, Math.min(1, core[k] * scale)) * 255);
+        rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = g; rgba[k * 4 + 3] = Math.round(softA[k] * 255);
+    }
     return { rgba, foot, mean: meanAlpha(foot), shade: sum > 0 ? sum / weight * scale : 0 };
 }
-// the next mip (a 2 x 2 box; a dimension of 4 stays) and a picture as BC7 blocks
+// the next mip (a 2 x 2 box; a dimension of 4 stays) and a picture as BC7 blocks. The colour is averaged by alpha, so a
+// cloud's edge keeps the cloud's colour at every distance (a clear texel's colour does not count where cloud is near)
 function halve(pic, w, h)
 {
     const nw = Math.max(w >> 1, 4), nh = Math.max(h >> 1, 4), sx = w > 4 ? 2 : 1, sy = h > 4 ? 2 : 1, out = new Uint8Array(nw * nh * 4);
     for (let j = 0; j < nh; j++)
         for (let i = 0; i < nw; i++)
-            for (let c = 0; c < 4; c++)
-            {
-                let sum = 0;
-                for (let dy = 0; dy < sy; dy++) for (let dx = 0; dx < sx; dx++) sum += pic[(Math.min(h - 1, j * sy + dy) * w + Math.min(w - 1, i * sx + dx)) * 4 + c];
-                out[(j * nw + i) * 4 + c] = Math.round(sum / (sx * sy));
-            }
+        {
+            let a = 0, n = 0;
+            const c = [0, 0, 0], plain = [0, 0, 0];
+            for (let dy = 0; dy < sy; dy++)
+                for (let dx = 0; dx < sx; dx++)
+                {
+                    const o = (Math.min(h - 1, j * sy + dy) * w + Math.min(w - 1, i * sx + dx)) * 4, ao = pic[o + 3];
+                    for (let k = 0; k < 3; k++) { c[k] += pic[o + k] * ao; plain[k] += pic[o + k]; }
+                    a += ao; n++;
+                }
+            const o = (j * nw + i) * 4;
+            for (let k = 0; k < 3; k++) out[o + k] = Math.round(a > 0 ? c[k] / a : plain[k] / n);
+            out[o + 3] = Math.round(a / n);
+        }
     return out;
 }
 function blocks(pic, w, h)

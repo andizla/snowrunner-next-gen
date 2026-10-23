@@ -167,7 +167,7 @@ namespace SnowRunnerNextGen
                 "NASA's star map in place of the game's star texture: the real sky's stars as fine points, with the glow of the Milky Way."));
             // the sky domes and cloud bands made anew from photographs of real skies, the fifth part of boot.pak
             list.Add(M("skies", "ATMOSPHERE", "Skies", true,
-                "The painted skies of every region made anew from photographs of real skies: 47 of the game's sky domes, cloud bands and night layers, each at its own size and brightness, the photograph's sun taken out so the game's sun is the only one. The clouds still drift."));
+                "The painted skies of every region made anew from photographs of real skies: 49 of the game's sky domes, cloud bands and night layers, each at its own size and brightness, the photograph's sun taken out so the game's sun is the only one. The aurora is green, as a real one is. The clouds still drift."));
             // the night sky's star layer times a factor, the third part of initial.pak
             Module stars = M("stars", "ATMOSPHERE", "Brighter stars", true, "The stars of the night sky drawn brighter, so they stand out against the dark.");
             stars.Options.Add(new OptionSet("Brightness", new[] { "3x", "2x" }, new[] { "3", "2" }, 0));
