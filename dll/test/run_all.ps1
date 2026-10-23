@@ -1,4 +1,4 @@
-﻿# Runs out\shadow_test.exe in every configuration (each with its SnowRunnerShadows.ini next to the DLL), the stock twins
+# Runs out\shadow_test.exe in every configuration (each with its SnowRunnerShadows.ini next to the DLL), the stock twins
 # ones with the test's own table (shadow_test maketable), and removes the ini, the table and the dump files afterwards.
 # Results: out\run_all.txt; exit code 0 = every configuration passed.
 $out = Join-Path (Split-Path -Parent $PSScriptRoot) 'out'
@@ -55,6 +55,8 @@ $configs = @(
     @{ name = 'ao full';        ini = @('AOHalf=0');                args = @('aofull') },
     # an odd render size (a DLSS scale gives one): the half-size pass fills its last column and row too
     @{ name = 'ao half odd';    ini = @();                          args = @('aohalfodd') },
+    # another program gives the device and its context tables of their own, copied from the hooked ones
+    @{ name = 'private tables'; ini = @();                          args = @('retable') },
     # the AO pass's depth mips at t126: on by default; ZMips=0 leaves t126 empty; the default run with them off
     @{ name = 'zmips';          ini = @();                          args = @('zmips') },
     @{ name = 'zmips off';      ini = @('ZMips=0');                 args = @('zmipsoff') },

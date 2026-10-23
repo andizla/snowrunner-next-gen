@@ -901,6 +901,52 @@ static bool InModule(void *addr, HMODULE m)
     HMODULE h = nullptr;
     return m && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)addr, &h) && h == m;
 }
+// another program gives the device and its context a method table of their own, copied from the hooked ones (the hooks
+// come along): a 3:1 depth texture made through the device's copy is still scaled, the context's hooked calls go
+// through, and the log says the copies were taken as the tables they came from (review 3, N-D2: before, the lookups came
+// back empty and the hook's next call faulted)
+static void **CopyTable(void *obj)
+{
+    void **vt = *(void ***)obj, **copy = new void *[256];
+    MEMORY_BASIC_INFORMATION mi = {};
+    VirtualQuery(vt, &mi, sizeof mi);
+    const size_t words = std::min<size_t>(256, (size_t)((BYTE *)mi.BaseAddress + mi.RegionSize - (BYTE *)vt) / sizeof(void *));
+    memcpy(copy, vt, words * sizeof(void *));
+    *(void ***)obj = copy;
+    return copy;
+}
+static int RetableTest()
+{
+    ID3D11Device *dev = nullptr;
+    ID3D11DeviceContext *ctx = nullptr;
+    D3D_FEATURE_LEVEL fl = D3D_FEATURE_LEVEL_11_0;
+    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, &fl, 1, D3D11_SDK_VERSION, &dev, nullptr, &ctx))) { printf("FAIL  no device\n"); return 2; }
+    void **devTable = *(void ***)dev, **ctxTable = *(void ***)ctx;
+    CopyTable(dev);
+    CopyTable(ctx);
+    D3D11_TEXTURE2D_DESC td = { 768, 256, 1, 1, DXGI_FORMAT_R32_TYPELESS, { 1, 0 }, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE, 0, 0 };
+    ID3D11Texture2D *tex = nullptr;
+    dev->CreateTexture2D(&td, nullptr, &tex);
+    D3D11_TEXTURE2D_DESC got = {};
+    if (tex) tex->GetDesc(&got);
+    Check(tex && got.Width == 1536 && got.Height == 512, "private tables: a 768 x 256 depth texture made through the device's copy is scaled to 1536 x 512");
+    const D3D11_VIEWPORT vp = { 0, 0, 768, 256, 0, 1 };
+    ctx->RSSetViewports(1, &vp);
+    ctx->OMSetRenderTargets(0, nullptr, nullptr);
+    ctx->ClearState();
+    Check(true, "private tables: the context's hooked calls go through its copy");
+    const std::string log = ReadDllLog();
+    Check(log.find("device method table") != std::string::npos && log.find("is a copy of the hooked") != std::string::npos, "private tables: the log names the device table as a copy of the hooked one");
+    Check(log.find("context method table") != std::string::npos, "private tables: the log names the context table as a copy of the hooked one");
+    if (tex) tex->Release();
+    *(void ***)ctx = ctxTable;   // the tables they came with, for their release
+    *(void ***)dev = devTable;
+    ctx->Release();
+    dev->Release();
+    printf("%s\n", g_failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
+    return g_failures ? 1 : 0;
+}
+
 // the frame timer: a factory from CreateDXGIFactory1 (the import the DLL hooks with FrameLog set), a swap chain made
 // through it on a hidden window, 2.6 s of Present every ~10 ms; with FrameLog=1 the log must name both hooks and carry
 // frames lines at about the rate presented, without it no frame timer at all. Either way DXGI's own method tables stay
@@ -1454,6 +1500,7 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "gputimers") == 0) return GpuTimersTest(false);
         if (strcmp(argv[i], "gpuprofile") == 0) return GpuTimersTest(true);
         if (strcmp(argv[i], "aohalfodd") == 0) return AOHalfOddTest();
+        if (strcmp(argv[i], "retable") == 0) return RetableTest();
         if (strcmp(argv[i], "zmips") == 0) return ZMipsTest(false);
         if (strcmp(argv[i], "zmipsoff") == 0) return ZMipsTest(true);
     }

@@ -108,7 +108,7 @@
 // its TAA pass is set up) bound there while the pass has run within the last 250 ms. The projection comes from the
 // game's CB_GLOBAL_CAMERA, bound at b1 for the AO pass. Nothing runs before a shader that writes output 7 and one that
 // reads t123 exist; F8 stops all of it. Knobs: SSRRoughMax, SSRThickness, SSRTemporal, SSRCone, SSRSteps; SSRMirror=1
-// (debug: every pixel a mirror with its normal from the depth buffer, no splice needed). SSRProbe=1 (default): 20 s after the AO
+// (debug: every pixel a mirror with its normal from the depth buffer, no splice needed). SSRProbe=1 (0 by default): 20 s after the AO
 // pass first runs and with every dump request, the order of a few frames' passes (lit pass, velocity, AO pass, TAA;
 // command lists in the order they run) is written to SnowRunnerShadows.probe.log, the formats involved to the log.
 //
@@ -178,6 +178,7 @@ extern const int kSlotCreateTexture2D, kSlotCreateDepthStencilView, kSlotCreateD
     kSlotCopyResource, kSlotCopySubresourceRegion, kSlotClearDepthStencilView, kSlotDrawIndexedInstancedIndirect,
     kSlotDrawInstancedIndirect, kSlotDrawAuto, kSlotCreateVertexShader, kSlotCreatePixelShader, kSlotRSSetState, kSlotRSGetState,
     kSlotPSSetShader, kSlotOMSetBlendState, kSlotVSSetShader, kSlotCSSetShader, kSlotCreateComputeShader;
+extern const int kDeviceSig[8], kContextSig[8];
 }
 
 // {6A1F0C52-3E8B-4D57-9B21-5C7F3E0D9A44}: set on every scaled texture and its depth views, value = the factor
@@ -230,7 +231,7 @@ static UINT g_feedMips = 1;         // ini FeedMips: the colour copy with a full
 static bool g_ssr = true;           // ini SSR: the reflection pass (render target 7 of the lit pass, t123/t124)
 static bool g_ssrHalf = true;       // ini SSRHalf: one ray per 2 x 2 block (0: one per pixel)
 static bool g_ssrMirror = false;    // ini SSRMirror (debug): every pixel a mirror with its normal from the depth buffer
-static bool g_ssrProbe = true;      // ini SSRProbe: the order of a few frames' passes, once, to SnowRunnerShadows.probe.log
+static bool g_ssrProbe = false;     // ini SSRProbe: the order of a few frames' passes, once, to SnowRunnerShadows.probe.log
 static bool g_ssrTiming = false;    // ini SSRTiming: the reflection pass's GPU time and ray counts, a log line every 10 s (0 = not timed)
 static UINT g_depthProbe = 0;       // ini DepthProbe (dev): 1 = with the probe's first recording, N >= 2 = N s after the AO pass first ran (see DPArm)
 static bool g_ssrLobe = false;      // ini SSRLobe: rays drawn from the GGX lobe (0: the mirror direction, roughness only blurs the hit)
@@ -492,22 +493,25 @@ static void StartHotkeys()
 
 static BOOLEAN WINAPI HidDMissing() { return FALSE; }                 // HidD_*: BOOLEAN, FALSE = failed
 static LONG WINAPI HidPMissing() { return (LONG)0xC0110020; }         // HidP_*: HIDP_STATUS_NOT_IMPLEMENTED
+static ULONG WINAPI HidPNoLength() { return 0; }                       // HidP_MaxUsageListLength, HidP_MaxDataListLength: a length
 
 static void LoadRealHid()
 {
+    wchar_t sys[MAX_PATH] = {};
+    GetSystemDirectoryW(sys, MAX_PATH);
+    const std::wstring system = std::wstring(sys) + L"\\hid.dll";
     std::wstring real = g_dir + L"hid_chain.dll";
-    if (GetFileAttributesW(real.c_str()) == INVALID_FILE_ATTRIBUTES)
-    {
-        wchar_t sys[MAX_PATH] = {};
-        GetSystemDirectoryW(sys, MAX_PATH);
-        real = std::wstring(sys) + L"\\hid.dll";
-    }
+    if (GetFileAttributesW(real.c_str()) == INVALID_FILE_ATTRIBUTES) real = system;
     HMODULE m = LoadLibraryW(real.c_str());
+    // another mod's hid.dll kept as hid_chain.dll that does not load: the system's then (review 3, N-D5)
+    if (!m && real != system) { Log("hid_chain.dll does not load (error %lu): the system's hid.dll instead", GetLastError()); real = system; m = LoadLibraryW(real.c_str()); }
     int missing = 0;
     for (int i = 0; i < kHidCount; i++)
     {
         void *p = m ? (void *)GetProcAddress(m, kHidNames[i]) : nullptr;
-        if (!p) { missing++; p = kHidNames[i][3] == 'D' ? (void *)&HidDMissing : (void *)&HidPMissing; }
+        // a stand-in of the function's own type: the two that return a list length give 0, not a status (review 3, N-D5)
+        const bool length = !strcmp(kHidNames[i], "HidP_MaxUsageListLength") || !strcmp(kHidNames[i], "HidP_MaxDataListLength");
+        if (!p) { missing++; p = kHidNames[i][3] == 'D' ? (void *)&HidDMissing : length ? (void *)&HidPNoLength : (void *)&HidPMissing; }
         g_hidReal[i] = p;
     }
     Log("hid.dll functions from %ls%s, %d missing", real.c_str(), m ? "" : " (NOT LOADED)", missing);
@@ -565,6 +569,7 @@ typedef HRESULT(STDMETHODCALLTYPE *PFN_CreateComputeShader)(ID3D11Device *, cons
 struct DeviceOrig
 {
     void **vt;
+    void *sig[8]; // the table's kDeviceSig slots, which this DLL never patches
     PFN_CreateTexture2D createTexture2D;
     PFN_CreateTexture2D1 createTexture2D1;
     PFN_CreateDepthStencilView createDSV;
@@ -576,6 +581,7 @@ struct DeviceOrig
 struct ContextOrig
 {
     void **vt;
+    void *sig[8]; // the table's kContextSig slots, which this DLL never patches
     PFN_OMSetRenderTargets omSet;
     PFN_OMSetRenderTargetsAndUAVs omSetUAV;
     PFN_RSSetViewports setViewports;
@@ -615,11 +621,20 @@ static ContextOrig g_contextValues[kContextSlots];
 static int g_contextEntries = 0; // under g_patchLock
 static std::mutex g_patchLock;
 
-static const DeviceOrig *DevOrig(void *self)
+static const DeviceOrig *DevOrigCopy(void **vt);
+static const ContextOrig *CtxOrigCopy(void **vt);
+// the entry of the object's table as the list has it (nullptr: not on it), for putting a table on the list
+static const DeviceOrig *DevOrigListed(void *self)
 {
     void **vt = *(void ***)self;
     for (int i = 0, n = g_deviceCount.load(std::memory_order_acquire); i < n; i++) if (g_devices[i].vt == vt) return &g_devices[i];
     return nullptr;
+}
+// in a hook: the entry of the object's table, or of the hooked table it is a copy of
+static const DeviceOrig *DevOrig(void *self)
+{
+    const DeviceOrig *d = DevOrigListed(self);
+    return d ? d : DevOrigCopy(*(void ***)self);
 }
 static size_t Bucket(void **vt)
 {
@@ -627,9 +642,8 @@ static size_t Bucket(void **vt)
     x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33;
     return (size_t)x & (kContextSlots - 1);
 }
-static const ContextOrig *CtxOrig(void *self)
+static const ContextOrig *CtxOrigListed(void **vt)
 {
-    void **vt = *(void ***)self;
     for (size_t i = Bucket(vt), n = 0; n < kContextSlots; i = (i + 1) & (kContextSlots - 1), n++)
     {
         void **key = g_contextKeys[i].load(std::memory_order_acquire);
@@ -637,6 +651,12 @@ static const ContextOrig *CtxOrig(void *self)
         if (!key) break;
     }
     return nullptr;
+}
+static const ContextOrig *CtxOrig(void *self)
+{
+    void **vt = *(void ***)self;
+    const ContextOrig *c = CtxOrigListed(vt);
+    return c ? c : CtxOrigCopy(vt);
 }
 // under g_patchLock: the entry for vt, filled with e (a reused table gets the same originals again)
 static bool PublishContext(void **vt, const ContextOrig &e)
@@ -653,6 +673,50 @@ static bool PublishContext(void **vt, const ContextOrig &e)
         return true;
     }
     return false;
+}
+
+// A table not on the list whose signature is that of one on it: a copy of a hooked table that another program gave the
+// object after the hooks went in, with the hooks in it (review 3, N-D2: the lookups came back empty and the hook's next
+// call faulted). It goes on the list with the originals of the table it was copied from. Only ever read: the signature
+// slots of the object's own table and the signatures kept on the list. nullptr: no table on the list matches
+static bool SigIs(void **vt, const int *slots, void *const *sig)
+{
+    for (int k = 0; k < 8; k++) if (vt[slots[k]] != sig[k]) return false;
+    return true;
+}
+static std::atomic<int> g_copyLines{ 0 };
+static const DeviceOrig *DevOrigCopy(void **vt)
+{
+    std::lock_guard<std::mutex> lock(g_patchLock);
+    const int n = g_deviceCount.load(std::memory_order_acquire);
+    for (int i = 0; i < n; i++) if (g_devices[i].vt == vt) return &g_devices[i];   // put on meanwhile
+    for (int i = 0; i < n; i++)
+    {
+        if (!SigIs(vt, kDeviceSig, g_devices[i].sig)) continue;
+        if (n >= 16) return &g_devices[i];   // the list is full: that table's originals all the same
+        g_devices[n] = g_devices[i];
+        g_devices[n].vt = vt;
+        g_deviceCount.store(n + 1, std::memory_order_release);
+        if (g_copyLines++ < 4) Log("device method table %p is a copy of the hooked %p (another program's): its originals taken from there", (void *)vt, (void *)g_devices[i].vt);
+        return &g_devices[n];
+    }
+    return nullptr;
+}
+static const ContextOrig *CtxOrigCopy(void **vt)
+{
+    std::lock_guard<std::mutex> lock(g_patchLock);
+    if (const ContextOrig *c = CtxOrigListed(vt)) return c;   // put on meanwhile
+    for (int i = 0; i < kContextSlots; i++)
+    {
+        void **key = g_contextKeys[i].load(std::memory_order_acquire);
+        if (!key || !SigIs(vt, kContextSig, g_contextValues[i].sig)) continue;
+        ContextOrig e = g_contextValues[i];
+        e.vt = vt;
+        if (!PublishContext(vt, e)) return &g_contextValues[i];   // the list is full: that table's originals all the same
+        if (g_copyLines++ < 4) Log("context method table %p is a copy of the hooked %p (another program's): its originals taken from there", (void *)vt, (void *)key);
+        return CtxOrigListed(vt);
+    }
+    return nullptr;
 }
 
 // ---- per context viewport and scissor state, as the callers set it
@@ -2201,6 +2265,9 @@ static void GIBindTarget(ID3D11DeviceContext *ctx, const ContextOrig *o, ID3D11R
         }
     }
     if (!gi) { r->Release(); return; }
+    // no shader reads it (bounce light left out of shader.pak): the AO pass draws as the game set it up, nothing written
+    // for no one (review 3, N-D4: written 40379 times in a run with no reader). At half size the pass needs both targets
+    if (!halfRtv[0] && !g_giReaders.load(std::memory_order_relaxed)) { r->Release(); return; }
     if (!PlainBlend(ctx, o, s, 1u << 1)) { r->Release(); return; }
     if (halfRtv[0])
     {
@@ -4897,11 +4964,13 @@ template <class T> static IUnknown *MakeTwin(T *sh)
     ID3D11Device *dev = nullptr;
     sh->GetDevice(&dev);
     if (!dev) return nullptr;
+    // the shader's device may be one whose table this DLL never hooked (under ReShade the game's device is ReShade's
+    // wrapper and a shader's GetDevice gives the real one: review 3, N-D1): its own function then, no hook in between
     const DeviceOrig *d = DevOrig(dev);
     T *made = nullptr;
     HRESULT hr;
-    if constexpr (pixel) hr = d->createPS(dev, stock, t.size, nullptr, &made);
-    else hr = d->createVS(dev, stock, t.size, nullptr, &made);
+    if constexpr (pixel) hr = d && d->createPS ? d->createPS(dev, stock, t.size, nullptr, &made) : dev->CreatePixelShader(stock, t.size, nullptr, &made);
+    else hr = d && d->createVS ? d->createVS(dev, stock, t.size, nullptr, &made) : dev->CreateVertexShader(stock, t.size, nullptr, &made);
     dev->Release();
     if (FAILED(hr) || !made)
     {
@@ -5309,6 +5378,7 @@ static void HookContext(ID3D11DeviceContext *ctx)
     if (vt[kSlotRSSetViewports] == (void *)&Hook_RSSetViewports) return; // this table is hooked already
     ContextOrig e = {};
     e.vt = vt;
+    for (int k = 0; k < 8; k++) e.sig[k] = vt[kContextSig[k]];
     e.omSet = (PFN_OMSetRenderTargets)vt[kSlotOMSetRenderTargets];
     e.omSetUAV = (PFN_OMSetRenderTargetsAndUAVs)vt[kSlotOMSetRenderTargetsAndUAVs];
     e.setViewports = (PFN_RSSetViewports)vt[kSlotRSSetViewports];
@@ -5628,13 +5698,14 @@ static void HookDevice(ID3D11Device *dev)
     {
         std::lock_guard<std::mutex> lock(g_patchLock);
         void **vt = *(void ***)dev;
-        if (!DevOrig(dev))
+        if (!DevOrigListed(dev))
         {
             const int n = g_deviceCount.load();
             if (n >= 16) { Log("too many device method tables, %p left alone", (void *)vt); return; }
             const bool v1 = SameTableFor(dev, __uuidof(ID3D11Device1)), v2 = SameTableFor(dev, __uuidof(ID3D11Device2)), v3 = SameTableFor(dev, __uuidof(ID3D11Device3));
             DeviceOrig &e = g_devices[n];
             e.vt = vt;
+            for (int k = 0; k < 8; k++) e.sig[k] = vt[kDeviceSig[k]];
             e.createTexture2D = (PFN_CreateTexture2D)vt[kSlotCreateTexture2D];
             e.createDSV = (PFN_CreateDepthStencilView)vt[kSlotCreateDepthStencilView];
             e.createDeferred = (PFN_CreateDeferredContext)vt[kSlotCreateDeferredContext];
@@ -5716,6 +5787,12 @@ static std::vector<OwnTable> g_own;   // the objects with a table of their own, 
 static void **GiveOwnTable(void *obj, int a, int b)
 {
     void **shared = *(void ***)obj;
+    {
+        // already a copy of ours: a second copy would keep our own hook as the real function, which then calls itself
+        // until the stack runs out (review 3, N-D3)
+        std::lock_guard<std::mutex> lock(g_ownLock);
+        for (const auto &x : g_own) if (x.table == shared) return shared;
+    }
     const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
     MEMORY_BASIC_INFORMATION mi = {};
     if (VirtualQuery(shared - 1, &mi, sizeof(mi)) != sizeof(mi) || mi.State != MEM_COMMIT || !(mi.Protect & readable) || (mi.Protect & PAGE_GUARD)) return nullptr;
@@ -6066,7 +6143,7 @@ static void ReadSettings()
     g_ssrMirror = GetPrivateProfileIntW(L"Shadows", L"SSRMirror", 0, ini.c_str()) != 0;
     const UINT depthProbe = GetPrivateProfileIntW(L"Shadows", L"DepthProbe", 0, ini.c_str());
     g_depthProbe = depthProbe > 3600 ? 3600 : depthProbe;
-    g_ssrProbe = GetPrivateProfileIntW(L"Shadows", L"SSRProbe", 1, ini.c_str()) != 0;
+    g_ssrProbe = GetPrivateProfileIntW(L"Shadows", L"SSRProbe", 0, ini.c_str()) != 0;   // off unless asked (review 3, N-D5: a hid.dll put in by hand wrote the probe log)
     g_ssrTiming = GetPrivateProfileIntW(L"Shadows", L"SSRTiming", 0, ini.c_str()) != 0;
     g_ssrLobe = GetPrivateProfileIntW(L"Shadows", L"SSRLobe", 0, ini.c_str()) != 0;
     const UINT steps = GetPrivateProfileIntW(L"Shadows", L"SSRSteps", 80, ini.c_str());

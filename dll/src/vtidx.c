@@ -52,6 +52,16 @@ const int kSlotDrawInstancedIndirect = SLOT(ID3D11DeviceContextVtbl, DrawInstanc
 const int kSlotDrawAuto = SLOT(ID3D11DeviceContextVtbl, DrawAuto);
 const int kSlotCreateVertexShader = SLOT(ID3D11DeviceVtbl, CreateVertexShader);
 
+// a table's signature: eight slots this DLL never patches, kept when a table goes on the list, so that a copy of a hooked
+// table another program gives the object later (the hooks come along with the rest) is known by them (shadows.cpp,
+// DevOrig and CtxOrig)
+const int kDeviceSig[8] = { SLOT(ID3D11DeviceVtbl, CreateBuffer), SLOT(ID3D11DeviceVtbl, CreateTexture1D), SLOT(ID3D11DeviceVtbl, CreateTexture3D),
+    SLOT(ID3D11DeviceVtbl, CreateShaderResourceView), SLOT(ID3D11DeviceVtbl, CreateUnorderedAccessView), SLOT(ID3D11DeviceVtbl, CreateRenderTargetView),
+    SLOT(ID3D11DeviceVtbl, CreateInputLayout), SLOT(ID3D11DeviceVtbl, CreateGeometryShader) };
+const int kContextSig[8] = { SLOT(ID3D11DeviceContextVtbl, VSSetConstantBuffers), SLOT(ID3D11DeviceContextVtbl, PSSetSamplers),
+    SLOT(ID3D11DeviceContextVtbl, IASetInputLayout), SLOT(ID3D11DeviceContextVtbl, IASetVertexBuffers), SLOT(ID3D11DeviceContextVtbl, IASetIndexBuffer),
+    SLOT(ID3D11DeviceContextVtbl, IASetPrimitiveTopology), SLOT(ID3D11DeviceContextVtbl, Map), SLOT(ID3D11DeviceContextVtbl, Unmap) };
+
 // the diagnostics' DXGI hooks (FrameLog, GpuTimers, the profiles, DepthProbe): the swap chain's Present and Present1 and
 // the factory's CreateSwapChain and CreateSwapChainForHwnd; the swap chain and the factory get a private copy of their
 // table (OwnTable in shadows.cpp)
