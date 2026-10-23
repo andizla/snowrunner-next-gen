@@ -27,6 +27,7 @@ namespace SnowRunnerNextGen
         public bool Running;
         public string Shader = "unknown";         // stock, ours, changed, unknown
         public readonly List<string> Modules = new List<string>();
+        public readonly List<string> Gone = new List<string>();      // chosen at the last Apply, but this game version cannot take them
         public string Dll = "none";               // none, ours, foreign, nobin
         public bool DllCurrent;
         public string Factor, SlopeBias;
@@ -73,6 +74,8 @@ namespace SnowRunnerNextGen
             s.Shader = Text(shader, "state") ?? "unknown";
             IEnumerable modules = shader != null && shader.ContainsKey("modules") ? shader["modules"] as IEnumerable : null;
             if (modules != null) foreach (object m in modules) if (m != null) s.Modules.Add(m.ToString());
+            IEnumerable gone = shader != null && shader.ContainsKey("gone") ? shader["gone"] as IEnumerable : null;
+            if (gone != null) foreach (object m in gone) if (m != null) s.Gone.Add(m.ToString());
             s.Dll = Text(dll, "state") ?? "none";
             s.DllCurrent = dll != null && dll.ContainsKey("current") && dll["current"] is bool && (bool)dll["current"];
             s.Factor = Text(dll, "factor");

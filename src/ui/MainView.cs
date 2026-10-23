@@ -441,6 +441,11 @@ namespace SnowRunnerNextGen
             Dictionary<string, object> sel = Selection();
             List<string> shader = new List<string>();
             foreach (object m in (List<object>)sel["shader"]) shader.Add((string)m);
+            // modules this game version cannot take are not in the build and never will be: no Apply asked for them
+            // (review 3, N8: the bar asked to apply forever). The sun shafts, the wider smoke glow and the water's sun go
+            // with the module they build on
+            List<string> gone = installed.Gone;
+            shader.RemoveAll(m => gone.Contains(m) || (m == "fogsun" && gone.Contains("fog")) || (m == "smokemore" && gone.Contains("smoke")) || (m == "watersun" && gone.Contains("water")));
             Dictionary<string, object> dll = sel["shadows"] as Dictionary<string, object>;
             string mine = Signature(shader, dll == null ? null : (string)dll["factor"], dll == null ? null : (string)dll["slopeBias"], dll == null ? null : (string)dll["aoHalf"],
                 Scenery((string)sel["scenery"], (string)sel["sceneryHide"], (string)sel["sceneryShadows"]), (string)sel["grass"], (string)sel["fill"], (string)sel["grade"],

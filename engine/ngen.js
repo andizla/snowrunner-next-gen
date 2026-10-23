@@ -172,8 +172,12 @@ function stateDir(g)
     if (config.devGame && config.devState && g.root.toLowerCase() === path.resolve(config.devGame).toLowerCase()) return config.devState;
     const named = (folder) => path.join(stateRoot(), 'games', crypto.createHash('sha256').update(folder.toLowerCase()).digest('hex').slice(0, 12));
     const keeps = (dir) => { try { return fs.readdirSync(dir).some((f) => /\.orig$/i.test(f)); } catch (e) { return false; } };
-    const own = named(g.home);
-    const earlier = [g.root].concat(path.basename(g.home).toLowerCase() === 'en_us' ? [path.dirname(g.home)] : []).map(named).filter((d) => d !== own);
+    // named after the folder as it really is: the same game reached through a junction, a subst drive or another drive
+    // letter has one state, not an empty one that refuses as orphaned (review 3, N6); a state named after the spelling
+    // it was given before is found among the earlier ones
+    const real = (p) => { try { return fs.realpathSync.native(p); } catch (e) { return p; } };
+    const own = named(real(g.home));
+    const earlier = [...new Set([g.home, g.root, real(g.root)].concat(path.basename(g.home).toLowerCase() === 'en_us' ? [path.dirname(g.home)] : []).map(named))].filter((d) => d !== own);
     let dir = keeps(own) ? own : earlier.find(keeps) || null;
     if (!dir)
     {
@@ -353,13 +357,16 @@ function gameRunning(g)
     const system = (...parts) => path.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', ...parts);
     try
     {
+        // the output as UTF-8: piped, it comes in the console's code page, and a game folder with letters outside it
+        // (D:\Игры\SnowRunner) never matched, so the game read as not running (review 3, N4); a hung call gives up
+        // after 20 s instead of holding the engine
         const out = execFileSync(system('WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command',
-            'Get-Process SnowRunner -ErrorAction SilentlyContinue | ForEach-Object { "" + $_.Id + "|" + $_.Path }'], { encoding: 'utf8', windowsHide: true });
+            '[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-Process SnowRunner -ErrorAction SilentlyContinue | ForEach-Object { "" + $_.Id + "|" + $_.Path }'], { encoding: 'utf8', windowsHide: true, timeout: 20000 });
         return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).some((l) => { const p = l.slice(l.indexOf('|') + 1).trim(); return !p || real(p) === ours; });
     }
     catch (e)
     {
-        try { return /SnowRunner\.exe/i.test(execFileSync(system('tasklist.exe'), ['/FI', 'IMAGENAME eq SnowRunner.exe', '/NH'], { encoding: 'utf8', windowsHide: true })); }
+        try { return /SnowRunner\.exe/i.test(execFileSync(system('tasklist.exe'), ['/FI', 'IMAGENAME eq SnowRunner.exe', '/NH'], { encoding: 'utf8', windowsHide: true, timeout: 20000 })); }
         catch (e2) { return true; }
     }
 }
@@ -502,20 +509,28 @@ function outdated(state, s)
 async function readPaks(g, state)
 {
     const env = toolEnv(g, state);
-    const said = await answer('fidelity_bundle.js', ['modules'], env);   // stock, a comma list, or unknown
+    // a pak a tool cannot read (zip64, bytes behind its end record, more than 65535 entries: another tool's layout) reads
+    // as changed by something else, so status, Apply and Restore go on with every other file instead of all stopping
+    // (review 3, N3); the log says why
+    const tolerant = async (what, read, fallback) => { try { return await read(); } catch (e) { logLine(what + ' could not be read, taken as changed by something else: ' + e.message); return fallback; } };
+    const changed = { state: 'changed' };
+    const said = await tolerant('shader.pak', () => answer('fidelity_bundle.js', ['modules'], env), 'changed');   // stock, a comma list, unknown (or changed: unreadable)
     let shader;
     if (said === 'stock') shader = { state: 'stock', modules: [] };
+    else if (said === 'changed') shader = { state: 'changed', modules: [] };
     else if (said === 'unknown')
     {
         const known = KNOWN_SHADER.includes(sha256File(g.shader));
         shader = { state: known ? 'stock' : fs.existsSync(path.join(state, 'shader.pak.orig')) ? 'changed' : 'unknown', modules: [] };
     }
-    else shader = { state: 'ours', modules: said.split(',').filter(Boolean) };
+    else shader = { state: 'ours', modules: said.split(',').filter(Boolean), gone: lastNotes(state).gone || [] };   // gone: chosen, but this game version cannot take them
     // scenery: nature, all, vanilla, changed; its two extras: off, plants or all (off for anything but this installer's build)
-    const lod = fs.existsSync(g.shared) ? JSON.parse(await answer('lod_patch.js', ['status-json'], env)) : { state: 'missing', hide: 'off', shadows: 'off' };
+    const lod = fs.existsSync(g.shared) ? await tolerant('shared.pak', async () => JSON.parse(await answer('lod_patch.js', ['status-json'], env)), { state: 'changed', hide: 'off', shadows: 'off' }) : { state: 'missing', hide: 'off', shadows: 'off' };
     const scenery = lod.state, sceneryHide = lod.hide, sceneryShadows = lod.shadows;
-    const { grass, fill, stars, weather, debris, initialPak, ownDays } = await readInitial(g, env), grade = await readGrade(g, env), particles = await readParticles(g, env);
-    const sky = await readSky(g, env), cubes = await readCubes(g, env), skies = await readSkies(g, env), logos = await readLogos(g, env), maps = await readMaps(g, env);
+    const { grass, fill, stars, weather, debris, initialPak, ownDays } = await tolerant('initial.pak', () => readInitial(g, env), { grass: changed, fill: changed, stars: changed, weather: changed, debris: changed, initialPak: 'changed', ownDays: null });
+    const grade = await tolerant('boot.pak', () => readGrade(g, env), changed), particles = await tolerant('boot.pak', () => readParticles(g, env), changed);
+    const sky = await tolerant('boot.pak', () => readSky(g, env), changed), cubes = await tolerant('boot.pak', () => readCubes(g, env), changed), skies = await tolerant('boot.pak', () => readSkies(g, env), changed);
+    const logos = await tolerant('gfx.pak', () => readLogos(g, env), { state: 'changed', intro: null }), maps = await tolerant('the level paks', () => readMaps(g, env), { state: 'changed', rows: '', part: false, changed: MAP_ROWS.join(',') });
     return { shader, scenery, sceneryHide, sceneryShadows, grass, fill, stars, weather, debris, initialPak, ownDays, grade, particles, sky, cubes, skies, logos, maps };
 }
 // initial.pak: the grass, the fill light, the stars, the weather and the debris, five parts of one build, each { state, factor }
@@ -711,6 +726,9 @@ function shaderNeedsAdopt(g, state, now)
 }
 
 const sameSet = (a, b) => a.length === b.length && a.slice().sort().join() === b.slice().sort().join();
+// the shader modules that go into a build when the game's shaders cannot take those in gone: the sun shafts are a build
+// of the fog, the wider smoke glow one of the smoke glow, the water's sun one of the water, so without those they go too
+const buildable = (shader, gone) => shader.filter((m) => !gone.includes(m) && !(m === 'fogsun' && gone.includes('fog')) && !(m === 'smokemore' && gone.includes('smoke')) && !(m === 'watersun' && gone.includes('water')));
 // initial.pak's sky edits depend on what boot.pak holds (lod_patch.js reads its directory when it builds), so after
 // boot.pak changed the parts that are in initial.pak are built again
 const fileStamp = (file) => { try { const s = fs.statSync(file); return s.size + ':' + s.mtimeMs; } catch (e) { return ''; } };
@@ -776,6 +794,19 @@ async function adoptPaks(g, env, now, files)
 
 // ---- one engine at a time, and a look before the first write
 
+// whether process pid runs the same program as this engine (its image name, from tasklist); when that cannot be told,
+// it counts as ours, so a lock is never taken from a live engine on a guess
+function lockHolderLooksLikeUs(pid)
+{
+    try
+    {
+        const out = execFileSync(path.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', 'tasklist.exe'), ['/FI', 'PID eq ' + pid, '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true, timeout: 20000 });
+        const m = /^"([^"]+)"/m.exec(out);
+        return !m || m[1].toLowerCase() === path.basename(process.execPath).toLowerCase();
+    }
+    catch (e) { return true; }
+}
+const fileTime = (file) => { try { return fs.statSync(file).mtimeMs; } catch (e) { return Date.now(); } };
 // a lock file in the state folder: a second Apply or Restore on the same game (a second window, or one started again
 // after the first was killed) stops here instead of writing next to the first; a lock left by a process that is gone
 // is taken over
@@ -792,6 +823,9 @@ function lockState(state)
             try { pid = Number(fs.readFileSync(file, 'utf8').trim()); } catch (x) { /* an empty lock: taken over */ }
             let alive = false;
             if (pid && pid !== process.pid) { try { process.kill(pid, 0); alive = true; } catch (x) { alive = x.code === 'EPERM'; } }
+            // the number may since belong to another program (Windows hands process ids out again): the lock holds only
+            // while that process is a Node like this one and the lock is younger than any Apply takes (review 3, N8)
+            if (alive) alive = lockHolderLooksLikeUs(pid) && Date.now() - fileTime(file) < 6 * 3600 * 1000;
             if (alive) throw new EngineError('busy', 'Another Apply or Restore is running on this game (process ' + pid + '). Wait for it to finish.');
             try { fs.unlinkSync(file); } catch (x) { /* the next try says why */ }
         }
@@ -816,9 +850,10 @@ function preflight(g, needDll)
     };
     probe(g.paks);
     if (g.bin) probe(g.bin);
-    for (const name of ['shader', 'shared', 'initial', 'boot', 'gfx'])
+    // the five paks, and the level paks Map days writes in place (review 3, N8: they had no check before the first write)
+    const levels = Object.values(require(path.join(config.tools, 'level_states.js')).ROWS).flatMap((r) => Object.keys(r.levels)).map((l) => path.join(g.paks, l + '.pak'));
+    for (const file of ['shader', 'shared', 'initial', 'boot', 'gfx'].map((name) => g[name]).concat(levels))
     {
-        const file = g[name];
         if (!fs.existsSync(file)) continue;
         let readOnly = false;
         try { readOnly = !(fs.statSync(file).mode & 0o200); } catch (e) { /* the open below says why */ }
@@ -870,7 +905,10 @@ async function apply(g, state, sel, adopt, leave)
     const notes = lastNotes(state), last = notes.selection || {};
 
     // the files another mod changed that this selection writes: one question for all of them, before anything is written
-    const shaderSame = now.shader.state === 'ours' && sameSet(now.shader.modules, shader) && sameCode(notes, 'shader');
+    // a module this game version cannot take was left out of the build in the game: the selection without it is what
+    // that build holds, not a reason to build again on every Apply (review 3, N8)
+    const shaderSame = now.shader.state === 'ours' && (sameSet(now.shader.modules, shader) || sameSet(now.shader.modules, buildable(shader, notes.gone || []))) && sameCode(notes, 'shader');
+    let goneNow = shaderSame ? notes.gone || [] : [];
     const changed = [];
     if (shader.length && !shaderSame && shaderNeedsAdopt(g, state, now)) changed.push('shader.pak');
     if (sel.scenery && now.scenery === 'changed') changed.push('shared.pak');
@@ -895,8 +933,8 @@ async function apply(g, state, sel, adopt, leave)
     {
         keepShaderOriginal(g, state, now, adopt);
         const gone = ownDump ? [] : await prepare(state, shader);
-        // the sun shafts are a build of the fog, the wider smoke glow one of the smoke glow: without those they go too
-        const build = shader.filter((m) => !gone.includes(m) && !(m === 'fogsun' && gone.includes('fog')) && !(m === 'smokemore' && gone.includes('smoke')) && !(m === 'watersun' && gone.includes('water')));
+        goneNow = gone;
+        const build = buildable(shader, gone);
         if (build.length)
         {
             step('Building shader.pak with ' + build.length + ' modules (about a minute)');
@@ -1074,8 +1112,10 @@ async function apply(g, state, sel, adopt, leave)
     if (mapsLeft) warn('The level files of ' + mapWords(mapsLeft) + ' were changed by something else: left as they are, so the map days were left out there.');
 
     await leaveNote(g, state);
+    // the record of this Apply before the files count as settled: a failure writing it still says files were changed
+    // (review 3, N8: it said nothing was)
+    writeJson(path.join(state, 'nextgen.json'), Object.assign({ selection: sel, parts: PARTS, date: stamp() }, goneNow.length ? { gone: goneNow } : {}));
     g.touched = false;
-    writeJson(path.join(state, 'nextgen.json'), { selection: sel, parts: PARTS, date: stamp() });
     emit(warned ? finished('Installed') : { type: 'done', warnings: 0, text: 'Installed. Start the game to see it.' });
 }
 
@@ -1104,7 +1144,9 @@ async function restore(g, state, adopt, leave)
     removeDll(g);
     if (now.scenery === 'nature' || now.scenery === 'all') { step('Putting the original shared.pak back (2 GB)'); await must('lod_patch.js', ['restore'], env); }
     else if (now.scenery === 'changed') warn('shared.pak is not this installer\'s build: left as it is.');
-    // boot.pak before initial.pak: the sky levels initial.pak holds follow the night sky in boot.pak
+    // boot.pak before initial.pak: the sky levels initial.pak holds follow the night sky in boot.pak. The skies first:
+    // every boot.pak step rebuilds with the parts still in, and the skies' own files may not be beside the program
+    if (now.skies.state === 'ours') { step('Putting the original skies back (boot.pak)'); await must('lut_grade.js', ['skies-restore'], env); }
     if (now.grade.state === 'ours') { step('Putting the game\'s own colour grading back (boot.pak)'); await must('lut_grade.js', ['restore'], env); }
     else if (now.grade.state === 'changed') warn(BOOT_CHANGED + ': left as it is.');
     if (now.particles.state === 'ours') { step('Putting the game\'s own particle textures back (boot.pak)'); await must('lut_grade.js', ['particles-restore'], env); }
@@ -1114,7 +1156,6 @@ async function restore(g, state, adopt, leave)
         else { step('Putting the game\'s own night sky back (boot.pak)'); await must('lut_grade.js', ['sky-restore'], env); }
     }
     if (now.cubes.state === 'ours') { step('Putting the original reflection cubes back (boot.pak)'); await must('lut_grade.js', ['cubes-restore'], env); }
-    if (now.skies.state === 'ours') { step('Putting the original skies back (boot.pak)'); await must('lut_grade.js', ['skies-restore'], env); }
     // the level files before initial.pak: days of a region's own sit in initial.pak, and no level file may name them
     // once they are gone
     if (now.maps.state === 'ours') { step('Putting the maps\' own days back (the level files)'); await must('level_states.js', ['restore'], env); }
@@ -1126,8 +1167,8 @@ async function restore(g, state, adopt, leave)
     if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }
     else if (now.logos.state === 'changed') warn(GFX_CHANGED + ': left as it is.');
     await leaveNote(g, state);
-    g.touched = false;
     writeJson(path.join(state, 'nextgen.json'), { selection: null, date: stamp() });
+    g.touched = false;
     emit(finished('The game\'s own files are back'));
 }
 

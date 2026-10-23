@@ -146,7 +146,8 @@ Check 'load list: the tool on a made-up list' ([string](& $node $listTest $level
 $introTest = Join-Path $env:TEMP 'ngen_gfx_intro_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'gfx_intro_test.js') -Destination $introTest -Force
 Check 'intro: the edits on a made-up bundle' ([string](& $node $introTest $levelTools | Select-Object -Last 1)) 'all passed'
-Check 'every part: boot.pak holds the grade (its LUTs and the emptied lens dirt), the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 235'
+# (a sky texture at the stock texture's size goes in with the game's own .pct_header, byte for byte: 33 of the 47)
+Check 'every part: boot.pak holds the grade (its LUTs and the emptied lens dirt), the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 202'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'
 Check 'every part: the note in the game folder names the five paks' (Note) 'boot.pak gfx.pak initial.pak shader.pak shared.pak'
@@ -164,6 +165,22 @@ $r = Apply $everything
 Check 'intro off again: gfx.pak holds the logos alone' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'intro off again: the status says so' ([string](Status).logos.intro) ''
 Check 'Bin has hid.dll, its ini and the stock twins' ((Test-Path (Join-Path $bin 'hid.dll')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'True'
+
+'the skies in, the sky pack not beside the program (a new version unzipped into a new folder): another boot.pak part, then Restore'
+$noPack = Join-Path $work 'no_sky_pack'
+New-Item -ItemType Directory -Force -Path $noPack | Out-Null
+$env:SR_SKIES_DIR = $noPack
+$halfGrade = [ordered]@{}; foreach ($k in $everything.Keys) { $halfGrade[$k] = $everything[$k] }; $halfGrade['grade'] = '0.5'
+$r = Apply $halfGrade
+Check 'no sky pack: the grade changes, done' (Last $r) 'done'
+Check 'no sky pack: the skies stay in' ([string](Status).skies.state) 'ours'
+Check 'no sky pack: boot.pak holds the same entries changed' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 202'
+$r = Engine @('restore')
+Check 'no sky pack: Restore goes through' (Last $r) 'done'
+Check 'no sky pack: boot.pak is the original byte for byte' (Hash $boot) (Hash (Join-Path $originals 'boot.pak.orig'))
+Remove-Item Env:\SR_SKIES_DIR
+$r = Apply $everything
+Check 'the sky pack back: every part in again' ('{0} {1}' -f (Last $r), [string](Status).skies.state) 'done ours'
 
 'the same selection again'
 $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -268,10 +285,18 @@ Check 'status: no part is out of date' (@((Status).outdated).Count) 0
 $same = [ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; slopeBias = '1' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5' }
 $stateDir = (Get-ChildItem -LiteralPath (Join-Path $env:NGEN_STATE_ROOT 'games') -Directory | Select-Object -First 1).FullName
 $lock = Join-Path $stateDir 'engine.lock'
-Set-Content -LiteralPath $lock -Value $PID -Encoding ASCII   # this PowerShell stands in for an engine at work
+$standIn = Start-Process -FilePath $node -ArgumentList '-e', 'setTimeout(() => {}, 600000)' -WindowStyle Hidden -PassThru   # a Node at work stands in for an engine
+try {
+  Set-Content -LiteralPath $lock -Value $standIn.Id -Encoding ASCII
+  $r = Apply $same
+  $e = $r[$r.Count - 1]
+  Check 'another engine holds the lock: Apply stops' ('{0} {1} {2}' -f $e.type, $e.code, $e.touched) 'error busy False'
+}
+finally { Stop-Process -Id $standIn.Id -ErrorAction SilentlyContinue }
+# the lock's number now belongs to another program (this PowerShell): Windows hands process numbers out again (review 3, N8)
+Set-Content -LiteralPath $lock -Value $PID -Encoding ASCII
 $r = Apply $same
-$e = $r[$r.Count - 1]
-Check 'another engine holds the lock: Apply stops' ('{0} {1} {2}' -f $e.type, $e.code, $e.touched) 'error busy False'
+Check 'a lock whose number another program has now: taken over, Apply runs and leaves none' ('{0} {1}' -f (Last $r), (Test-Path -LiteralPath $lock)) 'done False'
 Set-Content -LiteralPath $lock -Value '999999' -Encoding ASCII   # a lock left by a process that is gone
 $r = Apply $same
 Check 'a lock left behind: taken over, Apply runs and leaves none' ('{0} {1}' -f (Last $r), (Test-Path -LiteralPath $lock)) 'done False'

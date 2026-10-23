@@ -39,7 +39,7 @@
 //        restore takes its own part out, the others staying as they are)
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
-const { readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt } = require('./lod_patch.js');
+const { readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, keepCopy, writeJson, readJson, built, withPending, finishAdopt } = require('./lod_patch.js');
 
 const BOOT = process.env.SR_BOOT_PAK || 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/boot.pak';
 const STATE = process.env.SR_STATE_DIR || path.join(__dirname, '..', 'pak_backup');
@@ -153,7 +153,8 @@ function plan(file, parts)
         if (strength) for (const name of TARGETS)
         {
             const ent = z.entries.find((e) => ENTRY(name).test(e.name));
-            if (!ent) throw new Error('boot.pak has no LUT ' + name);
+            // a LUT this game version lacks is left out with a warning instead of stopping every Apply (review 3, N5)
+            if (!ent) { console.log('warning: boot.pak has no LUT ' + name + ' (renamed or gone in a game update): Photo grade leaves it out'); continue; }
             if (ent.method !== 0 || ent.flags !== 0) throw new Error(name + ': expected a stored entry');
             const { head, data } = readEntry(fd, ent);
             checkLut(data, name);
@@ -180,7 +181,12 @@ function plan(file, parts)
                 }
             }
         }
-        for (const [type, files] of [['particle', parts.particles ? particleFiles() : null], ['sky', parts.sky ? skyFiles() : null], ['cube', parts.cubes ? cubeFiles() : null], ['wsky', parts.skies ? skiesFiles() : null]])
+        // the skies are a download of their own: without the sky pack beside the program, a build that keeps them (any
+        // other part put in or taken out, Restore) takes them from the boot.pak in the game, this tool's build with them
+        // in; it stopped there before, half way through a Restore (review 3, N1)
+        const kept = parts.skies && !skiesAtHand() ? keptSkies(z, fd, jobs) : null;
+        if (kept) grow += kept.grow;
+        for (const [type, files] of [['particle', parts.particles ? particleFiles() : null], ['sky', parts.sky ? skyFiles() : null], ['cube', parts.cubes ? cubeFiles() : null], ['wsky', parts.skies && !kept ? skiesFiles() : null]])
         {
             if (!files) continue;
             let found = 0;
@@ -195,12 +201,43 @@ function plan(file, parts)
                 grow += next.length - ent.csize;
                 found++;
             }
-            if (found !== files.size) throw new Error('boot.pak has ' + found + ' of the ' + (type === 'sky' ? 'night sky' : type === 'cube' ? 'reflection cube' : type === 'wsky' ? 'winter sky' : 'particle') + ' set\'s ' + files.size + ' textures');
+            if (found !== files.size) console.log('warning: boot.pak has ' + found + ' of the ' + (type === 'sky' ? 'night sky' : type === 'cube' ? 'reflection cube' : type === 'wsky' ? 'winter sky' : 'particle') + ' set\'s ' + files.size + ' textures (the others renamed or gone in a game update): those are left out');
         }
         const end = z.cdOff + grow + z.cd.length + z.eocd.length;
-        return { z, jobs, strength, particles: !!parts.particles, sky: !!parts.sky, cubes: !!parts.cubes, skies: !!parts.skies, size: grow ? (z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end) : z.size };
+        return { z, jobs, strength, particles: !!parts.particles, sky: !!parts.sky, cubes: !!parts.cubes, skies: !!parts.skies, skiesKept: !!kept, size: grow ? (z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end) : z.size };
     }
     finally { fs.closeSync(fd); }
+}
+// the sky pack is beside the program (its folder holds textures)
+function skiesAtHand() { try { return fs.readdirSync(SKIES).some((f) => /\.pct$/i.test(f)); } catch (e) { return false; } }
+// the skies as the boot.pak in the game holds them, as jobs over the original's entries (z, fd: the original): every
+// entry that differs from the original there and is none of the other parts' (the LUTs, the lens dirt, the particle,
+// night sky and cube sets' names, whose files ship with the program), so the build in the game must be this tool's,
+// with the skies in
+function keptSkies(z, fd, jobs)
+{
+    if (state() !== 'ours' || !record().skies) throw new Error('no winter sky set at ' + SKIES + ', and boot.pak does not hold the skies to keep');
+    const others = new Set(['env_camera_bokeh.pct', ...particleFiles().keys(), ...skyFiles().keys(), ...cubeFiles().keys()]);
+    const bfd = fs.openSync(BOOT, 'r');
+    try
+    {
+        const b = readZip(bfd), byName = new Map(b.entries.map((e) => [e.name, e]));
+        let grow = 0, count = 0;
+        for (const ent of z.entries)
+        {
+            const name = baseName(ent.name), now = byName.get(ent.name);
+            if (jobs.has(ent) || others.has(name) || TARGETS.some((t) => ENTRY(t).test(ent.name)) || !now) continue;
+            if (now.crc === ent.crc && now.usize === ent.usize) continue;
+            if (ent.flags !== 0 || now.flags !== 0) throw new Error(ent.name + ': unexpected entry flags');
+            const { head } = readEntry(fd, ent), data = readEntry(bfd, now).data, next = now.method === 8 ? zlib.inflateRawSync(data) : data;
+            jobs.set(ent, { head, crc: zlib.crc32(next) >>> 0, usize: next.length, length: next.length, comp: next, next, method: 0, type: 'wsky', group: 'wsky', notes: [name] });
+            grow += next.length - ent.csize;
+            count++;
+        }
+        if (!count) throw new Error('no winter sky set at ' + SKIES + ', and none found in boot.pak to keep');
+        return { grow, count };
+    }
+    finally { fs.closeSync(bfd); }
 }
 // the written boot.pak read back: same entries in the same order, every planned entry exactly as planned (stored where
 // planned so), every other record unchanged (every 50th entry read and CRC checked)
@@ -308,10 +345,7 @@ function buildBoot(parts, label, adopted = false)
     }
     if (!fs.existsSync(ORIG))
     {
-        const keep = ORIG + '.tmp';
-        fs.copyFileSync(BOOT, keep);
-        if (fileHash(keep) !== fileHash(BOOT)) { fs.unlinkSync(keep); throw new Error('the boot.pak copy differs'); }
-        swapIn(keep, ORIG);
+        keepCopy(BOOT, ORIG, 'the original boot.pak');
     }
     const p = plan(ORIG, parts);
     let note;
@@ -324,7 +358,7 @@ function buildBoot(parts, label, adopted = false)
         if (p.particles) Object.assign(note, { particles: true, particleSet: particleSetHash() });
         if (p.sky) Object.assign(note, { sky: true, skySet: skySetHash() });
         if (p.cubes) Object.assign(note, { cubes: true, cubeSet: cubeSetHash() });
-        if (p.skies) Object.assign(note, { skies: true, skiesSet: skiesSetHash() });
+        if (p.skies) Object.assign(note, { skies: true, skiesSet: p.skiesKept ? record().skiesSet : skiesSetHash() });
         writeJson(NOTE, withPending(readNote(), note));
         swapIn(tmp, BOOT);
         const has = [];
@@ -333,7 +367,7 @@ function buildBoot(parts, label, adopted = false)
         if (p.particles) has.push(count('particle') + ' particle files at twice the size');
         if (p.sky) has.push('the night sky (' + count('sky') + ' files: the star map and the photo skies)');
         if (p.cubes) has.push('the reflection cubes (' + count('cube') + ' files)');
-        if (p.skies) has.push('the winter skies (' + count('wsky') + ' files)');
+        if (p.skies) has.push('the winter skies (' + count('wsky') + ' files' + (p.skiesKept ? ', kept from the boot.pak in the game: the sky pack is not beside the program' : '') + ')');
         console.log(label + ': boot.pak now has ' + has.join(' and ') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
     }
     finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }

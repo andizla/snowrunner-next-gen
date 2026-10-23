@@ -7,7 +7,9 @@ Next Gen Graphics (SnowRunner Next Gen before October 2026): graphics modules fo
 3. Pick the modules, then Apply. Restore puts the files back as they were before Next Gen Graphics changed them.
 
 The first Apply reads your game's own shaders and prepares the shader modules from them (a minute or two). The
-originals of every file the program changes are kept in %LOCALAPPDATA%\SnowRunnerNextGen until you restore them.
+originals of the game's paks the program changes are kept in %LOCALAPPDATA%\SnowRunnerNextGen until you restore them.
+Map days changes a few names in the level files in place, and Restore writes the game's own names back. Another mod's
+hid.dll is kept next to the game as hid_chain.dll and given back on Restore.
 
 The textures in this folder: the particle textures, the logos and two photo night skies are made from the game's
 own, the star map is NASA's, and the skies and reflection cubes are made from CC0 photographs by Poly Haven. THIRD_PARTY_NOTICES.md has the details.

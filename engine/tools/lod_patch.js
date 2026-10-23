@@ -624,14 +624,44 @@ function status()
 function backup()
 {
     const tmp = ORIG + '.tmp';
+    room(ORIG, fs.statSync(PAK).size, 'the original shared.pak');
     console.log('copying shared.pak (2.1 GB) to ' + ORIG);
-    fs.copyFileSync(PAK, tmp);
-    const sum = fileHash(PAK);
-    if (fileHash(tmp) !== sum) { fs.unlinkSync(tmp); throw new Error('the copy differs from shared.pak'); }
-    flush(tmp);
-    if (fs.existsSync(ORIG)) { const kept = keptName(ORIG); renameOver(ORIG, kept); console.log('the earlier original is kept as ' + path.basename(kept)); }
-    renameOver(tmp, ORIG);
+    let sum;
+    try
+    {
+        fs.copyFileSync(PAK, tmp);
+        sum = fileHash(PAK);
+        if (fileHash(tmp) !== sum) throw new Error('the copy differs from shared.pak');
+        flush(tmp);
+        if (fs.existsSync(ORIG)) { const kept = keptName(ORIG); renameOver(ORIG, kept); console.log('the earlier original is kept as ' + path.basename(kept)); }
+        renameOver(tmp, ORIG);
+    }
+    finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
     writeJson(NOTE, { origSha256: sum, origCdSha256: cdHash(ORIG), origDate: stamp() });
+}
+// room on the drive of file's folder for bytes more, with 256 MB to spare: a clear stop before an original is copied
+// instead of a full disk half way (review 3, N7). Without a way to ask (an older Node) it goes ahead
+function room(file, bytes, what)
+{
+    if (typeof fs.statfsSync !== 'function') return;
+    let free;
+    try { const s = fs.statfsSync(path.dirname(path.resolve(file))); free = Number(s.bavail) * Number(s.bsize); }
+    catch (e) { return; }
+    if (free < bytes + 256 * 1024 * 1024) throw new Error('not enough room to keep ' + what + ': ' + Math.ceil(bytes / 1048576) + ' MB needed, ' + Math.floor(free / 1048576) + ' MB free on ' + path.parse(path.resolve(file)).root);
+}
+// src kept as dst (an original): a copy beside it checked by its hash, then renamed into place; the copy is taken away
+// when anything fails, so no .tmp is left behind (review 3, N7)
+function keepCopy(src, dst, what)
+{
+    const keep = dst + '.tmp';
+    room(dst, fs.statSync(src).size, what);
+    try
+    {
+        fs.copyFileSync(src, keep);
+        if (fileHash(keep) !== fileHash(src)) throw new Error('the ' + path.basename(src) + ' copy differs');
+        swapIn(keep, dst);
+    }
+    finally { if (fs.existsSync(keep)) fs.unlinkSync(keep); }
 }
 
 // ---- initial.pak: five parts, built together from the original. The grass: every grass brand's FadeDistances times its
@@ -883,10 +913,7 @@ function buildInitial(parts, label)
     }
     if (!fs.existsSync(INITIAL_ORIG))
     {
-        const keep = INITIAL_ORIG + '.tmp';
-        fs.copyFileSync(INITIAL, keep);
-        if (fileHash(keep) !== fileHash(INITIAL)) { fs.unlinkSync(keep); throw new Error('the initial.pak copy differs'); }
-        swapIn(keep, INITIAL_ORIG);
+        keepCopy(INITIAL, INITIAL_ORIG, 'the original initial.pak');
     }
     const p = planInitial(INITIAL_ORIG, parts);
     let next;
@@ -1212,4 +1239,4 @@ if (require.main === module)
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
-module.exports = { INITIAL, classify, raise, patchMesh, meshType, plan, planInitial, verifyInitial, initialState, setDays, readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt, FLOORS, SETS };
+module.exports = { INITIAL, classify, raise, patchMesh, meshType, plan, planInitial, verifyInitial, initialState, setDays, readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, keepCopy, writeJson, readJson, built, withPending, finishAdopt, FLOORS, SETS };

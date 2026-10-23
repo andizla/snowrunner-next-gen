@@ -21,7 +21,7 @@
 //        install, restore and adopt with the game closed
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
-const { readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, writeJson, readJson, built, withPending, finishAdopt } = require('./lod_patch.js');
+const { readZip, readEntry, writePak, cdHash, fileHash, keptName, flush, renameOver, swapIn, keepCopy, writeJson, readJson, built, withPending, finishAdopt } = require('./lod_patch.js');
 const { patchIntro } = require('./gfx_intro.js');
 
 const GFX = process.env.SR_GFX_PAK || 'C:/Program Files (x86)/Steam/steamapps/common/Snowrunner/preload/paks/client/gfx.pak';
@@ -103,10 +103,12 @@ function plan(file, intro = false)
             jobs.set(ent, { head, crc: zlib.crc32(next) >>> 0, usize: next.length, length: next.length, comp: next, next, method: 0, type: sheet ? 'sheet' : 'picture', group: 'logo', notes: [name] });
             grow += next.length - ent.csize;
         }
-        for (const name of files.keys()) if (!seen.has(name)) throw new Error('gfx.pak has no ' + name);
+        // a picture this game version lacks (renamed or gone in an update) is left out with a warning instead of stopping every
+        // Apply (review 3, N5)
+        const missing = [...files.keys()].filter((name) => !seen.has(name));
         if (intro && !introIn && !left.includes('intro')) left.push('intro');
         const end = z.cdOff + grow + z.cd.length + z.eocd.length;
-        return { z, jobs, left, intro: introIn, size: z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end };
+        return { z, jobs, left, missing, intro: introIn, size: z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end };
     }
     finally { fs.closeSync(fd); }
 }
@@ -162,10 +164,7 @@ function install(adopted = false, intro = false)
     if (st === 'changed') { console.log('logos: gfx.pak is neither the original nor this tool\'s build (another tool or a game update): left alone'); return; }
     if (!fs.existsSync(ORIG))
     {
-        const keep = ORIG + '.tmp';
-        fs.copyFileSync(GFX, keep);
-        if (fileHash(keep) !== fileHash(GFX)) { fs.unlinkSync(keep); throw new Error('the gfx.pak copy differs'); }
-        swapIn(keep, ORIG);
+        keepCopy(GFX, ORIG, 'the original gfx.pak');
     }
     const p = plan(ORIG, intro), tmp = GFX + '.tmp';
     let next;
@@ -182,6 +181,7 @@ function install(adopted = false, intro = false)
             (sheetsLeft.length ? ' (left as they are, another layout: ' + sheetsLeft.join(', ') + ')' : '') + ' (' + p.size + ' bytes, read back ok, ' + sampled + ' untouched entries sampled)');
         if (sheetsLeft.length) console.log('warning: the Next Gen logo is not in ' + sheetsLeft.join(' and ') + ': this game version lays ' + (sheetsLeft.length > 1 ? 'these sheets' : 'this sheet') + ' out another way');
         if (p.left.includes('intro')) console.log('warning: the intro stays: this game version\'s start-up movie is not the one the edits were made for');
+        if (p.missing.length) console.log('warning: gfx.pak has no ' + p.missing.join(', ') + ' (renamed or gone in a game update): the Next Gen logo is left out there');
     }
     finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
     writeJson(NOTE, next);
