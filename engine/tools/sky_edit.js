@@ -4,8 +4,8 @@
 // (an image model repaints a marked circle), and later put back. Two kinds of view: around a direction (the spot where
 // a photograph's sun was taken out), and straight up (the zenith, where the game closes its dome with a fan of
 // triangles and only one plain colour holds without wedges, so the sky around it must come to that colour).
-// usage: node sky_edit.js crops <dome.pct> <out folder> <name> [--sun <panorama.hdr> [--yaw deg]] [--zenith]
-//        [--sun-circle deg] [--zenith-circle deg]
+// usage: node sky_edit.js crops <dome.pct> <out folder> <name> [--sun <panorama.hdr> [--yaw deg] | --bright] [--zenith]
+//        [--sun-circle deg] [--zenith-circle deg]   (--bright: the dome's own brightest spot, where no panorama is on record)
 //        writes <name>_<view>.png (the view), <name>_<view>_marked.png (the same with the circle to repaint drawn
 //        in red) and <name>.json (the views' geometry, for putting the edits back)
 //        node sky_edit.js apply <folder> <name> [--out <dome.pct>]
@@ -187,8 +187,14 @@ function samplePic(img, x, y, out)
     for (let k = 0; k < 3; k++)
         out[k] = (s[(y0 * img.w + x0) * 3 + k] * (1 - fx) + s[(y0 * img.w + x1) * 3 + k] * fx) * (1 - fy) + (s[(y1 * img.w + x0) * 3 + k] * (1 - fx) + s[(y1 * img.w + x1) * 3 + k] * fx) * fy;
 }
-// degrees past a view's circle at view pixel (i, j)
-const pastCircle = (v, t, i, j) => Math.atan(Math.hypot(((i + 0.5) / SIZE * 2 - 1) * t, (1 - (j + 0.5) / SIZE * 2) * t)) * 180 / Math.PI - v.circle;
+// degrees past a view's circle at view pixel (i, j); below the horizon (the view of a low sun reaches there, where the
+// dome has nothing but its lowest row stretched) a pixel answers NaN, so the colour match leaves it out
+function pastCircle(v, t, i, j)
+{
+    const a = ((i + 0.5) / SIZE * 2 - 1) * t, b = (1 - (j + 0.5) / SIZE * 2) * t;
+    if (v.c[1] + a * v.e1[1] + b * v.e2[1] < 0.01) return NaN;
+    return Math.atan(Math.hypot(a, b)) * 180 / Math.PI - v.circle;
+}
 function apply(dir, name, outFile)
 {
     const { encodeRect, halveRect, TAIL } = require('./make_cube.js');
@@ -213,7 +219,7 @@ function apply(dir, name, outFile)
         {
             const deg = pastCircle(v, t, i, j);
             if (Math.abs(deg) < 1.5) { samplePic(img, i, j, px); if (px[0] > 150 && px[0] > 2 * px[1] && px[0] > 2 * px[2]) red++; }
-            if (deg < BAND[0] || deg > BAND[1]) continue;
+            if (!(deg >= BAND[0] && deg <= BAND[1])) continue;   // NaN (below the horizon) too
             samplePic(img, i, j, px);
             for (let k = 0; k < 3; k++) { sum[k] += before[(j * SIZE + i) * 3 + k]; sum[3 + k] += px[k]; }
             n++;
@@ -222,7 +228,7 @@ function apply(dir, name, outFile)
         for (let j = 0; j < SIZE; j++) for (let i = 0; i < SIZE; i++)
         {
             const deg = pastCircle(v, t, i, j);
-            if (deg < BAND[0] || deg > BAND[1]) continue;
+            if (!(deg >= BAND[0] && deg <= BAND[1])) continue;   // NaN (below the horizon) too
             samplePic(img, i, j, px);
             for (let k = 0; k < 3; k++) dev += Math.abs(before[(j * SIZE + i) * 3 + k] - px[k] * gain[k]) / 3;
         }
@@ -306,6 +312,23 @@ function apply(dir, name, outFile)
     console.log('wrote ' + outFile);
 }
 
+// the brightest spot of the dome itself, for a texture with no panorama on record (a moon or a sun left in a hand-built
+// sky): the highest luminance over 4 x 4 texel cells, smoothed over 5 x 5 cells, above the lowest fifth (the horizon)
+function brightOf(d, yaw)
+{
+    const cw = d.w >> 2, ch = d.h >> 2, lum = new Float32Array(cw * ch);
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) { const o = ((y * 4) * d.w + x * 4) * 4; lum[y * cw + x] = 0.2126 * d.rgba[o] + 0.7152 * d.rgba[o + 1] + 0.0722 * d.rgba[o + 2]; }
+    let best = -1, bx = 0, by = 0;
+    for (let y = 2; y < Math.floor(ch * 0.8); y++) for (let x = 0; x < cw; x++)
+    {
+        let s = 0;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) s += lum[(y + dy) * cw + ((x + dx + cw) % cw)];
+        if (s > best) { best = s; bx = x; by = y; }
+    }
+    const th = (by * 4 + 2) / d.h * Math.PI / 2, ph = ((bx * 4 + 2) / d.w - yaw / 360) * 2 * Math.PI;
+    return [Math.sin(th) * Math.sin(ph), Math.cos(th), Math.sin(th) * Math.cos(ph)];
+}
+
 if (require.main === module)
 {
     const args = process.argv.slice(2), opt = (n) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : null; };
@@ -320,6 +343,7 @@ if (require.main === module)
             const s = sunOf(opt('sun')), a = -yaw * Math.PI / 180;
             views.push({ view: 'sun', center: [Math.cos(a) * s[0] + Math.sin(a) * s[2], s[1], -Math.sin(a) * s[0] + Math.cos(a) * s[2]] });
         }
+        else if (args.includes('--bright')) views.push({ view: 'sun', center: brightOf(dome, yaw) });
         if (args.includes('--zenith')) views.push({ view: 'zenith', center: [0, 1, 0] });
         for (const v of views)
         {

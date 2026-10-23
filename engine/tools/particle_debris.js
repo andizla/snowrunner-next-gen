@@ -19,8 +19,14 @@
 //              three times as long instead of twice, and the snow drops they throw (snow__subparticles,
 //              snow_frag__subparticles) fall at half the gravity with 0.6 of the air resistance and live 15 seconds:
 //              light snow hangs in the air, as it does.
-// Nothing else changes: air resistance, gravity, wind, size, scale and the textures stay the game's. DROPS is the part's
-// one number, 4 by default (an installer may offer 8). Every attribute written is one the game's own particle files use.
+//   water      the spray a wheel throws in water (water_splash_small, water_flow) and its drops (water_splash__subparticles,
+//              water_droplet__subparticles) fly further and are bigger: their air resistance x0.4 (the game's spray
+//              stops within half a metre, 3.0), the spray's sprites 1.5 times the size and living three times as long
+//              instead of twice, the drops 1.5 times the scale. The wheel's own throw is the game's: with less air to
+//              slow them the same throw carries about 2.5 times as far.
+// Nothing else changes: gravity, wind and the textures stay the game's, and air resistance, size and scale everywhere
+// but in the snow drops and the water spray. DROPS is the part's one number, 4 by default (an installer may offer 8).
+// Every attribute written is one the game's own particle files use.
 // lod_patch.js builds initial.pak with this edit next to the grass, the fill light, the stars and the weather
 // (debris-install / debris-restore).
 // usage: node particle_debris.js list [drops] [initial.pak]   what would change (default: 4 over pak_backup\initial.pak.orig)
@@ -35,7 +41,10 @@ const SPLASH = /^(mud_splash_(large|small)|snow_splash_(large|small)|water_burst
 const PUFF = /^(exhaust_(small|large|fog)|dust_small(_autumn|_needles|_snow|_summer)?|honk_dust|steam)$/i;
 const SNOW_SPLASH = /^(snow_splash_(large|small)|dirt_burst_medium(_skid)?_snow)$/i;   // splashes that get the snow life
 const SNOW_DROPS = /^snow(_frag)?__subparticles$/i;
-const FAMILIES = ['settle', 'float', 'splash', 'puff', 'snowdrops'];
+const WATER_SPRAY = /^(water_splash_small|water_flow)$/i;            // splashes that get the water spray's rule too
+const WATER_DROPS = /^water_(splash|droplet)__subparticles$/i;
+const SPRAY_AIR = 0.4, SPRAY_SIZE = 1.5, SPRAY_LIFE = 3;
+const FAMILIES = ['settle', 'float', 'splash', 'puff', 'snowdrops', 'waterdrops'];
 // "30", "2.4", "0.5": no trailing zeros
 const fmt = (v) => { const s = v.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''); return s === '' || s === '-' ? '0' : s; };
 
@@ -55,6 +64,7 @@ function family(base)
     if (SPLASH.test(base)) return 'splash';
     if (PUFF.test(base)) return 'puff';
     if (SNOW_DROPS.test(base)) return 'snowdrops';
+    if (WATER_DROPS.test(base)) return 'waterdrops';
     return null;
 }
 // a vector attribute "(0; -2.5; 0)" times f
@@ -145,8 +155,14 @@ function debrisEdit(text, entryName, drops)
     {
         tag('Subparticles', (t) => setAttr(t, 'Density', (v) => (v === null ? null : fmt(Math.min(Math.max(Number(v) * drops, 12 * drops), 64 * drops))), notes, 'drops'));
         tag('ExtraLifeTime', (t) => setAttr(t, 'Value', times(2), notes, 'drops life'));
-        tag('LifeTime', (t) => setAttr(t, 'Value', times(SNOW_SPLASH.test(m[1]) ? 3 : 2), notes, 'life'));
+        const spray = WATER_SPRAY.test(m[1]);
+        tag('LifeTime', (t) => setAttr(t, 'Value', times(spray ? SPRAY_LIFE : SNOW_SPLASH.test(m[1]) ? 3 : 2), notes, 'life'));
         tag('CombineParticles', (t) => setAttr(setAttr(t, 'MudDecals', times(2, 1), notes, 'mud marks'), 'WetDecals', times(2, 1), notes, 'wet marks'));
+        if (spray)
+        {
+            tag('CombineParticles', (t) => setAttr(t, 'AirResistance', times(SPRAY_AIR), notes, 'air'));
+            tag('Size', (t) => setAttr(t, 'Function', vecTimes(SPRAY_SIZE), notes, 'size'));
+        }
     }
     else if (fam === 'puff')
     {
@@ -156,6 +172,11 @@ function debrisEdit(text, entryName, drops)
     {
         tag('CombineParticles', (t) => setAttr(setAttr(t, 'Gravity', vecTimes(0.5), notes, 'gravity'), 'AirResistance', times(0.6), notes, 'air'));
         if (!tag('LifeTime', (t) => setAttr(t, 'Value', () => '15', notes, 'life'))) { out = insertBeforeClose(out, '</CombineParticles>', '<LifeTime Value="15" />'); notes.push('life 15'); }
+    }
+    else if (fam === 'waterdrops')
+    {
+        tag('CombineParticles', (t) => setAttr(t, 'AirResistance', times(SPRAY_AIR), notes, 'air'));
+        tag('Scale', (t) => setAttr(t, 'Value', times(SPRAY_SIZE), notes, 'scale'));
     }
     if (out !== text) kinds.add(fam);
     return { out, notes, kinds };
@@ -182,7 +203,7 @@ if (require.main === module)
                 const r = debrisEdit(readEntry(fd, ent).data.toString('latin1'), ent.name, drops);
                 if (!r.kinds.size) continue;
                 for (const k of r.kinds) count[k] = (count[k] || 0) + 1;
-                console.log('  ' + [...r.kinds][0].padEnd(10) + PARTICLE_ENTRY.exec(ent.name)[1].padEnd(32) + r.notes.join('; '));
+                console.log('  ' + [...r.kinds][0].padEnd(11) + PARTICLE_ENTRY.exec(ent.name)[1].padEnd(32) + r.notes.join('; '));
             }
             console.log(file + ': ' + FAMILIES.map((f) => f + ' ' + (count[f] || 0)).join(', ') + ' files changed (' + drops + 'x drops)');
         }
