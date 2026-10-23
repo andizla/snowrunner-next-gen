@@ -69,7 +69,13 @@ $configs = @(
     @{ name = 'contact alone';  ini = @('GI=0', 'SSR=0');           args = @('contact') },
     @{ name = 'contact off';    ini = @('ContactOn=0');             args = @('contact', 'off') },
     @{ name = 'contact hw';     ini = @();                          args = @('contact', 'hw') },
-    @{ name = 'contact default'; ini = @('ContactDebug=1');         args = @() }
+    @{ name = 'contact default'; ini = @('ContactDebug=1');         args = @() },
+    # the NEXT GEN overlay's Graphics tab: the switches the ini turned on (GTAO only with a table that has the AO pass's
+    # stock shaders), and the shared import slot lock with a second mod's hook in front of the DLL's
+    @{ name = 'graphics';       ini = @();                          args = @('graphics', '6') },
+    @{ name = 'graphics twins'; ini = @();                          args = @('graphics', '7'); table = $true },
+    @{ name = 'graphics no gi ssr'; ini = @('GI=0', 'SSR=0');       args = @('graphics', '3') },
+    @{ name = 'graphics none';  ini = @('Factor=1', 'Feed=0');      args = @('graphics', '0') }
 )
 $dumps = Join-Path $out 'SnowRunnerShadows_dump_*'
 Set-Content -Path $report -Value '' -Encoding UTF8

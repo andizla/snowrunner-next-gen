@@ -947,6 +947,130 @@ static int RetableTest()
     return g_failures ? 1 : 0;
 }
 
+// the NEXT GEN overlay's Graphics tab: the DLL's export NgGraphicsGetApi as the overlay finds it (by the DLL's full
+// path), version 1 only; the switches the ini turned on (expected: how many), each named and tipped in ASCII, set and
+// read back both ways, the flip in the log; out-of-range indices answer empty; the status lines. Then, with the device
+// hook on (expected > 0), the import slot as a second Next Gen mod writes it: the shared slot lock exists, the
+// D3D11CreateDevice import points into the DLL, and a hook put in front of it by compare-exchange under that lock runs
+// and calls on to the DLL's (a 3:1 depth texture of the device made through both is scaled)
+struct NgGraphicsApi
+{
+    int version;
+    int count;
+    const char *(*name)(int);
+    const char *(*help)(int);
+    int (*get)(int);
+    void (*set)(int, int);
+    int (*statusCount)();
+    const char *(*status)(int);
+};
+typedef HRESULT(WINAPI *PFN_CreateDevice)(IDXGIAdapter *, D3D_DRIVER_TYPE, HMODULE, UINT, const D3D_FEATURE_LEVEL *, UINT, UINT, ID3D11Device **, D3D_FEATURE_LEVEL *, ID3D11DeviceContext **);
+static PFN_CreateDevice g_nextCreateDevice = nullptr;
+static int g_frontCalls = 0;
+static HRESULT WINAPI FrontCreateDevice(IDXGIAdapter *a, D3D_DRIVER_TYPE t, HMODULE s, UINT f, const D3D_FEATURE_LEVEL *l, UINT n, UINT sdk, ID3D11Device **d, D3D_FEATURE_LEVEL *got, ID3D11DeviceContext **c)
+{
+    g_frontCalls++;
+    return g_nextCreateDevice(a, t, s, f, l, n, sdk, d, got, c);
+}
+static void **ImportSlot(HMODULE module, const char *dll, const char *func)
+{
+    BYTE *base = (BYTE *)module;
+    const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)(base + ((const IMAGE_DOS_HEADER *)base)->e_lfanew);
+    const IMAGE_DATA_DIRECTORY &dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    for (const IMAGE_IMPORT_DESCRIPTOR *imp = (const IMAGE_IMPORT_DESCRIPTOR *)(base + dir.VirtualAddress); dir.VirtualAddress && imp->Name; imp++)
+    {
+        if (_stricmp((const char *)(base + imp->Name), dll) != 0) continue;
+        const IMAGE_THUNK_DATA *names = (const IMAGE_THUNK_DATA *)(base + (imp->OriginalFirstThunk ? imp->OriginalFirstThunk : imp->FirstThunk));
+        IMAGE_THUNK_DATA *slots = (IMAGE_THUNK_DATA *)(base + imp->FirstThunk);
+        for (; names->u1.AddressOfData; names++, slots++)
+            if (!IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal) && strcmp((const char *)((const IMAGE_IMPORT_BY_NAME *)(base + names->u1.AddressOfData))->Name, func) == 0)
+                return (void **)&slots->u1.Function;
+    }
+    return nullptr;
+}
+static bool Ascii(const char *s) { if (!s || !*s) return false; for (; *s; s++) if ((unsigned char)*s < 32 || (unsigned char)*s > 126) return false; return true; }
+static int GraphicsTest(int expected)
+{
+    const HMODULE dll = GetModuleHandleW((ExeDir() + L"hid.dll").c_str());
+    typedef const NgGraphicsApi *(*PFN_Get)(int);
+    const PFN_Get getApi = dll ? (PFN_Get)GetProcAddress(dll, "NgGraphicsGetApi") : nullptr;
+    Check(getApi != nullptr, "graphics tab: NgGraphicsGetApi exported by the DLL, found by its full path");
+    if (!getApi) { printf("SOME CHECKS FAILED\n"); return 1; }
+    const NgGraphicsApi *api = getApi(1);
+    Check(api && api->version == 1, "graphics tab: version 1 served");
+    Check(!getApi(0) && !getApi(2), "graphics tab: versions 0 and 2 answer nullptr");
+    if (!api) { printf("SOME CHECKS FAILED\n"); return 1; }
+    char line[200];
+    snprintf(line, sizeof line, "graphics tab: %d switches, %d expected", api->count, expected);
+    Check(api->count == expected, line);
+    bool named = true, flips = true;
+    for (int i = 0; i < api->count; i++)
+    {
+        named &= Ascii(api->name(i)) && Ascii(api->help(i));
+        const int was = api->get(i);
+        api->set(i, !was);
+        flips &= api->get(i) == !was;
+        api->set(i, was);
+        flips &= api->get(i) == was;
+        printf("     %s = %d: %s\n", api->name(i), was, api->help(i));
+    }
+    Check(named, "graphics tab: every switch has an ASCII name and tip");
+    Check(flips, "graphics tab: every switch set off and on reads back what was set");
+    Check(*api->name(-1) == 0 && *api->name(api->count) == 0 && *api->help(api->count) == 0 && api->get(api->count) == 0, "graphics tab: indices out of range answer empty and 0");
+    api->set(api->count, 1);   // must do nothing
+    const int lines = api->statusCount();
+    bool statusOk = lines >= 4, reshade = false;
+    for (int i = 0; i < lines; i++) { statusOk &= Ascii(api->status(i)); reshade |= strcmp(api->status(i), "ReShade: not loaded") == 0; printf("     status: %s\n", api->status(i)); }
+    Check(statusOk, "graphics tab: at least four ASCII status lines");
+    Check(reshade, "graphics tab: the status says ReShade is not loaded (this program has none)");
+    const std::string log = ReadDllLog();
+    snprintf(line, sizeof line, "menu: %d switches for the NEXT GEN overlay's Graphics tab", expected);
+    Check(log.find(line) != std::string::npos, "graphics tab: the log names the switches offered");
+    if (api->count) Check(log.find(std::string("menu: ") + api->name(0) + (api->get(0) ? " off" : " on")) != std::string::npos, "graphics tab: a flip from the menu is in the log");
+
+    // the import slot, as a second Next Gen mod writes it
+    if (expected > 0)
+    {
+        wchar_t name[64];
+        swprintf_s(name, L"Local\\NextGen.Slots.%lu", GetCurrentProcessId());
+        HANDLE lock = OpenMutexW(SYNCHRONIZE, FALSE, name);
+        Check(lock != nullptr, "slot lock: Local\\NextGen.Slots.<pid> made by the DLL and kept");
+        void **slot = ImportSlot(GetModuleHandleW(nullptr), "d3d11.dll", "D3D11CreateDevice");
+        Check(slot && InModule(*slot, dll), "slot lock: this program's D3D11CreateDevice import points into the DLL");
+        if (slot && lock && WaitForSingleObject(lock, 5000) != WAIT_TIMEOUT)
+        {
+            DWORD old;
+            VirtualProtect(slot, sizeof(void *), PAGE_READWRITE, &old);
+            for (;;) { void *cur = *slot; g_nextCreateDevice = (PFN_CreateDevice)cur; if (InterlockedCompareExchangePointer(slot, (void *)&FrontCreateDevice, cur) == cur) break; }
+            VirtualProtect(slot, sizeof(void *), old, &old);
+            ReleaseMutex(lock);
+        }
+        ID3D11Device *dev = nullptr;
+        D3D_FEATURE_LEVEL fl = D3D_FEATURE_LEVEL_11_0;
+        D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, &fl, 1, D3D11_SDK_VERSION, &dev, nullptr, nullptr);
+        D3D11_TEXTURE2D_DESC td = { 768, 256, 1, 1, DXGI_FORMAT_R32_TYPELESS, { 1, 0 }, D3D11_USAGE_DEFAULT, D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE, 0, 0 }, got = {};
+        ID3D11Texture2D *tex = nullptr;
+        if (dev) dev->CreateTexture2D(&td, nullptr, &tex);
+        if (tex) tex->GetDesc(&got);
+        Check(g_frontCalls == 1, "slot lock: a hook put in front of the DLL's runs");
+        Check(got.Width == 1536 && got.Height == 512, "slot lock: and calls on to the DLL's (a 768 x 256 depth texture of that device is scaled to 1536 x 512)");
+        Check(api->statusCount() > 0 && strcmp(api->status(0), "Device: hooked") == 0, "graphics tab: the status says the device is hooked once one is made");
+        if (slot && g_nextCreateDevice)
+        {
+            DWORD old;
+            VirtualProtect(slot, sizeof(void *), PAGE_READWRITE, &old);
+            InterlockedCompareExchangePointer(slot, (void *)g_nextCreateDevice, (void *)&FrontCreateDevice);
+            VirtualProtect(slot, sizeof(void *), old, &old);
+        }
+        if (tex) tex->Release();
+        if (dev) dev->Release();
+        if (lock) CloseHandle(lock);
+    }
+    else Check(api->statusCount() > 0 && strcmp(api->status(0), "Device: left alone (nothing in the ini needs it)") == 0, "graphics tab: the status says the device is left alone");
+    printf("%s\n", g_failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
+    return g_failures ? 1 : 0;
+}
+
 // the frame timer: a factory from CreateDXGIFactory1 (the import the DLL hooks with FrameLog set), a swap chain made
 // through it on a hidden window, 2.6 s of Present every ~10 ms; with FrameLog=1 the log must name both hooks and carry
 // frames lines at about the rate presented, without it no frame timer at all. Either way DXGI's own method tables stay
@@ -1501,6 +1625,7 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "gpuprofile") == 0) return GpuTimersTest(true);
         if (strcmp(argv[i], "aohalfodd") == 0) return AOHalfOddTest();
         if (strcmp(argv[i], "retable") == 0) return RetableTest();
+        if (strcmp(argv[i], "graphics") == 0 && i + 1 < argc) return GraphicsTest(atoi(argv[i + 1]));
         if (strcmp(argv[i], "zmips") == 0) return ZMipsTest(false);
         if (strcmp(argv[i], "zmipsoff") == 0) return ZMipsTest(true);
     }

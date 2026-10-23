@@ -86,6 +86,11 @@
 //   F11  the AO pass: the game's own SSAO (its stock twin) or GTAO; the bounce light is off with the game's SSAO.
 // Ini: KeyStock=119 KeyPuddles=120 KeyBounce=121 KeyAO=122 (virtual-key codes, 0 = no key) and the states at start:
 // StockAll=0 PuddlesOn=1 BounceOn=1 StockAO=0.
+// The same switches as buttons: the NEXT GEN overlay (the shared menu of the Next Gen mods) draws a Graphics tab from
+// the list this DLL exports, NgGraphicsGetApi(1): each switch whose feature the ini turned on, with its name, a tip,
+// get and set, and status lines (device hooked, shadow map size, stock twins, ReShade). A button and its key flip one
+// flag. The import slots this DLL writes (D3D11CreateDevice and the diagnostics' imports) go through the mods' shared
+// lock, Local\NextGen.Slots.<pid>, with a compare-exchange, so a mod hooking the same import keeps its hook either way.
 // Dump (KeyDump=<virtual-key code>, 118 = F7, no key unless the ini names one: a dump is about 150 MB at 4K;
 // DumpAfter=<seconds>: once, that long after the AO pass first runs, 0 = off; DumpDir=<folder>, default this DLL's):
 // one frame's bounce-light chain saved to files for offline measurement. The next AO pass set up
@@ -379,7 +384,7 @@ static void Log(const char *fmt, ...)
 struct TwinEntry { uint32_t key, group, offset, size; };
 static const uint8_t *g_twinBase = nullptr;
 static const TwinEntry *g_twins = nullptr;
-static uint32_t g_twinCount = 0;
+static uint32_t g_twinCount = 0, g_twinAO = 0;   // entries; of them the AO pass's (group 1)
 static std::atomic<uint32_t> g_twinsMade{ 0 }, g_twinsFailed{ 0 };
 
 static void LoadTwins()
@@ -406,7 +411,7 @@ static void LoadTwins()
         ao += e[i].group == 1;
     }
     if (!ok) { Log("stock twins: SnowRunnerShadows.stock is not a valid table, ignored"); UnmapViewOfFile(base); return; }
-    g_twinBase = base; g_twins = e; g_twinCount = (uint32_t)n;
+    g_twinBase = base; g_twins = e; g_twinCount = (uint32_t)n; g_twinAO = ao;
     Log("stock twins: %u shaders (%u of the AO pass) in SnowRunnerShadows.stock", g_twinCount, ao);
 }
 static const TwinEntry *FindTwin(uint32_t key)
@@ -6083,6 +6088,49 @@ static HRESULT WINAPI Hook_D3D11CreateDevice(IDXGIAdapter *adapter, D3D_DRIVER_T
     return hr;
 }
 
+// An import slot written the way every Next Gen mod writes one (the NEXT GEN overlay's NgSlotSwap): under the named lock
+// Local\NextGen.Slots.<pid>, with a compare-exchange that keeps whatever is there as the original, so two mods hooking
+// the same import chain in either order and neither write is lost. This runs in DllMain under the loader lock, so the
+// wait is short: the overlay never needs the loader lock while it holds the slot lock, and when the wait runs out the
+// compare-exchange alone still keeps both writes. A write that faults (another writer put the page's protection back
+// between ours and the write) is tried again. The lock's handle stays open, as the overlay's does
+static HANDLE g_slotLock = nullptr;
+static bool CasSlot(void **slot, void *hook, void **orig)
+{
+    __try
+    {
+        for (;;)
+        {
+            void *const cur = *(void *volatile *)slot;
+            *orig = cur;   // before the hook can be reached through the slot
+            if (InterlockedCompareExchangePointer(slot, hook, cur) == cur) return true;
+        }
+    }
+    __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) { return false; }
+}
+static bool SwapSlot(void **slot, void *hook, void **orig)
+{
+    if (!g_slotLock)
+    {
+        wchar_t name[64];
+        swprintf_s(name, L"Local\\NextGen.Slots.%lu", GetCurrentProcessId());
+        g_slotLock = CreateMutexW(nullptr, FALSE, name);
+    }
+    const DWORD w = g_slotLock ? WaitForSingleObject(g_slotLock, 250) : WAIT_FAILED;
+    const bool held = w == WAIT_OBJECT_0 || w == WAIT_ABANDONED;
+    if (!held) Log("import slot lock %s: the slot written by compare-exchange alone", g_slotLock ? "busy for 250 ms" : "not made");
+    bool ok = false;
+    for (int tries = 0; tries < 8 && !ok; tries++)
+    {
+        DWORD old;
+        if (!VirtualProtect(slot, sizeof(void *), PAGE_READWRITE, &old)) break;
+        ok = CasSlot(slot, hook, orig);
+        VirtualProtect(slot, sizeof(void *), old, &old);
+    }
+    if (held) ReleaseMutex(g_slotLock);
+    return ok;
+}
+
 // Points the game's own import of d3d11.dll!D3D11CreateDevice at the hook. The game resolves nothing else from d3d11.
 static bool PatchImport(HMODULE module, const char *dll, const char *func, void *hook, void **orig)
 {
@@ -6099,12 +6147,7 @@ static bool PatchImport(HMODULE module, const char *dll, const char *func, void 
         {
             if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal)) continue;
             if (strcmp((const char *)((const IMAGE_IMPORT_BY_NAME *)(base + names->u1.AddressOfData))->Name, func) != 0) continue;
-            DWORD old;
-            if (!VirtualProtect(&slots->u1.Function, sizeof(void *), PAGE_READWRITE, &old)) return false;
-            *orig = (void *)slots->u1.Function;
-            slots->u1.Function = (ULONGLONG)hook;
-            VirtualProtect(&slots->u1.Function, sizeof(void *), old, &old);
-            return true;
+            return SwapSlot((void **)&slots->u1.Function, hook, orig);
         }
     }
     return false;
@@ -6214,6 +6257,97 @@ static void ReadSettings()
     }
 }
 
+// ---- the NEXT GEN overlay's Graphics tab: NgGraphicsGetApi(1) hands the overlay (the shared menu of the Next Gen mods,
+// which finds this DLL by its full path) the dev switches as a list: a name, a tip, get and set, and a few status lines.
+// The switches are the very flags the hotkeys flip, so keys and buttons stay in step; only the switches whose feature the
+// ini turned on are listed, fixed at load. The overlay calls everything on the game's present thread, every frame the tab
+// shows: get and status read flags, set stores one (taken at the next draw that reads it) and writes a log line. A change
+// lasts until the game closes; the ini sets the start. Strings are ASCII and live as long as the process. Before DllMain
+// has read the ini, and for any version but 1, the answer is nullptr
+struct NgGraphicsApi
+{
+    int version;
+    int count;
+    const char *(*name)(int);
+    const char *(*help)(int);
+    int (*get)(int);
+    void (*set)(int, int);
+    int (*statusCount)();
+    const char *(*status)(int);
+};
+struct GfxSwitch { const char *name; char help[160]; std::atomic<bool> *state; bool on; };   // on: the state that means "on"
+static GfxSwitch g_gfx[8];
+static int g_gfxCount = 0;
+static std::atomic<bool> g_gfxReady{ false };
+static bool g_importHooked = false;   // the D3D11CreateDevice import
+static char g_gfxStatus[5][128];
+static void GfxAdd(const char *name, const char *tip, UINT key, std::atomic<bool> *state, bool on)
+{
+    GfxSwitch &s = g_gfx[g_gfxCount++];
+    s.name = name; s.state = state; s.on = on;
+    char k[16];
+    KeyName(key, k, sizeof k);
+    if (key) snprintf(s.help, sizeof s.help, "%s (key %s)", tip, k);
+    else snprintf(s.help, sizeof s.help, "%s", tip);
+}
+static void GfxBuild()
+{
+    if (g_twinCount || g_gi || g_ssr || g_contact) GfxAdd("Next Gen shaders", "Every shader.pak effect and this DLL's passes; off: the game's own shaders", g_keyStock, &g_stockAll, false);
+    if (g_twinAO) GfxAdd("GTAO", "Ambient occlusion: GTAO; off: the game's own SSAO, which has no bounce light", g_keyAO, &g_stockAO, false);
+    if (g_gi) GfxAdd("Bounce light", "Light bounced off the scene into the shade", g_keyBounce, &g_bounceOn, true);
+    if (g_feed) GfxAdd("Puddle reflections", "The scene in the terrain's puddles; off: the sky's cubemap", g_keyPuddles, &g_puddlesOn, true);
+    if (g_ssr) GfxAdd("Reflections", "Screen-space reflections; off: the materials' own cubemap", g_keySSR, &g_ssrOn, true);
+    if (g_gi) GfxAdd("AO at half size", "The AO pass at half size, upsampled; off: full size (slower)", g_keyAOHalf, &g_aoHalfOn, true);
+    if (g_contact) GfxAdd("Contact shadows", "Fine sun shadows where objects meet the ground", g_keyContact, &g_contactOn, true);
+    g_gfxReady.store(true, std::memory_order_release);
+    Log("menu: %d switches for the NEXT GEN overlay's Graphics tab (NgGraphicsGetApi, version 1)", g_gfxCount);
+}
+static bool GfxIn(int i) { return i >= 0 && i < g_gfxCount; }
+static const char *GfxName(int i) { return GfxIn(i) ? g_gfx[i].name : ""; }
+static const char *GfxHelp(int i) { return GfxIn(i) ? g_gfx[i].help : ""; }
+static int GfxGet(int i) { return GfxIn(i) && g_gfx[i].state->load(std::memory_order_relaxed) == g_gfx[i].on ? 1 : 0; }
+static void GfxSet(int i, int value)
+{
+    if (!GfxIn(i)) return;
+    const bool want = (value != 0) == g_gfx[i].on;
+    if (g_gfx[i].state->exchange(want) != want) Log("menu: %s %s", g_gfx[i].name, value ? "on" : "off");
+}
+// ReShade: a loaded module that exports its add-on entry, whatever its file is called; looked for once
+static bool ReShadeLoaded()
+{
+    static int found = -1;
+    if (found >= 0) return found != 0;
+    found = 0;
+    const HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+    if (snap == INVALID_HANDLE_VALUE) return false;
+    MODULEENTRY32W me = { sizeof me };
+    for (BOOL more = Module32FirstW(snap, &me); more && !found; more = Module32NextW(snap, &me)) found = GetProcAddress(me.hModule, "ReShadeRegisterAddon") != nullptr;
+    CloseHandle(snap);
+    return found != 0;
+}
+static int GfxStatusCount()
+{
+    int n = 0;
+    const bool device = g_deviceCount.load(std::memory_order_acquire) > 0;
+    snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Device: %s", !g_deviceWork ? "left alone (nothing in the ini needs it)" : device ? "hooked" :
+        g_importHooked ? "not made yet" : "not hooked (no D3D11CreateDevice import found), nothing is done");
+    if (g_scaling) snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Sun shadow map: %g x the game's size", g_factor);
+    else snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Sun shadow map: the game's size");
+    if (g_twinCount) snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Stock shaders for the switches: %u (%u of the AO pass)", g_twinCount, g_twinAO);
+    else snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Stock shaders for the switches: none (no SnowRunnerShadows.stock)");
+    snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "ReShade: %s", ReShadeLoaded() ? "loaded" : "not loaded");
+    snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Changes here last until the game closes; SnowRunnerShadows.ini sets the start");
+    return n;
+}
+static const char *GfxStatus(int i) { return i >= 0 && i < (int)(sizeof g_gfxStatus / sizeof g_gfxStatus[0]) ? g_gfxStatus[i] : ""; }
+extern "C" __declspec(dllexport) const NgGraphicsApi *NgGraphicsGetApi(int version)
+{
+    static NgGraphicsApi api = { 1, 0, &GfxName, &GfxHelp, &GfxGet, &GfxSet, &GfxStatusCount, &GfxStatus };
+    if (version != 1 || !g_gfxReady.load(std::memory_order_acquire)) return nullptr;
+    api.count = g_gfxCount;
+    return &api;
+}
+
 BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
@@ -6235,6 +6369,7 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
         if (g_texBaseRule) TextureBaseRule();
         else Log("texture base rule: off (ini TextureBaseRule=0), the game's own");
         LoadTwins();
+        GfxBuild();
         if (g_trace)
         {
             _wfopen_s(&g_traceFile, (g_dir + L"SnowRunnerShadows.trace.log").c_str(), L"w");
@@ -6243,12 +6378,12 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
         g_deviceWork = g_scaling || g_feed || g_twinCount || g_gpuProfile;
         if (!g_deviceWork && g_texBaseLate)
         {
-            const bool ok = PatchImport(GetModuleHandleW(nullptr), "d3d11.dll", "D3D11CreateDevice", (void *)&Hook_D3D11CreateDevice, (void **)&g_realCreateDevice);
+            const bool ok = g_importHooked = PatchImport(GetModuleHandleW(nullptr), "d3d11.dll", "D3D11CreateDevice", (void *)&Hook_D3D11CreateDevice, (void **)&g_realCreateDevice);
             Log("D3D11CreateDevice import %s, for the texture base rule alone", ok ? "hooked" : "NOT FOUND, the game's rule stays");
         }
         if (g_deviceWork)
         {
-            const bool ok = PatchImport(GetModuleHandleW(nullptr), "d3d11.dll", "D3D11CreateDevice", (void *)&Hook_D3D11CreateDevice, (void **)&g_realCreateDevice);
+            const bool ok = g_importHooked = PatchImport(GetModuleHandleW(nullptr), "d3d11.dll", "D3D11CreateDevice", (void *)&Hook_D3D11CreateDevice, (void **)&g_realCreateDevice);
             Log("factor %g%s, slope bias %s, scene feed %s, bounce light %s; D3D11CreateDevice import %s", g_factor, g_scaling ? "" : " (not scaling)",
                 g_slopeBias ? "scaled with it" : "as the game sets it", g_feed ? "on" : "off", g_gi ? "on" : "off", ok ? "hooked" : "NOT FOUND, nothing will be done");
             if (g_ssr)
