@@ -285,7 +285,10 @@ Check 'status: no part is out of date' (@((Status).outdated).Count) 0
 $same = [ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3.5'; slopeBias = '1' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5' }
 $stateDir = (Get-ChildItem -LiteralPath (Join-Path $env:NGEN_STATE_ROOT 'games') -Directory | Select-Object -First 1).FullName
 $lock = Join-Path $stateDir 'engine.lock'
-$standIn = Start-Process -FilePath $node -ArgumentList '-e', 'setTimeout(() => {}, 600000)' -WindowStyle Hidden -PassThru   # a Node at work stands in for an engine
+# a Node at work stands in for an engine (the script one quoted argument: Start-Process joins its list with spaces)
+$standIn = Start-Process -FilePath $node -ArgumentList '-e "setTimeout(function () {}, 600000)"' -WindowStyle Hidden -PassThru
+Start-Sleep -Milliseconds 500
+Check 'the stand-in engine runs' ([string]$standIn.HasExited) 'False'
 try {
   Set-Content -LiteralPath $lock -Value $standIn.Id -Encoding ASCII
   $r = Apply $same

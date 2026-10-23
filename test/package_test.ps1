@@ -1,8 +1,8 @@
 # Tests the standalone package the way a player gets it: copies out\package\SnowRunnerNextGen to a temporary folder,
 # runs test\engine_test.ps1 against that copy's engine (its own node.exe, no dev config), with the file tracer
 # (test\trace_fs.js) loaded into every node process, and fails when any file outside the package copy, the test's game
-# copy and state folder (out\enginetest) and %TEMP% was opened, read, listed or required: a dev path the package still
-# reaches. In between, a changed code fingerprint in the copy's parts.json (a newer installer over an older install)
+# copy and state folder (out\enginetest) and %TEMP% was opened, read, listed, required, written, renamed, deleted or
+# made: a dev path the package still reaches, or a write outside the game and the state. In between, a changed code fingerprint in the copy's parts.json (a newer installer over an older install)
 # must make that part again with the same selection and leave the others. Takes a few minutes.
 # usage (after package.ps1): powershell -NoProfile -ExecutionPolicy Bypass -File test\package_test.ps1
 $ErrorActionPreference = 'Stop'
