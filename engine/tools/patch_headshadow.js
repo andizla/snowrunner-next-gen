@@ -6,9 +6,9 @@
 // scales, or right before that colour multiply, whose intensity it scales; fed the pixel's world position (what the
 // shader subtracts g_vHeadLightPos[0], cb2[24], from: an input, or a temp that still holds it there), it returns the
 // share of the lamp's light that gets past what stands in the way. Everything else the shader does with the light stays.
-// The shader also gets what the helper reads and it lacked: t121 (this frame's linear depth, which SnowRunner Shadows
-// binds when it sees it declared; declared in front of dcl_temps, where fxc puts textures) and cb1 up to register 5
-// (the view-projection: the declaration is widened in place).
+// The shader also gets what the helper reads and it lacked: t121 (the previous frame's linear depth, which SnowRunner
+// Shadows binds when it sees it declared; declared in front of dcl_temps, where fxc puts textures) and cb1 up to register
+// 13 (the previous frame's view-projection, c10..c13: the declaration is widened in place).
 // A shader is left as it is unless: one such sample writing a temp, or none and a colour multiply by one temp component;
 // the world position a plain input declared with x, y and z (an input read beyond its declaration crashes NVIDIA's
 // compiler, see patch_puddle.js) or a plain temp no instruction writes before the helper runs, and no loop in between;
@@ -25,6 +25,7 @@ const { dxbcChecksum } = require('./dxbc_patch.js');
 const W = path.resolve(__dirname, '..');
 const DUMP = process.env.SR_DUMP_DIR || path.join(W, 'dump');   // the game's shaders (extract.js output): SR_DUMP_DIR, else dump\
 const HELPER = path.join(W, 'replacements', 'headlight', 'headshadow.cso');
+const CB1_REGS = 14;   // the helper reads cb1 up to c13 (the previous frame's view-projection)
 const OP = { add: 0, mul: 56, sample_d: 73, dcl_resource: 88, dcl_constantbuffer: 89, dcl_temps: 104 };
 const PATTERN_SLOT = 54, PATTERN_SAMPLER = 2, DEPTH_SLOT = 121;
 
@@ -142,12 +143,12 @@ function patchHeadShadow(b, helper = fs.readFileSync(HELPER))
         note = 'intensity r' + r + '.' + 'xyzw'[c];
     }
     let out = replaceRange(b, x.off, x.off + x.len * 4, spliced, h.temps, h.body.length + 2);
-    // cb1 widened to 6 registers in place (its size is the operand's last index token; before the code, so the offset holds)
-    if (cb1.o[0].idx[1] < 6) out.writeUInt32LE(6, cb1.o[0].off + cb1.o[0].size - 4);
+    // cb1 widened to CB1_REGS registers in place (its size is the operand's last index token; before the code, so the offset holds)
+    if (cb1.o[0].idx[1] < CB1_REGS) out.writeUInt32LE(CB1_REGS, cb1.o[0].off + cb1.o[0].size - 4);
     // t121 declared in front of dcl_temps (the spliced code lies after it, so this offset holds too)
     if (!textures.has(DEPTH_SLOT)) out = insertAt(out, w.insts.find((y) => y.op === OP.dcl_temps).off, dclTexture2D(DEPTH_SLOT));
     dxbcChecksum(out.subarray(20)).copy(out, 4);
-    return { blob: out, note: note + ' at ' + at.i + ', world ' + (world.type ? 'v' : 'r') + world.idx[0] + ', cb1 ' + cb1.o[0].idx[1] + (cb1.o[0].idx[1] < 6 ? ' -> 6' : '') + (textures.has(DEPTH_SLOT) ? '' : ', t121 added') };
+    return { blob: out, note: note + ' at ' + at.i + ', world ' + (world.type ? 'v' : 'r') + world.idx[0] + ', cb1 ' + cb1.o[0].idx[1] + (cb1.o[0].idx[1] < CB1_REGS ? ' -> ' + CB1_REGS : '') + (textures.has(DEPTH_SLOT) ? '' : ', t121 added') };
 }
 
 const index = () => JSON.parse(fs.readFileSync(path.join(DUMP, 'index.json')));

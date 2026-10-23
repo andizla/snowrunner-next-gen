@@ -1,7 +1,7 @@
 // Offline test scene for the headlight shadows: renders scene.hlsl (which includes the helper,
 // engine\replacements\headlight\headshadow.hlsl) on this PC's GPU, or on WARP when there is none, and writes the picture.
 // The helper's constant buffers are filled as the game fills them: b1 CB_GLOBAL_CAMERA (c0 eye, c1 view direction,
-// c2..c5 the view-projection's columns), b2 CB_GLOBAL_SCENE (c20 the headlight's direction, c24 its position); pass 1's
+// c2..c5 the view-projection's columns, c10..c13 the previous frame's, the same here), b2 CB_GLOBAL_SCENE (c20 the headlight's direction, c24 its position); pass 1's
 // linear depth is bound at t121 for pass 2, as SnowRunner Shadows binds its copy in the game.
 // usage: scene <scene.hlsl> <out.bmp> [--size W H] [--eye x y z] [--target x y z] [--fov degrees] [--mode 0|1|2] [--ss n]
 //        [--time N] [-D NAME=value ...]     mode 0: with the helper's shadows, 1: the game's own light, 2: the helper's value
@@ -91,12 +91,13 @@ int wmain(int argc, wchar_t **argv)
     // the camera: x right, y up, z forward; clip = (x * sx, y * sy, depth terms, view depth)
     const V3 f = norm(sub(target, eye)), r = norm(cross({ 0, 1, 0 }, f)), u = cross(f, r);
     const float sy = 1.0f / std::tan(fov * 3.14159265f / 360.0f), sx = sy * H / W, zn = 0.1f, zf = 2000.0f, A = zf / (zf - zn), B = -zn * A;
-    float cam[24] = {
+    float cam[56] = {
         eye.x, eye.y, eye.z, 1, f.x, f.y, f.z, 0,
         r.x * sx, r.y * sx, r.z * sx, -dot(eye, r) * sx,
         u.x * sy, u.y * sy, u.z * sy, -dot(eye, u) * sy,
         f.x * A, f.y * A, f.z * A, -dot(eye, f) * A + B,
         f.x, f.y, f.z, -dot(eye, f) };
+    std::memcpy(&cam[40], &cam[8], 16 * sizeof(float));   // c10..c13, the previous frame's: the camera stands still
     // the headlight: between the two lamps of a pickup's front, a little downwards
     const V3 lamp = { 0.0f, 0.95f, 0.05f }, dir = norm({ 0.0f, -0.12f, 1.0f });
     float scene[28 * 4] = {};

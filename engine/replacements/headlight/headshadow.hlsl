@@ -13,10 +13,13 @@
 //
 // Contract with the splice: v0.xyz = the pixel's world position (the point the shader measures from the headlight);
 // o0.x = the share of the headlight that arrives, 0 to 1. Registers are the lit shaders' own: b1 CB_GLOBAL_CAMERA (c0 eye
-// position, c2..c5 view-projection columns; the splice widens the shader's declaration to 6), b2 CB_GLOBAL_SCENE
-// (g_vHeadLightPos[0] at c24, g_vHeadLightDir[0] at c20), and t121: SnowRunner Shadows' copy of this frame's linear depth
-// (metres), taken at the ambient occlusion pass, before the lit pass. Without the DLL t121 is unbound: every pixel gets
-// 1, the game's own light.
+// position, c2..c5 view-projection columns, c10..c13 the previous frame's; the splice widens the shader's declaration to
+// 14), b2 CB_GLOBAL_SCENE (g_vHeadLightPos[0] at c24, g_vHeadLightDir[0] at c20), and t121: SnowRunner Shadows' copy of
+// the previous frame's linear depth (metres), taken at the ambient occlusion pass, which comes after the lit pass. The
+// rays are projected with the previous frame's camera, so each step meets the depth that camera saw there: projected
+// with this frame's, a camera that moved (shaking on a rough road) compared the steps with whatever the last frame had
+// at that spot on the screen, and the road ahead went dark until the camera settled (seen in the game, 2026-10-23).
+// Without the DLL t121 is unbound: every pixel gets 1, the game's own light.
 //
 // Build: fxc -T ps_5_0 -E main headshadow.hlsl -Fo headshadow.cso. Every knob can be set with -D NAME=value.
 
@@ -59,7 +62,9 @@ cbuffer CB_GLOBAL_CAMERA : register(b1)
     float3 g_vEyePos;
     float  g_fZDir;
     float4 g_vViewDir;
-    float4 g_vViewProjCol[4]; // clip = (dot(p, col0), dot(p, col1), dot(p, col2), dot(p, col3))
+    float4 g_vViewProjCol[4]; // c2..c5: clip = (dot(p, col0), dot(p, col1), dot(p, col2), dot(p, col3))
+    float4 g_vViewCol[4];     // c6..c9
+    float4 g_vViewProjPrevCol[4]; // c10..c13: the previous frame's, the camera t121 was seen from
 };
 cbuffer CB_GLOBAL_SCENE : register(b2)
 {
@@ -74,6 +79,11 @@ float4 Clip(float3 p)
     const float4 q = float4(p, 1.0);
     return float4(dot(q, g_vViewProjCol[0]), dot(q, g_vViewProjCol[1]), dot(q, g_vViewProjCol[2]), dot(q, g_vViewProjCol[3]));
 }
+float4 PrevClip(float3 p)
+{
+    const float4 q = float4(p, 1.0);
+    return float4(dot(q, g_vViewProjPrevCol[0]), dot(q, g_vViewProjPrevCol[1]), dot(q, g_vViewProjPrevCol[2]), dot(q, g_vViewProjPrevCol[3]));
+}
 
 // one lamp: 1 = its light arrives, 0 = blocked (one exit: the splice inlines the helper, which cannot return early);
 // lampDir: the way the lamp points
@@ -85,7 +95,7 @@ float Lamp(float3 P, float3 L, float3 lampDir, float2 size, float jitter)
     const float3 dir = toL / d;
     const float3 w0 = P + dir * HS_START;
     float3 w1 = P + dir * (HS_START + max(span, 0.0));
-    const float4 c0 = Clip(w0), c1 = Clip(w1);
+    const float4 c0 = PrevClip(w0), c1 = PrevClip(w1);       // the previous frame's camera, as t121 is that frame's
     // a ray end behind the camera: shortened to where it is still in front of it (the same share of the way in the world)
     float4 e1 = c1;
     if (e1.w <= 0.05) { const float cut = (c0.w - 0.05) / max(c0.w - c1.w, 1e-4); e1 = lerp(c0, c1, cut); w1 = lerp(w0, w1, cut); }
@@ -109,7 +119,8 @@ float Lamp(float3 P, float3 L, float3 lampDir, float2 size, float jitter)
         const float thick = HS_THICK + 0.03 * w;
         const float2 edge = saturate(min(uv, 1.0 - uv) / HS_EDGE);
         // where the obstacle is in the world: on the camera's line through the step, at the scene's depth there (the step
-        // itself by its 1 / w share of the way); behind the lamps' plane it cannot block
+        // itself by its 1 / w share of the way); behind the lamps' plane it cannot block. From this frame's eye: the
+        // previous one is a frame's movement away, which moves O by that times (1 - z / w), a few centimetres
         const float3 S = lerp(w0 * iw0, w1 * iw1, f) * w;
         const float3 O = g_vEyePos + (S - g_vEyePos) * (z / w);
         const float ahead = dot(O - L, lampDir) > HS_PLANE ? 1.0 : 0.0;
