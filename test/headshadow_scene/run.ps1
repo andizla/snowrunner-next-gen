@@ -22,11 +22,14 @@ if (-not (Test-Path $exe) -or (Get-Item $exe).LastWriteTime -lt (Get-Item (Join-
 
 $w, $h = $Size -split 'x'
 # camera views: beside the truck (shadows visible), behind it (the chase camera: each shadow hides behind its caster),
-# and from high up (the beam's whole footprint)
+# from high up (the beam's whole footprint), and two of the game's shots of 2026-10-23 with the dark quad: low in front
+# of the truck beside its bumper (front), and high behind it to the left, further off (chase)
 $views = [ordered]@{
   side   = @('--eye', '5.5', '3.0', '-3.0', '--target', '-0.5', '0.3', '10.0')
   behind = @('--eye', '0.8', '2.6', '-8.0', '--target', '0.0', '0.6', '12.0')
   above  = @('--eye', '0.5', '24.0', '-4.0', '--target', '0.0', '0.0', '10.0')
+  front  = @('--eye', '1.6', '1.3', '0.6', '--target', '0.3', '0.0', '9.0')
+  chase  = @('--eye', '-3.5', '4.5', '-9.0', '--target', '1.0', '0.0', '6.0')
 }
 $modes = @(@{ m = '1'; label = "the game's own light" }, @{ m = '0'; label = 'with headlight shadows' }, @{ m = '2'; label = "helper's value (black = blocked)" })
 $defs = @(); foreach ($d in $Define) { if ($d) { $defs += '-D'; $defs += $d } }

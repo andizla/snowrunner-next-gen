@@ -8,7 +8,11 @@
 // share of the lamp's light that gets past what stands in the way. Everything else the shader does with the light stays.
 // The shader also gets what the helper reads and it lacked: t121 (the previous frame's linear depth, which SnowRunner
 // Shadows binds when it sees it declared; declared in front of dcl_temps, where fxc puts textures) and cb1 up to register
-// 13 (the previous frame's view-projection, c10..c13: the declaration is widened in place).
+// 13 (the previous frame's view-projection, c10..c13: the declaration is widened in place, or added in front of dcl_temps
+// when the shader has none: the grass's and the bushes' shaders (about 255, CB_INSTANCE with g_vGrassRemoveTimePoints)
+// take the headlight but not the camera, and without them a post or a guardrail standing in a verge cast nothing, seen in
+// the game on 2026-10-23. Every pixel shader of the game that binds b1 binds CB_GLOBAL_CAMERA there, and should b1 hold
+// nothing the helper takes no step and returns the game's light).
 // A shader is left as it is unless: one such sample writing a temp, or none and a colour multiply by one temp component;
 // the world position a plain input declared with x, y and z (an input read beyond its declaration crashes NVIDIA's
 // compiler, see patch_puddle.js) or a plain temp no instruction writes before the helper runs, and no loop in between;
@@ -38,6 +42,8 @@ const tempSrcX = (reg) => words(0x00100006, reg);  // rN.xxxx
 const tokens = (b, o) => b.subarray(o.off, o.off + o.size);
 // dcl_resource_texture2d (float,float,float,float) tN: opcode 88, dimension texture2d in bits 11..15, 4 tokens
 const dclTexture2D = (slot) => words(OP.dcl_resource | (3 << 11) | (4 << 24), 0x00107000, slot, 0x00005555);
+// dcl_constantbuffer cbN[size], immediateIndexed: opcode 89, 4 tokens (as fxc writes it)
+const dclConstantBuffer = (slot, size) => words(OP.dcl_constantbuffer | (4 << 24), 0x00208e46, slot, size);
 
 // bytes inserted at a byte offset inside the shader code; the container's sizes, chunk offsets and checksum follow
 // (dcl_temps is not touched: this is for declarations in front of it)
@@ -88,7 +94,6 @@ function patchHeadShadow(b, helper = fs.readFileSync(HELPER))
     }
     if (!world) return { reason: 'no world position' };
     if (!plain(world) || (world.type !== 0 && world.type !== 1)) return { reason: 'the world position is not a plain temp or input' };
-    if (!cb1) return { reason: 'no cb1' };
     if (cb2 < 25) return { reason: 'cb2 declared with ' + cb2 + ' registers' };
     if (world.type === 1)
     {
@@ -144,11 +149,14 @@ function patchHeadShadow(b, helper = fs.readFileSync(HELPER))
     }
     let out = replaceRange(b, x.off, x.off + x.len * 4, spliced, h.temps, h.body.length + 2);
     // cb1 widened to CB1_REGS registers in place (its size is the operand's last index token; before the code, so the offset holds)
-    if (cb1.o[0].idx[1] < CB1_REGS) out.writeUInt32LE(CB1_REGS, cb1.o[0].off + cb1.o[0].size - 4);
-    // t121 declared in front of dcl_temps (the spliced code lies after it, so this offset holds too)
-    if (!textures.has(DEPTH_SLOT)) out = insertAt(out, w.insts.find((y) => y.op === OP.dcl_temps).off, dclTexture2D(DEPTH_SLOT));
+    const cb1Size = cb1 ? cb1.o[0].idx[1] : 0;
+    if (cb1 && cb1Size < CB1_REGS) out.writeUInt32LE(CB1_REGS, cb1.o[0].off + cb1.o[0].size - 4);
+    // t121, and cb1 when the shader has none, declared in front of dcl_temps (the spliced code lies after it, so this offset holds too)
+    const temps = w.insts.find((y) => y.op === OP.dcl_temps).off;
+    if (!textures.has(DEPTH_SLOT)) out = insertAt(out, temps, dclTexture2D(DEPTH_SLOT));
+    if (!cb1) out = insertAt(out, temps, dclConstantBuffer(1, CB1_REGS));
     dxbcChecksum(out.subarray(20)).copy(out, 4);
-    return { blob: out, note: note + ' at ' + at.i + ', world ' + (world.type ? 'v' : 'r') + world.idx[0] + ', cb1 ' + cb1.o[0].idx[1] + (cb1.o[0].idx[1] < CB1_REGS ? ' -> ' + CB1_REGS : '') + (textures.has(DEPTH_SLOT) ? '' : ', t121 added') };
+    return { blob: out, note: note + ' at ' + at.i + ', world ' + (world.type ? 'v' : 'r') + world.idx[0] + (cb1 ? ', cb1 ' + cb1Size + (cb1Size < CB1_REGS ? ' -> ' + CB1_REGS : '') : ', cb1 added') + (textures.has(DEPTH_SLOT) ? '' : ', t121 added') };
 }
 
 const index = () => JSON.parse(fs.readFileSync(path.join(DUMP, 'index.json')));

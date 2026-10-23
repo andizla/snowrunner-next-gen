@@ -56,6 +56,12 @@
 #ifndef HS_STRENGTH
 #define HS_STRENGTH 1.0       // 1 = a fully blocked lamp gives no light; less leaves some
 #endif
+#ifndef HS_SNAP
+#define HS_SNAP 1.0           // metres, plus HS_SNAP_SLOPE times the distance: a pixel up to this far behind the depth the
+#endif                        // camera saw where it lies starts its walk on that surface; 0 = never. At a grazing view
+#ifndef HS_SNAP_SLOPE         // 15 cm under a surface is about a metre behind it along the view
+#define HS_SNAP_SLOPE 0.05
+#endif
 
 cbuffer CB_GLOBAL_CAMERA : register(b1)
 {
@@ -135,8 +141,26 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
 {
     uint w, h;
     g_txSceneZ.GetDimensions(w, h);
-    const float3 P = posIn.xyz, L = g_vHeadLightPos[0].xyz;
+    float3 P = posIn.xyz;
+    const float3 L = g_vHeadLightPos[0].xyz;
     const float2 size = float2(w, h);
+    // a pixel shaded below the surface the camera saw there starts on that surface: a road overlay or decal over the
+    // ground, parallax-mapped asphalt or a depth bias leave the point the shader lights a few centimetres under the depth,
+    // and seen at a grazing angle those centimetres put the first steps tens of centimetres behind the road itself, which
+    // then blocks them all (a hard-edged dark patch the size of the overlay, gone from a steep view; seen in the game,
+    // 2026-10-23). Moved along this frame's camera ray to the depth there, as O below; a pixel further behind (an edge,
+    // or something the last frame did not see) stays where it is
+    if (w != 0 && HS_SNAP > 0.0)
+    {
+        const float4 pc = PrevClip(P);
+        const float2 suv = float2(pc.x / max(pc.w, 0.05) * 0.5 + 0.5, 0.5 - pc.y / max(pc.w, 0.05) * 0.5);
+        if (pc.w > 0.05 && all(suv >= 0.0) && all(suv < 1.0))
+        {
+            const float zs = g_txSceneZ.Load(int3(suv * size, 0));
+            const float under = pc.w - zs;
+            if (under > 0.0 && under < HS_SNAP + HS_SNAP_SLOPE * pc.w) P = g_vEyePos + (P - g_vEyePos) * (zs / pc.w);
+        }
+    }
     const float3 hd = g_vHeadLightDir[0].xyz, lampDir = dot(hd, hd) > 1e-6 ? normalize(hd) : float3(0.0, 0.0, 1.0);
     // the pixel's place on the screen, for the per-pixel offset of the steps
     const float4 cp = Clip(P);
