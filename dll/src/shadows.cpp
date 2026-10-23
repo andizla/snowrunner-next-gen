@@ -10,7 +10,8 @@
 //
 // Loading: the game imports hid.dll and no core Windows DLL does, so this DLL sits in Sources\Bin as hid.dll. Every
 // hid.dll export jumps straight to the real function (hid_stubs.asm, generated from System32\hid.dll): the real one
-// from System32, or hid_chain.dll from the same folder when another mod used the name first (dimerge's convention).
+// from System32, or hid_chain.dll from the same folder when another mod used the name first (the usual name for a
+// chained DLL).
 //
 // Hooks: the game's import of D3D11CreateDevice is repointed at this DLL, and on the device it gets back (ReShade's
 // wrapper when ReShade is installed, the runtime's own device otherwise) these methods are replaced in its method
