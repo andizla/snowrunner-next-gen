@@ -53,6 +53,9 @@
 #ifndef HS_PLANE
 #define HS_PLANE 0.3          // metres in front of the lamps' plane an obstacle must stand to block: whatever is behind a
 #endif                        // lamp (the truck's own cab, bed, roof rack) cannot be between the lamp and a lit point
+#ifndef HS_BODY
+#define HS_BODY HS_NEAR       // metres around a lamp within which what the camera sees is the truck's own front and does
+#endif                        // not block (0: it does)
 #ifndef HS_STRENGTH
 #define HS_STRENGTH 1.0       // 1 = a fully blocked lamp gives no light; less leaves some
 #endif
@@ -130,7 +133,11 @@ float Lamp(float3 P, float3 L, float3 lampDir, float2 size, float jitter)
         const float3 S = lerp(w0 * iw0, w1 * iw1, f) * w;
         const float3 O = g_vEyePos + (S - g_vEyePos) * (z / w);
         const float ahead = dot(O - L, lampDir) > HS_PLANE ? 1.0 : 0.0;
-        const float b = saturate(inFront / HS_SOFT) * (inFront < thick ? 1.0 : 0.0) * ahead * edge.x * edge.y;
+        // within HS_BODY of the lamp stands the truck's own front (a bumper, a winch, a bull bar). The ray stops short of
+        // it, yet a step further out that the camera saw behind it took it for an obstacle: from a low view beside the
+        // bumper every ray passing behind it was blocked, a hard-edged dark quad on the road (seen in the game, 2026-10-24)
+        const float own = dot(O - L, O - L) < HS_BODY * HS_BODY ? 0.0 : 1.0;
+        const float b = saturate(inFront / HS_SOFT) * (inFront < thick ? 1.0 : 0.0) * ahead * own * edge.x * edge.y;
         blocked = max(blocked, b);
         if (blocked >= 0.999) break;
     }
