@@ -14,7 +14,7 @@ Light and shadow
 - Shadow edges: straight shadow edges rebuilt from the shadow texture, with no texel stairs at any resolution, and blended cascade seams. A 16-tap filter is the other choice.
 - Blocker search: shadows sharp at the contact and softer the farther they fall from what casts them.
 - Contact shadows: fine sun shadows traced on screen where things touch or overlap.
-- Headlight shadows: posts, trees and rocks in the beam cast shadows away from the truck's lamps. Off by default: seen working in the game once, not tuned yet.
+- Headlight shadows: posts, trees and rocks in the beam cast shadows away from the truck's lamps. Off by default: tested in the game, still being tuned.
 - GTAO: ground truth ambient occlusion in place of the game's SSAO, at half or full size.
 - Wide occlusion: soft shade under trucks, roofs and tree crowns, out to 6 metres.
 - Sky ambient: the fill light takes the sky's colour.
@@ -41,7 +41,7 @@ Atmosphere and image
 - Sharper smoke and particles: the particle textures at twice their size.
 - Debris and splashes: leaves, grass, twigs and dirt thrown up by the wheels stay on the ground and get pushed by the tyres; mud, water and snow splashes throw more drops; exhaust and dust hang in the air longer.
 - Night sky: NASA's star map in place of the game's star texture, and its stars in the photo night skies of Scandinavia, Kola and Quebec.
-- Skies: 47 of the game's sky domes, cloud bands and night layers, every region's, made anew from photographs of real skies and NASA's star map; the clouds still drift.
+- Skies: 49 of the game's sky domes, cloud bands and night layers, every region's, made anew from photographs of real skies and NASA's star map, and the aurora green as a real one; the clouds still drift.
 - Map days: Maine shows the days and the snowfall of two snow regions; this gives it Michigan's days, weather and sky. Rows for British Columbia, Austria and Washington, and on every row a third value, map by map, that picks days for each map on its own. Off by default.
 - Brighter stars: the stars of the night sky drawn brighter.
 - Tonemap: stronger contrast and a lighter bloom.
