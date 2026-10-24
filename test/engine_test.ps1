@@ -146,8 +146,8 @@ Check 'load list: the tool on a made-up list' ([string](& $node $listTest $level
 $introTest = Join-Path $env:TEMP 'ngen_gfx_intro_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'gfx_intro_test.js') -Destination $introTest -Force
 Check 'intro: the edits on a made-up bundle' ([string](& $node $introTest $levelTools | Select-Object -Last 1)) 'all passed'
-# (a sky texture at the stock texture's size goes in with the game's own .pct_header, byte for byte: 33 of the 47)
-Check 'every part: boot.pak holds the grade (its LUTs and the emptied lens dirt), the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 202'
+# (a sky texture at the stock texture's size goes in with the game's own .pct_header, byte for byte: 35 of the 49)
+Check 'every part: boot.pak holds the grade (its LUTs and the emptied lens dirt), the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 204'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'
 Check 'every part: the note in the game folder names the five paks' (Note) 'boot.pak gfx.pak initial.pak shader.pak shared.pak'
@@ -174,7 +174,7 @@ $halfGrade = [ordered]@{}; foreach ($k in $everything.Keys) { $halfGrade[$k] = $
 $r = Apply $halfGrade
 Check 'no sky pack: the grade changes, done' (Last $r) 'done'
 Check 'no sky pack: the skies stay in' ([string](Status).skies.state) 'ours'
-Check 'no sky pack: boot.pak holds the same entries changed' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 202'
+Check 'no sky pack: boot.pak holds the same entries changed' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 204'
 $r = Engine @('restore')
 Check 'no sky pack: Restore goes through' (Last $r) 'done'
 Check 'no sky pack: boot.pak is the original byte for byte' (Hash $boot) (Hash (Join-Path $originals 'boot.pak.orig'))
