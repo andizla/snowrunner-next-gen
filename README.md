@@ -89,7 +89,7 @@ A game update or the store's file check replaces the game's files with the origi
 
 Every Apply and Restore is written to `install.log` in `%LOCALAPPDATA%\SnowRunnerNextGen`: what the program found and each step it took. After a stop or a note, Show the log in the result window opens that folder. Send the file along when you report a problem.
 
-Support, questions and talk about the mod: the channel on [Enthusiast Runner's Discord](https://discord.com/invite/MssDb2Pvcj), with thanks to Enthusiast Runner for it. A problem can also be reported as an issue here.
+Support, questions and talk about the mod: the channel on [EnthusiastRunner's Discord](https://discord.com/invite/MssDb2Pvcj), with thanks to EnthusiastRunner for it. A problem can also be reported as an issue here.
 
 ## What it changes
 
