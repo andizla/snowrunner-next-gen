@@ -16,9 +16,9 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $script:failed = 0
 $paksOf = 'shader', 'shared', 'initial', 'boot', 'gfx'
 
-# the old release and this package with its sky pack, each in a folder of its own
+# the old release, and this one's two downloads unzipped into one folder as a player does, each in a folder of its own
 $oldDir = Join-Path $work 'old'; [IO.Compression.ZipFile]::ExtractToDirectory($Old, $oldDir)
-$newDir = Join-Path $work 'new'; Copy-Item -LiteralPath (Join-Path $root 'out\package\SnowRunnerNextGen') -Destination $newDir -Recurse
+$newDir = Join-Path $work 'new'; [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $root 'out\SnowRunnerNextGen.zip'), $newDir)
 [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $root 'out\SnowRunnerNextGen_Skies.zip'), $newDir)
 $want = @{}; foreach ($p in $paksOf) { $want[$p] = (Get-FileHash -LiteralPath (Join-Path $Originals "$p.pak.orig") -Algorithm SHA256).Hash }
 
@@ -40,7 +40,7 @@ function Apply([string]$dir, [string]$game, $selection) {
   $selection | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $file -Encoding ASCII
   $r = Engine $dir $game @('apply', '--selection', $file)
   # a game version the old release does not know asks to take the files as the originals, as its window does
-  if ($r[$r.Count - 1].type -eq 'adopt-files') { '     (the question answered with yes, as a player would)' | Out-Host; $r = Engine $dir $game @('apply', '--selection', $file, '--adopt') }
+  if ($r[$r.Count - 1].code -eq 'adopt-files') { '     (the question answered with yes, as a player would)' | Out-Host; $r = Engine $dir $game @('apply', '--selection', $file, '--adopt') }
   return ,$r
 }
 function Status([string]$dir, [string]$game) { return (Engine $dir $game @('status') | Where-Object { $_.type -eq 'status' } | Select-Object -First 1) }
@@ -64,42 +64,51 @@ function Restored([string]$dir, [string]$game, [string]$label) {
 # the windows' default choices: 1.0.2's cards, and this version's (catalog: the new cards Debris and splashes 4x,
 # Reflection cubes, Skies, and Weather's Drifting clouds)
 $shader = @('revec', 'seam', 'blocker', 'contact', 'gtao', 'aofar', 'ambient', 'sssr', 'headglow', 'water', 'puddles', 'rivertint', 'crestglow', 'smoke', 'smokeshade', 'tonemap', 'bloom')
-$old = [ordered]@{ shader = $shader; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = $null; sceneryHide = $null; sceneryShadows = $null
+$oldChoice = [ordered]@{ shader = $shader; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = $null; sceneryHide = $null; sceneryShadows = $null
   grass = $null; fill = '0.7'; grade = '1'; particles = '1'; stars = '3'; sky = '1'; weather = 'shadows,showers,evening,horizon,far,fireflies,pollen'; logos = '1' }
-$mirror = [ordered]@{}; foreach ($k in $old.Keys) { $mirror[$k] = $old[$k] }
-$mirror.debris = $null; $mirror.cubes = $null; $mirror.skies = $null; $mirror.maps = $null
-$new = [ordered]@{}; foreach ($k in $mirror.Keys) { $new[$k] = $mirror[$k] }
-$new.weather = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift'; $new.debris = '4'; $new.cubes = '1'; $new.skies = '1'
+$newChoice = [ordered]@{}; foreach ($k in $oldChoice.Keys) { $newChoice[$k] = $oldChoice[$k] }
+$newChoice.weather = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift'; $newChoice.debris = '4'; $newChoice.cubes = '1'; $newChoice.skies = '1'; $newChoice.maps = $null
+$all = 'shader', 'dll', 'grade', 'particles', 'stars', 'sky', 'weather', 'logos', 'fill', 'debris', 'cubes', 'skies'
+function States($s, [string[]]$names) { return (@($names | ForEach-Object { $s.$_.state }) -join ' ') }
+function Hash([string]$file) { if (Test-Path -LiteralPath $file) { return (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash }; return 'missing' }
 
 '--- update: the last public release, then this one'
 $env:NGEN_STATE_ROOT = Join-Path $work 'state_update'
 $game = NewGame 'game_update'
-$r = Apply $oldDir $game $old
+$r = Apply $oldDir $game $oldChoice
 Check 'update: the old release installs its defaults' $r[$r.Count - 1].type 'done'
 $s = Status $newDir $game
 '     as this version sees it: ' + (Parts $s)
 "     outdated: $(@($s.outdated) -join ', ')"
+Check 'update: the old release put its parts in' (States $s 'dll', 'grade', 'particles', 'stars', 'sky', 'weather', 'logos', 'fill') 'ours ours ours ours ours ours ours ours'
+# what the window then sends: the cards mirror what is installed (the shader cards as shader.pak holds them: an old
+# release that does not know the game's shader.pak leaves it), and the cards the old release did not have stay unticked
+$mirror = [ordered]@{}; foreach ($k in $oldChoice.Keys) { $mirror[$k] = $oldChoice[$k] }
+if ($s.shader.state -ne 'ours') { $mirror.shader = @() }
+$mirror.debris = $null; $mirror.cubes = $null; $mirror.skies = $null; $mirror.maps = $null
 $r = Apply $newDir $game $mirror
 Check 'update: Apply with the installed choices' $r[$r.Count - 1].type 'done'
 Check 'update: no warnings' @($r | Where-Object { $_.type -eq 'warn' }).Count 0
 $s = Status $newDir $game
 '     after: ' + (Parts $s)
 Check 'update: nothing outdated' (@($s.outdated) -join ',') ''
-$r = Apply $newDir $game $new
-Check 'update: Apply with the new cards ticked' $r[$r.Count - 1].type 'done'
+Check "update: SnowRunner Shadows is this release's" (Hash (Join-Path $game 'Sources\Bin\hid.dll')) (Hash (Join-Path $newDir 'engine\hid.dll'))
+$r = Apply $newDir $game $newChoice
+Check 'update: Apply with Defaults' $r[$r.Count - 1].type 'done'
 $s = Status $newDir $game
-Check 'update: the new cards in' ('{0} {1} {2} {3}' -f $s.debris.state, $s.cubes.state, $s.skies.state, $s.weather.parts) 'ours ours ours shadows,showers,evening,horizon,far,fireflies,pollen,drift'
+'     after: ' + (Parts $s)
+Check 'update: every part of the defaults in' (States $s $all) (@($all | ForEach-Object { 'ours' }) -join ' ')
 Restored $newDir $game 'update'
 
 '--- clean: this version on an untouched game'
 $env:NGEN_STATE_ROOT = Join-Path $work 'state_clean'
 $game = NewGame 'game_clean'
-$r = Apply $newDir $game $new
+$r = Apply $newDir $game $newChoice
 Check 'clean: Apply with the defaults' $r[$r.Count - 1].type 'done'
 Check 'clean: no warnings' @($r | Where-Object { $_.type -eq 'warn' }).Count 0
 $s = Status $newDir $game
 '     after: ' + (Parts $s)
-Check 'clean: every part of the defaults in' ('{0} {1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11}' -f $s.shader.state, $s.dll.state, $s.grade.state, $s.particles.state, $s.stars.state, $s.sky.state, $s.weather.state, $s.logos.state, $s.fill.state, $s.debris.state, $s.cubes.state, $s.skies.state) 'ours ours ours ours ours ours ours ours ours ours ours ours'
+Check 'clean: every part of the defaults in' (States $s $all) (@($all | ForEach-Object { 'ours' }) -join ' ')
 Restored $newDir $game 'clean'
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }

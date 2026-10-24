@@ -7,7 +7,7 @@ Next Gen Graphics (SnowRunner Next Gen before October 2026): graphics modules fo
 3. Pick the modules, then Apply. Restore puts the files back as they were before Next Gen Graphics changed them.
 
 The first Apply reads your game's own shaders and prepares the shader modules from them (a minute or two). The
-originals of the game's paks the program changes are kept in %LOCALAPPDATA%\SnowRunnerNextGen (about 4 GB). Restore
+originals of the game's paks the program changes are kept in %LOCALAPPDATA%\SnowRunnerNextGen (2 to 4 GB). Restore
 puts them back in the game and keeps those copies: to remove Next Gen Graphics for good, delete that folder by hand
 after Restore. Map days changes a few names in the level files in place, and Restore writes the game's own names
 back. Another mod's hid.dll is kept next to the game as hid_chain.dll and given back on Restore.

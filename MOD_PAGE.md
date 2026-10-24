@@ -35,7 +35,7 @@ The (?) on each card says what the module does, what to look for, and what it co
 3. The program finds the game through Steam, Epic Games or the Microsoft Store. If it does not, pick the game folder.
 4. Pick the modules, then click Apply. The first Apply reads your game's own shaders and prepares the modules from them, which takes a minute or two.
 
-Restore originals puts every file back as it was and takes SnowRunner Shadows out. The copies of the original files stay in %LOCALAPPDATA%\SnowRunnerNextGen (about 4 GB): to remove the mod for good, delete that folder by hand after Restore.
+Restore originals puts every file back as it was and takes SnowRunner Shadows out. The copies of the original files stay in %LOCALAPPDATA%\SnowRunnerNextGen (2 to 4 GB): to remove the mod for good, delete that folder by hand after Restore.
 
 ## Other mods and game updates
 
