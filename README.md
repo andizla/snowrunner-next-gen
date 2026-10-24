@@ -72,6 +72,8 @@ The first Apply reads your game's own shaders and prepares the shader modules fr
 
 Click Restore originals. Every file goes back to what it was before SnowRunner Next Gen changed it, and SnowRunner Shadows comes out.
 
+Restore keeps the copies of the original files in `%LOCALAPPDATA%\SnowRunnerNextGen` (about 4 GB), and the program never deletes them. To remove the mod for good, delete that folder by hand after Restore.
+
 ## Other mods and game updates
 
 The program keeps a copy of each file before its first change and builds from those copies. When another mod or a game update has changed one of those files since, Apply and Restore ask first:
