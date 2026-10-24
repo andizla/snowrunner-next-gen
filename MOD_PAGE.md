@@ -1,8 +1,10 @@
-# SnowRunner Next Gen
+# Next Gen Graphics for SnowRunner
 
 Graphics modules for SnowRunner, installed from one window: sharper shadows with straight edges, ground truth ambient occlusion and bounce light, reflections on paint, glass, water and wet ground, volumetric fog, more of the game's weather, the night sky with real stars, and a photo colour grade. Tick the modules you want and click Apply. Restore puts the game's own files back.
 
-It works without ReShade or any other loader. The shaders go into the game's own shader cache, and SnowRunner Shadows is one small DLL next to the game.
+Called SnowRunner Next Gen before October 2026. It needs no loader or injector: the shaders go into the game's own shader cache, and SnowRunner Shadows is one small DLL next to the game.
+
+The full guide, a PDF with a part for beginners and every card and setting in depth: [SnowRunner_Next_Gen_Guide.pdf](https://github.com/andizla/snowrunner-next-gen/blob/main/docs/SnowRunner_Next_Gen_Guide.pdf)
 
 ## Before and after
 

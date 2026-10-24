@@ -4,7 +4,9 @@ Graphics modules for SnowRunner, installed from one window. Called SnowRunner Ne
 
 Each card in the window is one module: sharper shadows, ambient occlusion, bounce light, reflections on paint and water, fog, smoke, colour, the night sky. Tick what you want and click Apply. The program builds the game's files on your machine, from your own game files, and installs them. Restore puts the files back as they were.
 
-It works without ReShade or any other loader. The shaders go into the game's own shader cache, and SnowRunner Shadows is one small DLL next to the game.
+It needs no loader or injector: the shaders go into the game's own shader cache, and SnowRunner Shadows is one small DLL next to the game.
+
+The full guide, a PDF with a part for beginners and every card and setting in depth: [docs/SnowRunner_Next_Gen_Guide.pdf](docs/SnowRunner_Next_Gen_Guide.pdf)
 
 ## Modules
 

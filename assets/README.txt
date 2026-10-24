@@ -1,4 +1,5 @@
 Next Gen Graphics (SnowRunner Next Gen before October 2026): graphics modules for SnowRunner, in one window.
+The full guide (PDF): https://github.com/andizla/snowrunner-next-gen/blob/main/docs/SnowRunner_Next_Gen_Guide.pdf
 
 1. Close SnowRunner.
 2. Unzip this folder anywhere and run SnowRunnerNextGen.exe. Nothing else needs to be installed. For the Skies card,
