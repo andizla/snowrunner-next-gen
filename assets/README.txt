@@ -24,4 +24,7 @@ file. Or leave it out: the file and its modules stay as they are.
 When something goes wrong: every Apply and Restore is written to %LOCALAPPDATA%\SnowRunnerNextGen\install.log.
 Send that file along when you report a problem.
 
+Thanks to Milos_Mk6 (https://mod.io/g/snowrunner/u/milos-mk6), who tested the 1.1.0 builds and found the hard-edged
+islands in the Milky Way.
+
 Licence: GNU GPL version 3 (LICENSE). Third-party notices: THIRD_PARTY_NOTICES.md and licenses\.

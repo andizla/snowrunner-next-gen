@@ -1,6 +1,6 @@
 # Third party notices
 
-SnowRunner Next Gen is licensed under the GNU General Public License version 3 (LICENSE). It contains or builds on the
+Next Gen Graphics (SnowRunner Next Gen before October 2026) is licensed under the GNU General Public License version 3 (LICENSE). It contains or builds on the
 following third-party work.
 
 ## XeGTAO
