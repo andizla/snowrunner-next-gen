@@ -89,6 +89,8 @@ A game update or the store's file check replaces the game's files with the origi
 
 Every Apply and Restore is written to `install.log` in `%LOCALAPPDATA%\SnowRunnerNextGen`: what the program found and each step it took. After a stop or a note, Show the log in the result window opens that folder. Send the file along when you report a problem.
 
+Support, questions and talk about the mod: the channel on [Enthusiast Runner's Discord](https://discord.com/invite/MssDb2Pvcj), with thanks to Enthusiast Runner for it. A problem can also be reported as an issue here.
+
 ## What it changes
 
 In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather, debris and splashes, and Maine's own days with Map days map by map), `boot.pak` (photo grade, particles, night sky, reflection cubes, winter skies), `gfx.pak` (the logo, and the start without the intro) and, with Map days, a few names in the level files of Maine, British Columbia, Austria and Washington, all under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in the folder with `SnowRunner.exe` (`Sources\Bin` on Steam). Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
