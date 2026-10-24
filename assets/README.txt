@@ -29,5 +29,6 @@ https://discord.com/invite/MssDb2Pvcj (thanks to EnthusiastRunner for it).
 
 A big thank you to Milos_Mk6, who gave their time to the early builds. Their runs, feedback and patience shaped
 this release, and it would not be what it is without them.
+Thank you also to demonbleak66 for the comments, suggestions and feedback on Next Gen Graphics.
 
 Licence: GNU GPL version 3 (LICENSE). Third-party notices: THIRD_PARTY_NOTICES.md and licenses\.

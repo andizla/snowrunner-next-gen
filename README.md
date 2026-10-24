@@ -132,6 +132,7 @@ GNU General Public License v3.0 (GPL-3.0-only), see `LICENSE`. Third party notic
 - The night sky's star map is made from Deep Star Maps 2020 by NASA's Scientific Visualization Studio.
 - Milliath found how far the game draws grass, the limit Grass reach keeps to.
 - A big thank you to Milos_Mk6, who gave their time to the early builds. Their runs, feedback and patience shaped this release, and it would not be what it is without them.
+- Thank you also to demonbleak66 for the comments, suggestions and feedback on Next Gen Graphics.
 - The skies and the reflection cubes are made from CC0 panoramas on Poly Haven; their authors are named in `THIRD_PARTY_NOTICES.md`.
 - The package runs its engine on Node.js.
 
