@@ -130,6 +130,20 @@ function skyMedian(p, yaw)
     lum.sort((a, b) => a - b);
     return lum[lum.length >> 1];
 }
+// --contrast k: every texel's light spread around the sky half's geometric mean luminance, L' = G (L / G)^k, its colour
+// kept; for the flat overcast photographs (a low-contrast deck reads as plain against the game's own stormy skies)
+function spread(p, k)
+{
+    let sum = 0, n = 0;
+    for (let y = 0; y < p.h >> 1; y += 2)
+        for (let x = 0; x < p.w; x += 2) { const o = (y * p.w + x) * 3; sum += Math.log(Math.max(1e-6, 0.2126 * p.data[o] + 0.7152 * p.data[o + 1] + 0.0722 * p.data[o + 2])); n++; }
+    const g = Math.exp(sum / n);
+    for (let o = 0; o < p.data.length; o += 3)
+    {
+        const f = Math.pow(Math.max(1e-6, 0.2126 * p.data[o] + 0.7152 * p.data[o + 1] + 0.0722 * p.data[o + 2]) / g, k - 1);
+        p.data[o] *= f; p.data[o + 1] *= f; p.data[o + 2] *= f;
+    }
+}
 const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 const linear = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
 // the ground gain: a factor on everything below the horizon, faded in over the first GROUND_FADE of elevation, as a
@@ -818,8 +832,12 @@ if (require.main === module)
             // --no-sun takes the panorama's sun out; --tex-rgb r,g,b white-balances and exposes the picture until the
             // texture's own mean colour lands on it (the stock texture's, so a state's tint works on it as before);
             // --fade x sets the share of the height the alpha fades over at the bottom (0: opaque); --grey writes the
-            // luminance alone; --preview writes <out>.png, 1024 x 256
+            // luminance alone; --contrast k spreads the light around its mean (see spread; 1, the default, leaves it);
+            // --preview writes <out>.png, 1024 x 256
             const p = readHdr(args[1]), sunRadius = args.includes('--no-sun') ? removeSun(p) : 0;
+            const contrast = opt('contrast') === null ? 1 : Number(opt('contrast'));
+            if (!(contrast > 0 && contrast < 4)) throw new Error('--contrast takes a value above 0 and below 4');
+            if (contrast !== 1) spread(p, contrast);
             capOf(p);
             const want = opt('tex-rgb') === null ? null : opt('tex-rgb').split(',').map(Number);
             if (want && !(want.length === 3 && want.every((v) => v > 0 && v < 1))) throw new Error('--tex-rgb takes three values between 0 and 1');
@@ -834,7 +852,7 @@ if (require.main === module)
             }
             const look = { fade: opt('fade') === null ? HORIZON_FADE : Number(opt('fade')), grey: args.includes('--grey'), cap: !args.includes('--no-cap'), preview: args.includes('--preview') ? args[2].replace(/\.pct$/i, '') + '.png' : null };
             const t = writeSkyPct(args[2], p, exposure, yaw, opt('header'), look);
-            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): ' + t.w + ' x ' + t.h + ', ' + t.mips + ' mips, exposure ' + exposure.toFixed(4) + ', mean ' + texColour(p, exposure).map((v) => v.toFixed(2)).join('/') + ', sun ' + (sunRadius ? 'taken out, ' + sunRadius + ' degrees' : 'left') + ', fade ' + look.fade + (look.grey ? ', grey' : '') + ', white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
+            console.log('built ' + args[2] + ' from ' + path.basename(args[1]) + ' (' + p.w + ' x ' + p.h + '): ' + t.w + ' x ' + t.h + ', ' + t.mips + ' mips, exposure ' + exposure.toFixed(4) + ', mean ' + texColour(p, exposure).map((v) => v.toFixed(2)).join('/') + ', sun ' + (sunRadius ? 'taken out, ' + sunRadius + ' degrees' : 'left') + ', fade ' + look.fade + (look.grey ? ', grey' : '') + (contrast !== 1 ? ', contrast ' + contrast : '') + ', white ' + TONE.white + ', cap ' + TONE.cap.toFixed(3) + ', yaw ' + yaw);
         }
         else if (cmd === 'pak' && args[1] && args[2] && args.length > 3)
         {
