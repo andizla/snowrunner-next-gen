@@ -30,7 +30,7 @@
 // and in the directory. Nothing is kept for the way back: restore writes the game's names, which the table holds, and
 // the CRC comes out as it was. A level pak that is missing, whose file is compressed or whose names are neither the
 // game's nor ours is left as it is.
-// usage: node level_states.js status | list | install <rows, e.g. maine,bc or maineown,bcown> | restore
+// usage: node level_states.js status | list | install <rows, e.g. maine,bc or maineown,bcown> | restore | own-named
 //        status: one line of JSON, { "maine": "ours" | "own" | "vanilla" | "part" | "changed" | "missing", ... }
 //        install: the rows named take our names, every other row the game's; restore: every row the game's
 //        SR_PAKS_DIR points at the folder with the level paks; install and restore with the game closed
@@ -224,7 +224,9 @@ if (require.main === module)
                 for (const [level, [from, to]] of Object.entries(ROWS[row].levels)) console.log(row.padEnd(8) + level + '  ' + from + ' -> ' + to + (ROWS[row].own ? ' or ' + ownOf(ROWS[row], level) : '') + '  ' + levelState(path.join(PAKS, level + '.pak'), from, to, ROWS[row].own ? ownOf(ROWS[row], level) : undefined));
         else if (cmd === 'install') install(rowSpec(arg));
         else if (cmd === 'restore') install([]);
-        else console.log('usage: node level_states.js status | list | install <rows: ' + ROW_NAMES.join(',') + '> | restore');
+        // the sets of a region's own a level file still names (comma list, empty for none): initial.pak keeps those
+        else if (cmd === 'own-named') console.log(ownNamed().join(','));
+        else console.log('usage: node level_states.js status | list | install <rows: ' + ROW_NAMES.join(',') + '> | restore | own-named');
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }

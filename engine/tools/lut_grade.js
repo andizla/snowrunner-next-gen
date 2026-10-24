@@ -208,8 +208,21 @@ function plan(file, parts)
     }
     finally { fs.closeSync(fd); }
 }
-// the sky pack is beside the program (its folder holds textures)
-function skiesAtHand() { try { return fs.readdirSync(SKIES).some((f) => /\.pct$/i.test(f)); } catch (e) { return false; } }
+// the sky pack beside the program: its list (pack.json, written by package.ps1 one folder above the textures) names
+// every file of the pack and its size. complete: each is there at that size; incomplete: some are missing or cut short
+// (an unzip stopped half way went into boot.pak without a word, review 5, C10); missing: none is. A folder without a
+// list (a working tree) counts its textures alone
+function skiesPack()
+{
+    let pct;
+    try { pct = fs.readdirSync(SKIES).filter((f) => /\.pct$/i.test(f)); } catch (e) { return { state: 'missing' }; }
+    const list = path.join(SKIES, '..', 'pack.json');
+    if (!fs.existsSync(list)) return { state: pct.length ? 'complete' : 'missing' };
+    const files = JSON.parse(fs.readFileSync(list, 'utf8')).files || {}, names = Object.keys(files);
+    const bad = names.filter((rel) => { try { return fs.statSync(path.join(SKIES, '..', rel)).size !== files[rel]; } catch (e) { return true; } }).length;
+    return { state: !bad ? 'complete' : bad === names.length ? 'missing' : 'incomplete', bad, of: names.length };
+}
+function skiesAtHand() { return skiesPack().state === 'complete'; }
 // the skies as the boot.pak in the game holds them, as jobs over the original's entries (z, fd: the original): every
 // entry that differs from the original there and is none of the other parts' (the LUTs, the lens dirt, the particle,
 // night sky and cube sets' names, whose files ship with the program), so the build in the game must be this tool's,
@@ -422,6 +435,9 @@ function adopt()
     if (st === 'ours') { console.log('photo grade: boot.pak is this tool\'s own build: nothing to adopt'); return; }
     if (st === 'vanilla') { console.log('photo grade: boot.pak is already the original'); return; }
     const note = readNote(), had = { grade: note.strength || null, particles: !!note.particles, sky: !!note.sky, cubes: !!note.cubes, skies: !!note.skies };
+    // the last build's skies are told from the other mod's changes by the sky pack's own files; without the pack the
+    // whole last build stayed in the new original, out of Restore's reach (review 5, C8). Nothing is touched yet
+    if (had.skies && !skiesAtHand()) throw new Error('boot.pak holds the skies of the last build, and the sky pack is not beside this program: unzip the sky pack (SnowRunnerNextGen_Skies.zip) into this program\'s folder, then take boot.pak as it is now as the original');
     // what the last build wrote per entry name, with the old original's entry and bytes
     const last = new Map();
     if ((had.grade || had.particles || had.sky || had.cubes || had.skies) && fs.existsSync(ORIG))

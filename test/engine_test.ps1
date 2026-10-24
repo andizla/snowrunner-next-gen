@@ -182,6 +182,24 @@ Remove-Item Env:\SR_SKIES_DIR
 $r = Apply $everything
 Check 'the sky pack back: every part in again' ('{0} {1}' -f (Last $r), [string](Status).skies.state) 'done ours'
 
+'the sky pack cut short (an unzip that stopped half way): Apply leaves the skies out and says so'
+$cut = Join-Path $work 'cut_sky_pack'; $cutPct = Join-Path $cut 'pct'
+New-Item -ItemType Directory -Force -Path $cutPct | Out-Null
+$skySrc = @(Get-ChildItem -LiteralPath (Join-Path $root 'engine\replacements\skies\pct') -File | Sort-Object Name)
+$packList = [ordered]@{}; foreach ($f in $skySrc) { $packList['pct/' + $f.Name] = $f.Length }
+[IO.File]::WriteAllText((Join-Path $cut 'pack.json'), (([ordered]@{ version = 'test'; files = $packList }) | ConvertTo-Json))
+$skySrc | Select-Object -First ($skySrc.Count - 1) | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $cutPct }
+$noSkies = [ordered]@{}; foreach ($k in $everything.Keys) { $noSkies[$k] = $everything[$k] }; $noSkies['skies'] = $null
+$r = Apply $noSkies
+Check 'cut sky pack: the skies out first' ([string](Status).skies.state) 'vanilla'
+$env:SR_SKIES_DIR = $cutPct
+$r = Apply $everything
+Check 'cut sky pack: Apply says the pack is incomplete' (Warned $r 'sky pack beside this program is incomplete') 'True'
+Check 'cut sky pack: the skies stay out' ([string](Status).skies.state) 'vanilla'
+Remove-Item Env:\SR_SKIES_DIR
+$r = Apply $everything
+Check 'cut sky pack: the whole pack puts them in again' ('{0} {1}' -f (Last $r), [string](Status).skies.state) 'done ours'
+
 'the same selection again'
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $r = Apply $everything
@@ -421,6 +439,26 @@ Check 'moved back: the same state again, under the first name' ('{0} {1}' -f @((
 $r = Engine @('restore')
 Check 'moved back: restore, and the note is gone' ('{0} {1}' -f (Last $r), (Note)) 'done none'
 foreach ($p in 'shader', 'boot', 'initial') { Check "moved back: $p.pak is the original byte for byte" (Hash (Join-Path $paks "$p.pak")) (Hash (Join-Path $originals "$p.pak.orig")) }
+
+'the skies in, the sky pack not beside the program, another mod changes boot.pak, and the answer is yes: refused (review 5, C8)'
+$skiesOnly = [ordered]@{ shader = @(); shadows = $null; scenery = $null; grass = $null; fill = $null; grade = '1'; skies = '1' }
+$r = Apply $skiesOnly
+Check 'skies, no pack, adopt: the skies in first' ('{0} {1}' -f (Last $r), (Status).skies.state) 'done ours'
+$bootKept = Join-Path $work 'boot_before_the_other_mod.pak'
+Copy-Item -LiteralPath $boot -Destination $bootKept -Force
+AddEntry $boot $modFile3 $modText3 $modCrc3
+$env:SR_SKIES_DIR = $noPack
+$bootBefore = Hash $boot
+$r = Apply $skiesOnly @('--adopt')
+$e = $r[$r.Count - 1]
+Check 'skies, no pack, adopt: refused, naming the sky pack' ('{0} {1}' -f $e.type, ([string]$e.text -match 'unzip the sky pack')) 'error True'
+Check 'skies, no pack, adopt: boot.pak untouched' ((Hash $boot) -eq $bootBefore) 'True'
+Remove-Item Env:\SR_SKIES_DIR
+# the game as the test left it before (the package test goes on from there): the build without the other mod's file, restored
+Copy-Item -LiteralPath $bootKept -Destination $boot -Force
+Remove-Item -LiteralPath $bootKept
+$r = Engine @('restore')
+Check 'skies, no pack, adopt: Restore after, the originals back' ('{0} {1}' -f (Last $r), ((Hash $boot) -eq (Hash (Join-Path $originals 'boot.pak.orig')))) 'done True'
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }
 'all passed'

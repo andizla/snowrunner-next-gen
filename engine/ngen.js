@@ -511,8 +511,20 @@ async function readPaks(g, state)
     const env = toolEnv(g, state);
     // a pak a tool cannot read (zip64, bytes behind its end record, more than 65535 entries: another tool's layout) reads
     // as changed by something else, so status, Apply and Restore go on with every other file instead of all stopping
-    // (review 3, N3); the log says why
-    const tolerant = async (what, read, fallback) => { try { return await read(); } catch (e) { logLine(what + ' could not be read, taken as changed by something else: ' + e.message); return fallback; } };
+    // (review 3, N3); the log says why. Only a zip layout the tools cannot read counts: any other failure (a lock, a full
+    // disk, a fault in a tool) stops as before instead of leading to the question to take the files as the originals,
+    // which for shared.pak and shader.pak would keep this program's own build as one (review 5, C9)
+    const ZIP_LAYOUT = /no zip end record|no zip directory|zip64|behind the zip end record|between the central directory and the end record|bad central directory record|entry count differs from the end record|bad local header/i;
+    const tolerant = async (what, read, fallback) =>
+    {
+        try { return await read(); }
+        catch (e)
+        {
+            if (!ZIP_LAYOUT.test(String(e && e.message))) throw e;
+            logLine(what + ' could not be read, taken as changed by something else: ' + e.message);
+            return fallback;
+        }
+    };
     const changed = { state: 'changed' };
     const said = await tolerant('shader.pak', () => answer('fidelity_bundle.js', ['modules'], env), 'changed');   // stock, a comma list, unknown (or changed: unreadable)
     let shader;
@@ -615,7 +627,19 @@ const NOTE_ABOUT = 'Next Gen Graphics (SnowRunner Next Gen before October 2026) 
 const pakFile = (g, name) => g[name.replace(/\.pak$/, '')];
 // the sky textures come as a download of their own (package.ps1): whether they are in this copy
 // (where lut_grade.js looks for them: SR_SKIES_DIR, else replacements\skies\pct beside the tools)
-const skiesPack = () => { try { return fs.readdirSync(process.env.SR_SKIES_DIR || path.join(config.tools, '..', 'replacements', 'skies', 'pct')).some((f) => f.endsWith('.pct')); } catch (e) { return false; } };
+// as lut_grade.js's skiesPack reads it: complete, incomplete (a file of its list, pack.json, missing or cut short:
+// review 5, C10) or missing; a folder without the list (a working tree) counts its textures alone
+const skiesPack = () =>
+{
+    const dir = process.env.SR_SKIES_DIR || path.join(config.tools, '..', 'replacements', 'skies', 'pct');
+    let pct;
+    try { pct = fs.readdirSync(dir).filter((f) => /\.pct$/i.test(f)); } catch (e) { return { state: 'missing' }; }
+    const list = path.join(dir, '..', 'pack.json');
+    if (!fs.existsSync(list)) return { state: pct.length ? 'complete' : 'missing' };
+    const files = JSON.parse(fs.readFileSync(list, 'utf8')).files || {}, names = Object.keys(files);
+    const bad = names.filter((rel) => { try { return fs.statSync(path.join(dir, '..', rel)).size !== files[rel]; } catch (e) { return true; } }).length;
+    return { state: !bad ? 'complete' : bad === names.length ? 'missing' : 'incomplete', bad, of: names.length };
+};
 
 // sha256 of a pak's file directory (the zip's central directory), which changes with any entry; null when the file is
 // missing or has no directory
@@ -836,7 +860,7 @@ const unlockState = (file) => { try { fs.unlinkSync(file); } catch (e) { /* noth
 // before the first write: the folders the run writes in take a file, the paks it may rewrite open for writing (not
 // read-only, not held by another program), and SnowRunner Shadows' preconditions hold; a run that would stop halfway
 // stops here instead, with nothing changed
-function preflight(g, needDll)
+function preflight(g, needDll, levelsToo)
 {
     // Windows refuses the change: the Xbox app's version, and a game under Program Files on some machines, let only an
     // administrator change the game's files
@@ -850,8 +874,9 @@ function preflight(g, needDll)
     };
     probe(g.paks);
     if (g.bin) probe(g.bin);
-    // the five paks, and the level paks Map days writes in place (review 3, N8: they had no check before the first write)
-    const levels = Object.values(require(path.join(config.tools, 'level_states.js')).ROWS).flatMap((r) => Object.keys(r.levels)).map((l) => path.join(g.paks, l + '.pak'));
+    // the five paks, and the level paks Map days writes in place (review 3, N8: they had no check before the first write),
+    // these only when this run may write them: a read-only or locked level pak stopped every run (review 5, C12)
+    const levels = levelsToo ? Object.values(require(path.join(config.tools, 'level_states.js')).ROWS).flatMap((r) => Object.keys(r.levels)).map((l) => path.join(g.paks, l + '.pak')) : [];
     for (const file of ['shader', 'shared', 'initial', 'boot', 'gfx'].map((name) => g[name]).concat(levels))
     {
         if (!fs.existsSync(file)) continue;
@@ -901,7 +926,7 @@ async function apply(g, state, sel, adopt, leave)
     step('Reading what is installed');
     const now = await readStatus(g, state);
     if (now.orphaned.length) throw new EngineError('orphaned', orphanText(now.orphaned, false), { files: now.orphaned });
-    preflight(g, !!sel.shadows);
+    preflight(g, !!sel.shadows, !!sel.maps || now.maps.state === 'ours');
     const notes = lastNotes(state), last = notes.selection || {};
 
     // the files another mod changed that this selection writes: one question for all of them, before anything is written
@@ -1081,7 +1106,8 @@ async function apply(g, state, sel, adopt, leave)
     }
     else if (now.skies.state === 'ours' && sameCode(notes, 'skies')) emit({ type: 'log', text: 'boot.pak already has the skies' });
     else if (now.skies.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the skies were left out.');
-    else if (!skiesPack()) warn('Skies needs the sky pack, a download of its own (SnowRunnerNextGen_Skies.zip, beside this program\'s download), unzipped into this program\'s folder. The skies were left out.');
+    else if (skiesPack().state === 'incomplete') warn('The sky pack beside this program is incomplete: ' + skiesPack().bad + ' of its ' + skiesPack().of + ' files are missing or cut short. Unzip SnowRunnerNextGen_Skies.zip into this program\'s folder again. The skies were left out.');
+    else if (skiesPack().state !== 'complete') warn('Skies needs the sky pack, a download of its own (SnowRunnerNextGen_Skies.zip, beside this program\'s download), unzipped into this program\'s folder. The skies were left out.');
     else { step('Putting the skies in (boot.pak, 490 MB)'); await must('lut_grade.js', ['skies-install'], env); }
 
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
@@ -1126,7 +1152,7 @@ async function restore(g, state, adopt, leave)
     step('Reading what is installed');
     const now = await readStatus(g, state);
     if (now.orphaned.length) throw new EngineError('orphaned', orphanText(now.orphaned, true), { files: now.orphaned });
-    preflight(g, false);
+    preflight(g, false, now.maps.state === 'ours');
     // files another mod changed since the last apply put Next Gen's changes in them: with the player's yes they are taken
     // as they are now, so restore takes Next Gen's changes out of them and keeps the other mod's
     const last = lastNotes(state).selection || {};
@@ -1160,8 +1186,13 @@ async function restore(g, state, adopt, leave)
     // once they are gone
     if (now.maps.state === 'ours') { step('Putting the maps\' own days back (the level files)'); await must('level_states.js', ['restore'], env); }
     const partsIn = now.grass.state === 'ours' || now.fill.state === 'ours' || now.stars.state === 'ours' || now.weather.state === 'ours' || now.debris.state === 'ours';
+    // a level file that still names days of a region's own (one of its files changed by something else, so the level
+    // files were not put back) keeps initial.pak as it is: the original holds no such days, and that map would no longer
+    // load (review 5, C13)
+    const stillNamed = now.ownDays ? await answer('level_states.js', ['own-named'], env) : '';
+    if (stillNamed) warn('initial.pak was left as it is: a level file changed by something else still names days of its own (' + stillNamed + '), which the game\'s own initial.pak does not hold. Restore again once the level files are the game\'s own (the store\'s file check puts them back).');
     // with days of a region's own in it, the step before may have left the original already
-    if (now.ownDays ? (await readInitial(g, env)).initialPak === 'ours' : partsIn) { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
+    else if (now.ownDays ? (await readInitial(g, env)).initialPak === 'ours' : partsIn) { step('Putting the original initial.pak back'); await must('lod_patch.js', ['initial-restore'], env); }
     else if (initialLeft) warn('initial.pak was changed by something else: left as it is.');
     if (fileStamp(g.boot) !== bootStamp) await refreshInitial(g, env);
     if (now.logos.state === 'ours') { step('Putting the original gfx.pak back (700 MB)'); await must('gfx_logos.js', ['restore'], env); }

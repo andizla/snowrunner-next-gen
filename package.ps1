@@ -166,6 +166,11 @@ $isSky = { param($f) $f.FullName.StartsWith($skiesDir + '\', [StringComparison]:
 $listed = [ordered]@{}
 foreach ($f in (Get-ChildItem -LiteralPath $engine -File -Recurse | Where-Object { $_.FullName -ne (Join-Path $engine 'config.json') -and -not (& $isSky $_) } | Sort-Object FullName)) { $listed[$f.FullName.Substring($pkg.Length + 1).Replace('\', '/')] = $f.Length }
 [IO.File]::WriteAllText((Join-Path $engine 'files.json'), ((([ordered]@{ version = $version; files = $listed }) | ConvertTo-Json).Replace("`r`n", "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
+# the sky pack's own list, in the pack (one folder above its textures): each file's path from there and its size, so the
+# engine can tell a pack an unzip left short from a whole one (review 5, C10)
+$packList = [ordered]@{}
+foreach ($f in (Get-ChildItem -LiteralPath $skiesDir -File -Recurse | Where-Object { $_.Name -ne 'pack.json' } | Sort-Object FullName)) { $packList[$f.FullName.Substring($skiesDir.Length + 1).Replace('\', '/')] = $f.Length }
+[IO.File]::WriteAllText((Join-Path $skiesDir 'pack.json'), ((([ordered]@{ version = $version; files = $packList }) | ConvertTo-Json).Replace("`r`n", "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
 
 # The zip is the release's download and is made only on request (-Zip). An older one goes either way, so that no zip
 # outlives the folder it was made from. It is written entry by entry with forward slashes in its paths, as the zip
