@@ -122,6 +122,8 @@ GNU General Public License v3.0 (GPL-3.0-only), see `LICENSE`. Third party notic
 - The rebuilt shadow edges follow revectorization-based shadow mapping by Macedo and Apolinário (2016) and shadow map silhouette revectorization by Bondarev (2014).
 - The night sky's star map is made from Deep Star Maps 2020 by NASA's Scientific Visualization Studio.
 - Milliath found how far the game draws grass, the limit Grass reach keeps to.
+- Thanks to the players who tested and reported: [Milos_Mk6](https://mod.io/g/snowrunner/u/milos-mk6) tested the 1.1.0 builds and found the hard-edged islands in the Milky Way, [foxrunner96](https://mod.io/g/snowrunner/u/foxrunner96) reported how 1.0.2 fared on the game's October update, [demonbleak66](https://mod.io/g/snowrunner/u/demonbleak66) reported artifacts in the water reflections, and MoonPerc reported the old picture left in the shadows after a video setting changed.
+- The skies and the reflection cubes are made from CC0 panoramas on Poly Haven; their authors are named in `THIRD_PARTY_NOTICES.md`.
 - The package runs its engine on Node.js.
 
 SnowRunner is a game by Saber Interactive. This project is not affiliated with Saber Interactive or Focus Entertainment.
