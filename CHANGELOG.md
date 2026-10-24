@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.0] - not released yet
+## [1.1.0] 2026-10-24
 
 - After test build 3, from a review of the release (tested offline):
   - The sky pack carries a list of its files and their sizes: a pack an unzip left short is told apart, and Apply leaves the skies out and says to unzip it again, instead of writing the textures it has.
