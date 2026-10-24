@@ -131,7 +131,7 @@ namespace SnowRunnerNextGen
 
             d["headshadow"] = E(
                 Does, "The game lights everything in your headlights' cone, even what stands behind a post or a tree. For every lit pixel this walks from it towards each of the two lamps through what is on screen, and dims the headlight's light where something stands in the way.",
-                Notice, "At night, posts, trees, rocks and other trucks throw long shadows away from your lamps, two side by side up close that merge further off.",
+                Notice, "At night, posts, trees, rocks and other trucks throw long shadows away from your lamps, their edges half lit where only one lamp reaches.",
                 Costs, "Some graphics time where the headlights fall: up to 48 depth reads for each lit pixel.",
                 Know, "Needs SnowRunner Shadows, which supplies the depth. Only what is on screen can cast these shadows, and nothing closer than 2.5 m to the lamps. Seen working in the game once and not tuned yet, so it is off by default.");
 

@@ -4,8 +4,8 @@
 // pixel towards the lamp through the scene's depth and finds what stands in the way. The splice
 // (tools\patch_headshadow.js) multiplies the light pattern's sample by it.
 //
-// Technique: a ray from the surface to each lamp of the pair (the headlights sit HS_SPREAD metres apart across the
-// truck: up close a pole throws two shadows that merge further off), stepped evenly across the screen so thin casters
+// Technique: a ray from the surface to each of two lamps HS_SPREAD metres apart across the truck (each lamp's light is
+// tested on its own and the two are averaged), stepped evenly across the screen so thin casters
 // are not stepped over, each step's depth compared with the scene's linear depth there. A step behind what the camera
 // sees, by more than a bias and less than a thickness, is blocked; the comparison is soft over HS_SOFT metres, and the
 // steps start at a per-pixel offset (interleaved gradient noise, Jimenez 2014) that the game's temporal anti-aliasing
