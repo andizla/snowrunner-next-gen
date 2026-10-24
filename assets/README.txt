@@ -27,7 +27,7 @@ Send that file along when you report a problem.
 Support, questions and talk about the mod: the channel on Enthusiast Runner's Discord,
 https://discord.com/invite/MssDb2Pvcj (thanks to Enthusiast Runner for it).
 
-A big thank you to Milos_Mk6 (https://mod.io/g/snowrunner/u/milos-mk6), who gave their time to the early builds.
-Their runs, feedback and patience shaped this release, and it would not be what it is without them.
+A big thank you to Milos_Mk6, who gave their time to the early builds. Their runs, feedback and patience shaped
+this release, and it would not be what it is without them.
 
 Licence: GNU GPL version 3 (LICENSE). Third-party notices: THIRD_PARTY_NOTICES.md and licenses\.
