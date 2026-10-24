@@ -27,7 +27,7 @@ Send that file along when you report a problem.
 Support, questions and talk about the mod: the channel on Enthusiast Runner's Discord,
 https://discord.com/invite/MssDb2Pvcj (thanks to Enthusiast Runner for it).
 
-Thanks to Milos_Mk6 (https://mod.io/g/snowrunner/u/milos-mk6), who tested the 1.1.0 builds and found the hard-edged
-islands in the Milky Way.
+A big thank you to Milos_Mk6 (https://mod.io/g/snowrunner/u/milos-mk6), who gave their time to the early builds.
+Their runs, feedback and patience shaped this release, and it would not be what it is without them.
 
 Licence: GNU GPL version 3 (LICENSE). Third-party notices: THIRD_PARTY_NOTICES.md and licenses\.
