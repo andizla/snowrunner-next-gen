@@ -62,7 +62,7 @@ The (?) on each card says what the module does, what to look for, and what it co
 ## Install
 
 1. Close SnowRunner.
-2. Unzip the folder anywhere and run `SnowRunnerNextGen.exe`. Nothing else needs to be installed. For the Skies card, unzip the sky pack (`SnowRunnerNextGen_Skies.zip`, a download of its own, about 210 MB) into the same folder; without it the skies are left out.
+2. Unzip the folder anywhere and run `SnowRunnerNextGen.exe`. Nothing else needs to be installed. For the Skies card, unzip the sky pack (`SnowRunnerNextGen_Skies.zip`, a download of its own, about 100 MB) into the same folder; without it the skies are left out.
 3. The program finds the game through Steam, Epic Games or the Microsoft Store. If it does not, pick the game folder.
 4. Pick the modules, then click Apply.
 

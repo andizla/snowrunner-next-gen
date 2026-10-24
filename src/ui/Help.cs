@@ -246,7 +246,7 @@ namespace SnowRunnerNextGen
             d["skies"] = E(
                 Does, "A region's sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 49 of the game's sky domes and cloud bands, across every region, with ones made from photographs of real skies, the Milky Way on two night layers with the real one from NASA's star map, and the aurora's blue and violet with a real aurora's green. Each keeps the size of the texture it replaces and the game's own brightness for it. The photographs' own sun is taken out, so the game's sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency.",
                 Notice, "Real clouds and skies by day, still drifting; at dusk, dawn and night the game's tint over them.",
-                Costs, "Nothing in the game. The textures come as a download of their own, the sky pack (SnowRunnerNextGen_Skies.zip, about 210 MB, 490 MB unzipped), unzipped into this program's folder; without it Apply leaves the skies out and says so.",
+                Costs, "Nothing in the game. The textures come as a download of their own, the sky pack (SnowRunnerNextGen_Skies.zip, about 100 MB, 300 MB unzipped), unzipped into this program's folder; without it Apply leaves the skies out and says so.",
                 Know, "The rainbow, the comet, the sun's and the moon's discs and glows stay the game's. It changes boot.pak, together with Photo grade, Sharper smoke and particles, Night sky and Reflection cubes, which it keeps. The skies are made with engine\\tools\\make_cube.js and make_clouds.js from 23 CC0 panoramas by Poly Haven, the Milky Way from NASA's Deep Star Maps 2020.");
 
             d["cubes"] = E(
