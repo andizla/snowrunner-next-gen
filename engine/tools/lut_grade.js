@@ -218,7 +218,9 @@ function skiesPack()
     try { pct = fs.readdirSync(SKIES).filter((f) => /\.pct$/i.test(f)); } catch (e) { return { state: 'missing' }; }
     const list = path.join(SKIES, '..', 'pack.json');
     if (!fs.existsSync(list)) return { state: pct.length ? 'complete' : 'missing' };
-    const files = JSON.parse(fs.readFileSync(list, 'utf8')).files || {}, names = Object.keys(files);
+    let files;
+    try { files = JSON.parse(fs.readFileSync(list, 'utf8')).files || {}; } catch (e) { return { state: 'incomplete', unreadable: true }; }   // the list itself cut short
+    const names = Object.keys(files);
     const bad = names.filter((rel) => { try { return fs.statSync(path.join(SKIES, '..', rel)).size !== files[rel]; } catch (e) { return true; } }).length;
     return { state: !bad ? 'complete' : bad === names.length ? 'missing' : 'incomplete', bad, of: names.length };
 }

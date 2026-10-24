@@ -196,6 +196,9 @@ $env:SR_SKIES_DIR = $cutPct
 $r = Apply $everything
 Check 'cut sky pack: Apply says the pack is incomplete' (Warned $r 'sky pack beside this program is incomplete') 'True'
 Check 'cut sky pack: the skies stay out' ([string](Status).skies.state) 'vanilla'
+Set-Content -LiteralPath (Join-Path $cut 'pack.json') -Value '{"version": "test", "files": {' -NoNewline
+$r = Apply $everything
+Check 'cut sky pack: its list cut short reads as incomplete too' ('{0} {1}' -f (Last $r), (Warned $r 'pack\.json\) is cut short')) 'done True'
 Remove-Item Env:\SR_SKIES_DIR
 $r = Apply $everything
 Check 'cut sky pack: the whole pack puts them in again' ('{0} {1}' -f (Last $r), [string](Status).skies.state) 'done ours'
@@ -459,6 +462,15 @@ Copy-Item -LiteralPath $bootKept -Destination $boot -Force
 Remove-Item -LiteralPath $bootKept
 $r = Engine @('restore')
 Check 'skies, no pack, adopt: Restore after, the originals back' ('{0} {1}' -f (Last $r), ((Hash $boot) -eq (Hash (Join-Path $originals 'boot.pak.orig')))) 'done True'
+
+'a pak in another tool''s layout (a byte behind its end record): the status reads it as changed instead of failing (review 3, N3; review 5, C9)'
+$initialKept = Join-Path $work 'initial_before_the_tail.pak'
+Copy-Item -LiteralPath $initial -Destination $initialKept -Force
+$tail = [IO.File]::Open($initial, [IO.FileMode]::Append); $tail.WriteByte(1); $tail.Dispose()
+Check 'another layout: initial.pak''s parts read as changed' ([string](Status).grass.state) 'changed'
+Copy-Item -LiteralPath $initialKept -Destination $initial -Force
+Remove-Item -LiteralPath $initialKept
+Check 'another layout: back as it was, the original reads again' ([string](Status).grass.state) 'vanilla'
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }
 'all passed'

@@ -514,7 +514,7 @@ async function readPaks(g, state)
     // (review 3, N3); the log says why. Only a zip layout the tools cannot read counts: any other failure (a lock, a full
     // disk, a fault in a tool) stops as before instead of leading to the question to take the files as the originals,
     // which for shared.pak and shader.pak would keep this program's own build as one (review 5, C9)
-    const ZIP_LAYOUT = /no zip end record|no zip directory|zip64|behind the zip end record|between the central directory and the end record|bad central directory record|entry count differs from the end record|bad local header/i;
+    const ZIP_LAYOUT = /no zip end record|no zip directory|bad zip directory|zip64|behind the zip end record|between the central directory and the end record|bad central directory record|entry count differs from the end record|bad local header/i;
     const tolerant = async (what, read, fallback) =>
     {
         try { return await read(); }
@@ -636,7 +636,9 @@ const skiesPack = () =>
     try { pct = fs.readdirSync(dir).filter((f) => /\.pct$/i.test(f)); } catch (e) { return { state: 'missing' }; }
     const list = path.join(dir, '..', 'pack.json');
     if (!fs.existsSync(list)) return { state: pct.length ? 'complete' : 'missing' };
-    const files = JSON.parse(fs.readFileSync(list, 'utf8')).files || {}, names = Object.keys(files);
+    let files;
+    try { files = JSON.parse(fs.readFileSync(list, 'utf8')).files || {}; } catch (e) { return { state: 'incomplete', unreadable: true }; }   // the list itself cut short
+    const names = Object.keys(files);
     const bad = names.filter((rel) => { try { return fs.statSync(path.join(dir, '..', rel)).size !== files[rel]; } catch (e) { return true; } }).length;
     return { state: !bad ? 'complete' : bad === names.length ? 'missing' : 'incomplete', bad, of: names.length };
 };
@@ -1106,7 +1108,7 @@ async function apply(g, state, sel, adopt, leave)
     }
     else if (now.skies.state === 'ours' && sameCode(notes, 'skies')) emit({ type: 'log', text: 'boot.pak already has the skies' });
     else if (now.skies.state === 'changed') warn(BOOT_CHANGED + ': left as it is, so the skies were left out.');
-    else if (skiesPack().state === 'incomplete') warn('The sky pack beside this program is incomplete: ' + skiesPack().bad + ' of its ' + skiesPack().of + ' files are missing or cut short. Unzip SnowRunnerNextGen_Skies.zip into this program\'s folder again. The skies were left out.');
+    else if (skiesPack().state === 'incomplete') warn('The sky pack beside this program is incomplete: ' + (skiesPack().unreadable ? 'its list of files (pack.json) is cut short' : skiesPack().bad + ' of its ' + skiesPack().of + ' files are missing or cut short') + '. Unzip SnowRunnerNextGen_Skies.zip into this program\'s folder again. The skies were left out.');
     else if (skiesPack().state !== 'complete') warn('Skies needs the sky pack, a download of its own (SnowRunnerNextGen_Skies.zip, beside this program\'s download), unzipped into this program\'s folder. The skies were left out.');
     else { step('Putting the skies in (boot.pak, 490 MB)'); await must('lut_grade.js', ['skies-install'], env); }
 

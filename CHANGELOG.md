@@ -3,7 +3,7 @@
 ## [1.1.0] 2026-10-24
 
 - After test build 3, from a review of the release (tested offline):
-  - The sky pack carries a list of its files and their sizes: a pack an unzip left short is told apart, and Apply leaves the skies out and says to unzip it again, instead of writing the textures it has.
+  - The sky pack carries a list of its files and their sizes: a pack an unzip left short, the list itself included, is told apart, and Apply leaves the skies out and says to unzip it again, instead of writing the textures it has.
   - With the skies in and the sky pack not beside the program, taking a changed boot.pak as the original is refused until the pack is back: without it the whole last build stayed in the new original, out of Restore's reach.
   - Only a pak in another tool's zip layout reads as changed by something else; any other failure of a tool stops as before, instead of leading to the question that could keep this program's own build as the original.
   - The Map days level files are checked for writing only when Map days is chosen or in: a read-only level file no longer stops every Apply and Restore.
