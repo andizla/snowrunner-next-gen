@@ -69,7 +69,7 @@ namespace SnowRunnerNextGen
             list.Add(M("contact", "SHADOWS", "Contact shadows", true,
                 "Fine sun shadows traced on screen where things touch or overlap, in detail the shadow texture is too coarse to hold.",
                 "shadows"));
-            list.Add(M("headshadow", "SHADOWS", "Headlight shadows", false,
+            list.Add(M("headshadow", "SHADOWS", "Headlight shadows", true,
                 "Your headlights cast shadows: posts, trees and rocks block the beam instead of letting it light what stands behind them.",
                 "shadows"));
 
@@ -84,7 +84,7 @@ namespace SnowRunnerNextGen
             list.Add(M("ambient", "LIGHT", "Sky ambient", true, "The fill light takes the sky's colour instead of a flat grey."));
             Module fill = M("fill", "LIGHT", "Fill light", true,
                 "Less of the flat light that fills in shade: shaded sides, the insides of trees and trucks in shadow get darker, while sunlit parts and the sky stay as they are.");
-            fill.Options.Add(new OptionSet("Strength", new[] { "70 %", "55 %", "85 %" }, new[] { "0.7", "0.55", "0.85" }, 0));
+            fill.Options.Add(new OptionSet("Strength", new[] { "70 %", "55 %", "85 %" }, new[] { "0.7", "0.55", "0.85" }, 1));
             list.Add(fill);
             // off by default: in places it comes out too strong
             list.Add(M("gi", "LIGHT", "Bounce light", false,
@@ -133,19 +133,19 @@ namespace SnowRunnerNextGen
             weather.Options.Add(new OptionSet("Fireflies", new[] { "on", "off" }, new[] { "fireflies", "" }, 0));
             weather.Options.Add(new OptionSet("Pollen", new[] { "on", "off" }, new[] { "pollen", "" }, 0));
             weather.Options.Add(new OptionSet("Drifting clouds", new[] { "on", "off" }, new[] { "drift", "" }, 0));
-            // off by default until it has been looked at in the game: more land to draw on the snow maps
-            weather.Options.Add(new OptionSet("Far land", new[] { "on", "off" }, new[] { "land", "" }, 1));
+            // more land to draw on the snow maps
+            weather.Options.Add(new OptionSet("Far land", new[] { "on", "off" }, new[] { "land", "" }, 0));
             list.Add(weather);
             // the map days, in the level paks: a row for each region, the key of a row that is on is its name and the
-            // selection joins them into the tool's comma list. Off by default until it has been looked at in the game
-            Module maps = M("maps", "ATMOSPHERE", "Map days", false,
-                "Four regions have no days of their own and show another region's. Maine shows two snow regions': snow in the air and winter light on a map without snow. This gives Maine Michigan's days, weather and sky; British Columbia, Austria and Washington have a row each.");
+            // selection joins them into the tool's comma list
+            Module maps = M("maps", "ATMOSPHERE", "Map days", true,
+                "Four regions have no days of their own and show another region's. Maine shows two snow regions': snow in the air and winter light on a map without snow. This gives each of their maps days that fit it, chosen map by map, with a row for each region.");
             // the third value of each row: days chosen map by map (level_states.js has the choices); Maine's are sets of
             // its own that initial.pak holds
-            maps.Options.Add(new OptionSet("Maine", new[] { "Michigan's days", "the game's", "map by map" }, new[] { "maine", "", "maineown" }, 0));
-            maps.Options.Add(new OptionSet("British Columbia", new[] { "North Carolina's days", "the game's", "map by map" }, new[] { "bc", "", "bcown" }, 1));
-            maps.Options.Add(new OptionSet("Austria", new[] { "both maps alike", "the game's", "map by map" }, new[] { "austria", "", "austriaown" }, 1));
-            maps.Options.Add(new OptionSet("Washington", new[] { "Michigan's autumn", "the game's", "map by map" }, new[] { "washington", "", "washingtonown" }, 1));
+            maps.Options.Add(new OptionSet("Maine", new[] { "Michigan's days", "the game's", "map by map" }, new[] { "maine", "", "maineown" }, 2));
+            maps.Options.Add(new OptionSet("British Columbia", new[] { "North Carolina's days", "the game's", "map by map" }, new[] { "bc", "", "bcown" }, 2));
+            maps.Options.Add(new OptionSet("Austria", new[] { "both maps alike", "the game's", "map by map" }, new[] { "austria", "", "austriaown" }, 2));
+            maps.Options.Add(new OptionSet("Washington", new[] { "Michigan's autumn", "the game's", "map by map" }, new[] { "washington", "", "washingtonown" }, 2));
             list.Add(maps);
             Module smoke = M("smoke", "ATMOSPHERE", "Smoke glow", true, "Exhaust and other smoke glows when the sun is behind it.");
             // the glow on eight more particle shaders (module smokemore): off unless picked
@@ -180,23 +180,23 @@ namespace SnowRunnerNextGen
             grade.Options.Add(new OptionSet("Strength", new[] { "100 %", "50 %" }, new[] { "1", "0.5" }, 0));
             list.Add(grade);
 
-            Module scenery = M("scenery", "SCENERY", "Scenery detail", false,
+            Module scenery = M("scenery", "SCENERY", "Scenery detail", true,
                 "Scenery keeps its full detail farther out, so less pops in while you drive. All meshes makes shared.pak larger than 2 GB. " +
                 "Shown far away: plants (trees, bushes, rocks, twigs), or everything, no longer vanish at a set distance. Small shadows: what casts none, or loses it a few metres away, gets one.");
-            scenery.Options.Add(new OptionSet("Set", new[] { "nature", "all meshes" }, new[] { "nature", "all" }, 0));
-            scenery.Options.Add(new OptionSet("Shown far away", new[] { "as the game", "plants", "everything" }, new[] { "", "plants", "all" }, 0));
-            scenery.Options.Add(new OptionSet("Small shadows", new[] { "off", "plants", "everything" }, new[] { "", "plants", "all" }, 0));
+            scenery.Options.Add(new OptionSet("Set", new[] { "nature", "all meshes" }, new[] { "nature", "all" }, 1));
+            scenery.Options.Add(new OptionSet("Shown far away", new[] { "as the game", "plants", "everything" }, new[] { "", "plants", "all" }, 2));
+            scenery.Options.Add(new OptionSet("Small shadows", new[] { "off", "plants", "everything" }, new[] { "", "plants", "all" }, 2));
             list.Add(scenery);
-            Module grass = M("grass", "SCENERY", "Grass reach", false, "Grass drawn farther out. Costs frame rate in grassy areas.");
-            grass.Options.Add(new OptionSet("Reach", new[] { "3x", "2x" }, new[] { "3", "2" }, 0));
+            Module grass = M("grass", "SCENERY", "Grass reach", true, "Grass drawn farther out. Costs frame rate in grassy areas.");
+            grass.Options.Add(new OptionSet("Reach", new[] { "3x", "2x" }, new[] { "3", "2" }, 1));
             list.Add(grass);
 
             // NEXT GEN under the game's logo, in gfx.pak
             Module logos = M("logos", "INTERFACE", "Next Gen logo", true,
                 "NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map.");
             // the start-up row: the game's warning and publisher logos, or straight to the Next Gen splash (about 16 s
-            // sooner at the title screen). Off by default until it has been looked at
-            logos.Options.Add(new OptionSet("Start-up", new[] { "the game's intro", "Next Gen splash only" }, new[] { "", "intro" }, 0));
+            // sooner at the title screen)
+            logos.Options.Add(new OptionSet("Start-up", new[] { "the game's intro", "Next Gen splash only" }, new[] { "", "intro" }, 1));
             list.Add(logos);
             return list;
         }

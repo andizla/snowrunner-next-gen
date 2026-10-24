@@ -2,6 +2,7 @@
 
 ## [1.1.0] 2026-10-24
 
+- New defaults: Headlight shadows, Map days (every row map by map), Scenery detail (all meshes, everything shown far away, small shadows for everything), Grass reach (2x), Weather's Far land and the start on the Next Gen splash are on by default, and Fill light defaults to 55 %: 31 of the 34 cards are on.
 - After test build 3, from a review of the release (tested offline):
   - The sky pack carries a list of its files and their sizes: a pack an unzip left short, the list itself included, is told apart, and Apply leaves the skies out and says to unzip it again, instead of writing the textures it has.
   - With the skies in and the sky pack not beside the program, taking a changed boot.pak as the original is refused until the pack is back: without it the whole last build stayed in the new original, out of Restore's reach.

@@ -61,14 +61,19 @@ function Restored([string]$dir, [string]$game, [string]$label) {
   '     kept in the state folder after Restore: {0:N1} GB (the originals; the program never deletes them)' -f ($kept / 1GB)
 }
 
-# the windows' default choices: 1.0.2's cards, and this version's (catalog: the new cards Debris and splashes 4x,
-# Reflection cubes, Skies, and Weather's Drifting clouds)
+# the windows' default choices: 1.0.2's cards, and this version's (catalog: the new cards Headlight shadows, Map days
+# with every row map by map, Debris and splashes 4x, Reflection cubes and Skies, Weather's Drifting clouds and Far land,
+# the logo's Next Gen splash; Scenery detail at everything and Grass reach 2x on; Fill light at 55 %)
 $shader = @('revec', 'seam', 'blocker', 'contact', 'gtao', 'aofar', 'ambient', 'sssr', 'headglow', 'water', 'puddles', 'rivertint', 'crestglow', 'smoke', 'smokeshade', 'tonemap', 'bloom')
 $oldChoice = [ordered]@{ shader = $shader; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = $null; sceneryHide = $null; sceneryShadows = $null
   grass = $null; fill = '0.7'; grade = '1'; particles = '1'; stars = '3'; sky = '1'; weather = 'shadows,showers,evening,horizon,far,fireflies,pollen'; logos = '1' }
 $newChoice = [ordered]@{}; foreach ($k in $oldChoice.Keys) { $newChoice[$k] = $oldChoice[$k] }
-$newChoice.weather = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift'; $newChoice.debris = '4'; $newChoice.cubes = '1'; $newChoice.skies = '1'; $newChoice.maps = $null
-$all = 'shader', 'dll', 'grade', 'particles', 'stars', 'sky', 'weather', 'logos', 'fill', 'debris', 'cubes', 'skies'
+$newChoice.shader = $shader + 'headshadow'; $newChoice.scenery = 'all'; $newChoice.sceneryHide = 'all'; $newChoice.sceneryShadows = 'all'; $newChoice.grass = '2'; $newChoice.fill = '0.55'
+$newChoice.weather = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift,land'; $newChoice.logos = 'intro'; $newChoice.debris = '4'; $newChoice.cubes = '1'; $newChoice.skies = '1'
+$newChoice.maps = 'maineown,bcown,austriaown,washingtonown'
+# these copies hold no level files, so Map days is left out with one warning
+$mapsLeftOut = 'the map days were left out'
+$all = 'shader', 'dll', 'grass', 'grade', 'particles', 'stars', 'sky', 'weather', 'logos', 'fill', 'debris', 'cubes', 'skies'
 function States($s, [string[]]$names) { return (@($names | ForEach-Object { $s.$_.state }) -join ' ') }
 function Hash([string]$file) { if (Test-Path -LiteralPath $file) { return (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash }; return 'missing' }
 
@@ -95,9 +100,11 @@ Check 'update: nothing outdated' (@($s.outdated) -join ',') ''
 Check "update: SnowRunner Shadows is this release's" (Hash (Join-Path $game 'Sources\Bin\hid.dll')) (Hash (Join-Path $newDir 'engine\hid.dll'))
 $r = Apply $newDir $game $newChoice
 Check 'update: Apply with Defaults' $r[$r.Count - 1].type 'done'
+Check 'update: no warning but the map days left out' @($r | Where-Object { $_.type -eq 'warn' -and $_.text -notmatch $mapsLeftOut }).Count 0
 $s = Status $newDir $game
 '     after: ' + (Parts $s)
 Check 'update: every part of the defaults in' (States $s $all) (@($all | ForEach-Object { 'ours' }) -join ' ')
+Check 'update: scenery detail at everything' ('{0} {1} {2}' -f $s.scenery, $s.sceneryHide, $s.sceneryShadows) 'all all all'
 Restored $newDir $game 'update'
 
 '--- clean: this version on an untouched game'
@@ -105,10 +112,12 @@ $env:NGEN_STATE_ROOT = Join-Path $work 'state_clean'
 $game = NewGame 'game_clean'
 $r = Apply $newDir $game $newChoice
 Check 'clean: Apply with the defaults' $r[$r.Count - 1].type 'done'
-Check 'clean: no warnings' @($r | Where-Object { $_.type -eq 'warn' }).Count 0
+Check 'clean: the map days left out, for want of level files' @($r | Where-Object { $_.type -eq 'warn' -and $_.text -match $mapsLeftOut }).Count 1
+Check 'clean: no other warning' @($r | Where-Object { $_.type -eq 'warn' -and $_.text -notmatch $mapsLeftOut }).Count 0
 $s = Status $newDir $game
 '     after: ' + (Parts $s)
 Check 'clean: every part of the defaults in' (States $s $all) (@($all | ForEach-Object { 'ours' }) -join ' ')
+Check 'clean: scenery detail at everything' ('{0} {1} {2}' -f $s.scenery, $s.sceneryHide, $s.sceneryShadows) 'all all all'
 Restored $newDir $game 'clean'
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }

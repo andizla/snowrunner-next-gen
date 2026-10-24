@@ -49,21 +49,24 @@ try {
   function Ticked { ($list.Cards | Where-Object { $_.On } | ForEach-Object { $_.Module.Id }) -join ' ' }
   function Note { $bar.GetType().GetField('note', $flags).GetValue($bar) }
 
-  # on by default: every card but Headlight shadows, Bounce light, Headlight glare cap, Winter skies, Volumetric fog, Map days, Scenery detail and Grass reach
-  $defaults = 'shadows edges blocker contact gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow cubes weather smoke smokeshade particles debris sky skies stars tonemap bloom grade logos'
+  # on by default: every card but Bounce light, Headlight glare cap and Volumetric fog
+  $defaults = 'shadows edges blocker contact headshadow gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '27 of 34 selected'
+  Check 'count' (Note) '31 of 34 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
   Check 'SnowRunner Shadows: 1x by default' (& $keyOf 'shadows') '1'
   Check 'cascade seams: blended by default' ($cards['edges'].Module.Options[1].Keys[$cards['edges'].Choice[1]]) 'seam'
   Check 'GTAO: half size by default' (& $keyOf 'gtao') 'half'
+  Check 'fill light: 55 % by default' (& $keyOf 'fill') '0.55'
+  Check 'grass reach: 2x by default' (& $keyOf 'grass') '2'
+  Check 'scenery detail: all meshes, everything far away, small shadows for everything by default' ((0..2 | ForEach-Object { $cards['scenery'].Module.Options[$_].Keys[$cards['scenery'].Choice[$_]] }) -join ' ') 'all all all'
   # what Apply sends: the seam dither only with the rebuilt edges (the bundle refuses it with the 16-tap filter)
   $selection = { $viewType.GetMethod('Selection', $flags).Invoke($view, @()) }
   $s = & $selection
   Check 'selection: rebuilt edges, the seam dither, AO at half size' ((@($s['shader']) -contains 'revec') -and (@($s['shader']) -contains 'seam') -and ($s['shadows']['aoHalf'] -eq '1')) 'True'
-  Check 'selection: the night sky, the stars at 3x and the logos' ('{0} {1} {2}' -f $s['sky'], $s['stars'], $s['logos']) '1 3 1'
+  Check 'selection: the night sky, the stars at 3x and the logos with the Next Gen splash' ('{0} {1} {2}' -f $s['sky'], $s['stars'], $s['logos']) '1 3 intro'
   Check 'selection: the reflection cubes by default, the bounce light not' ('{0} {1}' -f (@($s['shader']) -contains 'gi'), $s['cubes']) 'False 1'
   $cards['edges'].Choice[0] = 1
   $s = & $selection
@@ -102,36 +105,34 @@ try {
   $cards['fog'].ToggleByUser()
   # the weather: the rows that are on, as the tool's comma list
   $s = & $selection
-  Check 'selection: the weather, eight parts by default, the far land not' ($s['weather']) 'shadows,showers,evening,horizon,far,fireflies,pollen,drift'
+  Check 'selection: the weather, all nine parts by default' ($s['weather']) 'shadows,showers,evening,horizon,far,fireflies,pollen,drift,land'
   $cards['weather'].Choice[5] = 1
   $s = & $selection
-  Check 'selection: the fireflies leave the list' ($s['weather']) 'shadows,showers,evening,horizon,far,pollen,drift'
-  Check 'selection: no map days by default' ([string]$s['maps']) ''
-  # the map days: Maine's row has three values, the third a set of its own
-  $cards['maps'].ToggleByUser()
-  $s = & $selection
-  Check 'selection: the map days on give Maine Michigan''s days' ([string]$s['maps']) 'maine'
-  $cards['maps'].Choice[0] = 2
-  $s = & $selection
-  Check 'selection: Maine map by map' ([string]$s['maps']) 'maineown'
-  foreach ($row in 1..3) { $cards['maps'].Choice[$row] = 2 }
-  $s = & $selection
-  Check 'selection: every row map by map' ([string]$s['maps']) 'maineown,bcown,austriaown,washingtonown'
+  Check 'selection: the fireflies leave the list' ($s['weather']) 'shadows,showers,evening,horizon,far,pollen,drift,land'
+  # the map days: on by default with every row map by map (Maine's the sets of its own); each row has three values
+  Check 'selection: the map days by default, every row map by map' ([string]$s['maps']) 'maineown,bcown,austriaown,washingtonown'
   $cards['maps'].Choice[3] = 0
   $s = & $selection
   Check 'selection: Washington with Michigan''s autumn' ([string]$s['maps']) 'maineown,bcown,austriaown,washington'
   foreach ($row in 1..3) { $cards['maps'].Choice[$row] = 1 }
-  # the logo card's start-up row: the game's intro by default, the Next Gen splash alone when picked
   $s = & $selection
-  Check 'selection: the logos with the game''s intro by default' ([string]$s['logos']) '1'
-  $cards['logos'].Choice[0] = 1
+  Check 'selection: Maine map by map alone' ([string]$s['maps']) 'maineown'
+  $cards['maps'].Choice[0] = 0
   $s = & $selection
-  Check 'selection: the Next Gen splash only' ([string]$s['logos']) 'intro'
+  Check 'selection: Maine with Michigan''s days' ([string]$s['maps']) 'maine'
+  # the logo card's start-up row: the Next Gen splash alone by default, the game's intro when picked
+  Check 'selection: the Next Gen splash only by default' ([string]$s['logos']) 'intro'
   $cards['logos'].Choice[0] = 0
+  $s = & $selection
+  Check 'selection: the logos with the game''s intro' ([string]$s['logos']) '1'
+  $cards['logos'].Choice[0] = 1
   $cards['maps'].Choice[0] = 1
   $s = & $selection
   Check 'selection: Maine with the game''s days and no other row sends no map days' ([string]$s['maps']) ''
-  $cards['maps'].Choice[0] = 0
+  foreach ($row in 0..3) { $cards['maps'].Choice[$row] = 2 }
+  $cards['maps'].ToggleByUser()
+  $s = & $selection
+  Check 'selection: the map days unticked send none' ([string]$s['maps']) ''
   $cards['maps'].ToggleByUser()
   foreach ($row in 0..8) { $cards['weather'].Choice[$row] = 1 }
   $s = & $selection
@@ -140,13 +141,13 @@ try {
   $cards['shadows'].ToggleByUser()
   # Headlights in reflections goes with Object reflections and Sun glow through waves with Water reflections, which
   # both need SnowRunner Shadows
-  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint cubes weather smoke smokeshade particles debris sky skies stars tonemap bloom grade logos'
-  Check 'its note' (Note) 'Contact shadows, Object reflections, Headlights in reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
+  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
+  Check 'its note' (Note) 'Contact shadows, Headlight shadows, Object reflections, Headlights in reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
   $cards['gi'].ToggleByUser()
-  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint cubes weather smoke smokeshade particles debris sky skies stars tonemap bloom grade logos'
+  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'its note' (Note) 'Bounce light needs SnowRunner Shadows: ticked it too.'
   $cards['gtao'].ToggleByUser()
-  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint cubes weather smoke smokeshade particles debris sky skies stars tonemap bloom grade logos'
+  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'its note' (Note) 'Wide occlusion and Bounce light need GTAO: unticked them too.'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($false))
   Check 'clear' (Note) '0 of 34 selected'
@@ -173,16 +174,18 @@ try {
   $has = [Activator]::CreateInstance($asm.GetType('SnowRunnerNextGen.GameStatus'))
   $has.Shader = 'ours'; foreach ($m in @($s['shader'])) { $has.Modules.Add($m) }
   $has.Dll = 'ours'; $has.DllCurrent = $true; $has.Factor = '1'; $has.SlopeBias = '1'; $has.AoHalf = '1'
-  $has.Fill = 'ours'; $has.FillFactor = '0.7'; $has.Grade = 'ours'; $has.GradeStrength = '1'; $has.Particles = 'ours'
-  $has.Stars = 'ours'; $has.StarsFactor = '3'; $has.Sky = 'ours'; $has.Logos = 'ours'
-  $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift'
+  $has.Fill = 'ours'; $has.FillFactor = '0.55'; $has.Grade = 'ours'; $has.GradeStrength = '1'; $has.Particles = 'ours'
+  $has.Stars = 'ours'; $has.StarsFactor = '3'; $has.Sky = 'ours'; $has.Logos = 'ours'; $has.LogosIntro = $true
+  $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift,land'
+  $has.Scenery = 'all'; $has.SceneryHide = 'all'; $has.SceneryShadows = 'all'; $has.Grass = 'ours'; $has.GrassFactor = '2'
+  $has.Maps = 'ours'; $has.MapsRows = 'maineown,bcown,austriaown,washingtonown'
   $has.Debris = 'ours'; $has.DebrisFactor = '4'; $has.Cubes = 'ours'; $has.Skies = 'ours'
   $viewType.GetField('installed', $flags).SetValue($view, $has)
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: the default set as installed' (Note) "27 of 34 selected  $([char]0xB7)  as installed"
+  Check 'bar: the default set as installed' (Note) "31 of 34 selected  $([char]0xB7)  as installed"
   $has.Outdated.Add('shader')
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: a newer build of an installed part' (Note) "27 of 34 selected  $([char]0xB7)  Apply to update the game to this version"
+  Check 'bar: a newer build of an installed part' (Note) "31 of 34 selected  $([char]0xB7)  Apply to update the game to this version"
   $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($has))
   Check 'header: says that Apply updates the game' ($said -match 'Note: this installer has a newer build of what is installed: Apply updates the game$') 'True'
   $viewType.GetField('installed', $flags).SetValue($view, $null)

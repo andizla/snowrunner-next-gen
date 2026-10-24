@@ -16,11 +16,11 @@ Light and shadow
 - Shadow edges: straight shadow edges rebuilt from the shadow texture, with no texel stairs at any resolution, and blended cascade seams. A 16-tap filter is the other choice.
 - Blocker search: shadows sharp at the contact and softer the farther they fall from what casts them.
 - Contact shadows: fine sun shadows traced on screen where things touch or overlap.
-- Headlight shadows: posts, trees and rocks in the beam cast shadows away from the truck's lamps. Off by default: tested in the game, still being tuned.
+- Headlight shadows: posts, trees and rocks in the beam cast shadows away from the truck's lamps. Tested in the game, still being tuned.
 - GTAO: ground truth ambient occlusion in place of the game's SSAO, at half or full size.
 - Wide occlusion: soft shade under trucks, roofs and tree crowns, out to 6 metres.
 - Sky ambient: the fill light takes the sky's colour.
-- Fill light: less of the flat light that fills in shade.
+- Fill light: less of the flat light that fills in shade, 55 % of it by default.
 - Bounce light: sunlit ground and paint light up what stands next to them. Off by default and experimental: in places it comes out too strong.
 
 Reflections and water
@@ -44,20 +44,20 @@ Atmosphere and image
 - Debris and splashes: leaves, grass, twigs and dirt thrown up by the wheels stay on the ground and get pushed by the tyres; mud, water and snow splashes throw more drops; exhaust and dust hang in the air longer.
 - Night sky: NASA's star map in place of the game's star texture, and its stars in the photo night skies of Scandinavia, Kola and Quebec.
 - Skies: 49 of the game's sky domes, cloud bands and night layers, every region's, made anew from photographs of real skies and NASA's star map, and the aurora green as a real one; the clouds still drift.
-- Map days: Maine shows the days and the snowfall of two snow regions; this gives it Michigan's days, weather and sky. Rows for British Columbia, Austria and Washington, and on every row a third value, map by map, that picks days for each map on its own. Off by default.
+- Map days: Maine shows the days and the snowfall of two snow regions; this gives it Michigan's days, weather and sky. Rows for British Columbia, Austria and Washington, and on every row a third value, map by map, that picks days for each map on its own. On by default, every row map by map.
 - Brighter stars: the stars of the night sky drawn brighter.
 - Tonemap: stronger contrast and a lighter bloom.
 - Bloom soft cut: no haze from bright snow and sky.
 - Photo grade: colour closer to a photo.
 
-Scenery, both off by default
+Scenery, both on by default
 
-- Scenery detail: scenery keeps its full detail farther out. Two more rows on the card, off by default: plants or everything shown at any distance, and shadows for small things that have none.
-- Grass reach: grass drawn farther out.
+- Scenery detail: scenery keeps its full detail farther out, all meshes by default. Two more rows on the card, both at everything by default: plants or everything shown at any distance, and shadows for small things that have none.
+- Grass reach: grass drawn farther out, 2x by default.
 
 Interface
 
-- Next Gen logo: NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map. A row Start-up, off by default, starts the game on the Next Gen splash without the warning and the publisher logos.
+- Next Gen logo: NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map. A row Start-up, on by default, starts the game on the Next Gen splash without the warning and the publisher logos.
 
 The (?) on each card says what the module does, what to look for, and what it costs.
 
