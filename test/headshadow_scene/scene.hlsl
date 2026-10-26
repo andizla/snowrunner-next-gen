@@ -58,15 +58,53 @@ static const float GROUND_ALBEDO = 0.30;
 static const float AMBIENT = 0.02;
 static const float3 SKY = float3(0.010, 0.014, 0.030);
 
+// snow's small relief: the ground's height varies by up to GROUND_BUMP metres in drifts and ripples of a few metres down
+// to half a metre (the case of the stripes on lit snow seen in the game on 2026-10-26); 0 = flat
+#ifndef GROUND_BUMP
+#define GROUND_BUMP 0.0
+#endif
+// and GROUND_ROUGH metres of roughness about half a metre across, as snow's surface has (the fine grain of the stripes)
+#ifndef GROUND_ROUGH
+#define GROUND_ROUGH 0.0
+#endif
+float GroundH(float2 xz)
+{
+    return GROUND_BUMP * (0.5 * sin(xz.x * 0.9 + sin(xz.y * 0.6)) * sin(xz.y * 0.8) + 0.3 * sin(xz.x * 2.6 + xz.y * 2.1)
+        + 0.2 * sin(xz.x * 7.3 - xz.y * 6.1))
+        + GROUND_ROUGH * (0.6 * sin(xz.x * 13.1 + xz.y * 3.7) * sin(xz.y * 11.3 - xz.x * 2.9) + 0.4 * sin(xz.x * 21.7 - xz.y * 17.9));
+}
+
 struct Hit { float t; float3 n; float albedo; bool ground; };
 
 Hit Trace(float3 o, float3 d)
 {
     Hit h;
     h.t = 1e9; h.n = float3(0, 1, 0); h.albedo = 0; h.ground = false;
-    if (d.y < 0.0) { h.t = -o.y / d.y; h.albedo = GROUND_ALBEDO; h.ground = true; }
+    if (GROUND_BUMP <= 0.0 && GROUND_ROUGH <= 0.0) { if (d.y < 0.0) { h.t = -o.y / d.y; h.albedo = GROUND_ALBEDO; h.ground = true; } }
+    else
+    {
+        // marched to the first step under the relief, then halved down to the crossing
+        float a = 0.0, t = 0.02;
+        [loop] for (int k = 0; k < 1500 && t < 200.0; k++)
+        {
+            const float3 p = o + d * t;
+            if (p.y < GroundH(p.xz))
+            {
+                [unroll] for (int j = 0; j < 10; j++) { const float m = 0.5 * (a + t); const float3 q = o + d * m; if (q.y < GroundH(q.xz)) t = m; else a = m; }
+                const float3 g = o + d * t; const float e = 0.01;
+                h.t = t; h.albedo = GROUND_ALBEDO; h.ground = true;
+                h.n = normalize(float3(GroundH(g.xz - float2(e, 0)) - GroundH(g.xz + float2(e, 0)), 2.0 * e, GroundH(g.xz - float2(0, e)) - GroundH(g.xz + float2(0, e))));
+                break;
+            }
+            a = t; t += 0.01 + 0.003 * t;   // fine enough not to step over the crests at a grazing view
+        }
+    }
     const float3 inv = 1.0 / d;
-    [unroll] for (int i = 0; i < BOX_COUNT; i++)
+    // NO_CASTERS=1: the ground alone, so every blocked pixel is a false one
+#ifndef NO_CASTERS
+#define NO_CASTERS 0
+#endif
+    [unroll] for (int i = 0; i < (NO_CASTERS ? 0 : BOX_COUNT); i++)
     {
         const float3 t0 = (BOXES[i].lo - o) * inv, t1 = (BOXES[i].hi - o) * inv;
         const float3 a = min(t0, t1), b = max(t0, t1);

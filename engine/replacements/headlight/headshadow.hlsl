@@ -56,6 +56,12 @@
 #ifndef HS_BODY
 #define HS_BODY HS_NEAR       // metres around a lamp within which what the camera sees is the truck's own front and does
 #endif                        // not block (0: it does)
+#ifndef HS_LIFT
+#define HS_LIFT 0.1           // metres above the surface (straight up) where a ray starts: lumps lower than that do not block
+#endif
+#ifndef HS_ROWS
+#define HS_ROWS 1             // pixel rows above and below a step whose farther depth counts (0: the step's own pixel only)
+#endif
 #ifndef HS_STRENGTH
 #define HS_STRENGTH 1.0       // 1 = a fully blocked lamp gives no light; less leaves some
 #endif
@@ -102,7 +108,10 @@ float Lamp(float3 P, float3 L, float3 lampDir, float2 size, float jitter)
     const float d = max(length(toL), 1e-3);
     const float span = d - HS_NEAR - HS_START;
     const float3 dir = toL / d;
-    const float3 w0 = P + dir * HS_START;
+    // the walk starts HS_LIFT above the surface: snow's surface is rough by a few centimetres, and a ray leaving it at
+    // the flat angle of a low headlight ran that close above it for the first metre, where any lump blocked it, at a
+    // different point for each pixel's offset: a fine grain over the whole lit snow (seen in the game, 2026-10-26)
+    const float3 w0 = P + float3(0.0, HS_LIFT, 0.0) + dir * HS_START;
     float3 w1 = P + dir * (HS_START + max(span, 0.0));
     const float4 c0 = PrevClip(w0), c1 = PrevClip(w1);       // the previous frame's camera, as t121 is that frame's
     // a ray end behind the camera: shortened to where it is still in front of it (the same share of the way in the world)
@@ -122,8 +131,15 @@ float Lamp(float3 P, float3 L, float3 lampDir, float2 size, float jitter)
         const float2 uv = float2(s.x * 0.5 + 0.5, 0.5 - s.y * 0.5);
         if (any(uv < 0.0) || any(uv > 1.0)) break;          // off the screen: nothing known further on
         const float w = 1.0 / lerp(iw0, iw1, f);            // the step's distance from the camera
-        const float z = g_txSceneZ.Load(int3(uv * size, 0));
+        const int2 px = int2(uv * size);
+        float z = g_txSceneZ.Load(int3(px, 0));
         const float bias = HS_BIAS + HS_BIAS_SLOPE * w;
+        // the ground seen at a grazing angle is one depth per pixel row, in steps that grow with the distance; a ray
+        // running close above it met the near side of a step and took the ground itself for a caster, in stripes that
+        // followed the steps' per-pixel offset (on lit snow, seen in the game, 2026-10-26). Where a step seems blocked,
+        // the farther of the depths one row up and down counts: the ground's own steps no longer block, an upright
+        // caster still does (read only there: most steps are not blocked)
+        if (HS_ROWS > 0 && w - z - bias > 0.0) z = max(z, max(g_txSceneZ.Load(int3(px + int2(0, HS_ROWS), 0)), g_txSceneZ.Load(int3(px - int2(0, HS_ROWS), 0))));
         const float inFront = w - z - bias;                 // > 0: the scene is in front of the step there
         const float thick = HS_THICK + 0.03 * w;
         const float2 edge = saturate(min(uv, 1.0 - uv) / HS_EDGE);

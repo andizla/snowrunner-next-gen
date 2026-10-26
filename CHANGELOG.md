@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.1]
+
+- Headlight shadows no longer draw grain and stripes across lit snow and other ground. A low headlight's rays leave the ground at a flat angle and ran a few centimetres above it for the first metre, where snow's small lumps (and the ground's own steps of one depth per pixel row, seen at a grazing angle) blocked them, differently for each pixel. Each ray now starts 10 cm above the surface, and where a step seems blocked the farther of the depths one row above and below counts. In the test scene on bumpy, rough snow the falsely blocked share of the beam drops from about 3.5 % to none; posts, rails and walls still cast, and it costs at most 0.07 ms a frame at 4K.
+
 ## [1.1.0]
 
 - New defaults: Headlight shadows, Map days (every row map by map), Scenery detail (all meshes, everything shown far away, small shadows for everything), Grass reach (2x), Weather's Far land and the start on the Next Gen splash are on by default, and Fill light defaults to 55 %: 31 of the 34 cards are on.

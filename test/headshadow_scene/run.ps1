@@ -3,7 +3,9 @@
 # value alone: white lit, black blocked, blue outside the beam) and puts the three side by side in one PNG per view.
 # The helper is engine\replacements\headlight\headshadow.hlsl itself; -Define overrides its knobs for a try.
 # usage: powershell -File test\headshadow_scene\run.ps1 [-Define HS_NEAR=1.5,HS_SOFT=0.3] [-Name try1] [-Size 960x540]
-param([string[]]$Define = @(), [string]$Name = 'default', [string]$Size = '960x540')
+#   -SS: sub-samples per axis (3 by default; 1 shows the steps' per-pixel offset as the game does where its TAA cannot
+#   average it: the offset is the same every frame)
+param([string[]]$Define = @(), [string]$Name = 'default', [string]$Size = '960x540', [int]$SS = 3)
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $root = Split-Path -Parent (Split-Path -Parent $here)
@@ -32,13 +34,13 @@ $views = [ordered]@{
   chase  = @('--eye', '-3.5', '4.5', '-9.0', '--target', '1.0', '0.0', '6.0')
 }
 $modes = @(@{ m = '1'; label = "the game's own light" }, @{ m = '0'; label = 'with headlight shadows' }, @{ m = '2'; label = "helper's value (black = blocked)" })
-$defs = @(); foreach ($d in $Define) { if ($d) { $defs += '-D'; $defs += $d } }
+$defs = @(); foreach ($d in (($Define -join ',') -split ',')) { if ($d) { $defs += '-D'; $defs += $d } }   # run with -File, a list comes as one string
 Add-Type -AssemblyName System.Drawing
 foreach ($v in $views.Keys) {
   $bmps = @()
   foreach ($m in $modes) {
     $bmp = Join-Path $out "$Name`_$v`_$($m.m).bmp"
-    & $exe (Join-Path $here 'scene.hlsl') $bmp --size $w $h --mode $m.m @($views[$v]) @defs | Out-Null
+    & $exe (Join-Path $here 'scene.hlsl') $bmp --size $w $h --mode $m.m --ss $SS @($views[$v]) @defs | Out-Null
     if ($LASTEXITCODE) { throw "scene.exe failed on view $v, mode $($m.m)" }
     $bmps += $bmp
   }
