@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.0] 2026-10-24
+## [1.1.0]
 
 - New defaults: Headlight shadows, Map days (every row map by map), Scenery detail (all meshes, everything shown far away, small shadows for everything), Grass reach (2x), Weather's Far land and the start on the Next Gen splash are on by default, and Fill light defaults to 55 %: 31 of the 34 cards are on.
 - After test build 3, from a review of the release (tested offline):
@@ -65,7 +65,7 @@
 - Winter skies, a new card, off by default: Kola's two clear-day sky domes made anew from the 8k version of the same clear-day panorama with its sun taken out, at the game's own 8192 by 2048, with the horizon fade. The game's cloud bands, sun and stars stay and drift over it. A first step, Kola only. A part of boot.pak like the cubes; 45 MB more in the download.
 - Brighter stars: dusk and dawn keep the game's star level. The factor applies to the nights alone, so the stars no longer stand out in a sunset. Apply updates an install made with an earlier version.
 
-## [1.0.2] 2026-10-08
+## [1.0.2]
 
 - Bounce light is off by default and marked experimental: on snow and ice it comes out too strong and blue, in tracks, ruts and along drifts. Its strength of four now stops where a surface reaches 0.6 of the scene's ambient light, which eases the glow and does not cure it. An install made with 1.0.0 or 1.0.1 keeps the card ticked: untick Bounce light and click Apply.
 - Volumetric fog is off by default. Its sun shafts have their own switch on the card, Sun shafts, also off: they stay experimental and show over the truck and other things close to the camera. An install made with 1.0.0 or 1.0.1 has the fog with the shafts: Apply takes the shafts out unless the switch is on, and unticking the card takes the fog out.
@@ -83,7 +83,7 @@
 - The window remembers a game folder you picked.
 - After an update the status lists the parts an older version built, and the bar says "Apply to update the game to this version".
 
-## [1.0.1] 2026-10-07
+## [1.0.1]
 
 - Water reflections: the dotted pattern on far water at flat angles is gone. Far from the camera the reflected ray no longer follows waves that are too small for the screen. The reflection there keeps a ripple, as the game's own reflection has, and the change from near to far is spread over a stretch of water.
 - Water reflections show the scene at its own brightness. In 1.0.0 a reflected bank or truck came out about twice as bright as it is under a bright sky.
@@ -96,7 +96,7 @@
 - The download is a zip with standard folder paths. The 1.0.0 zip had Windows-style paths, which Linux archive programs unpacked into one flat folder. The 1.0.0 download was replaced on 2026-10-06 with a repacked one.
 - Not in this version: the fix for the fog's sun shafts showing over things close to the camera. It moves to a later version.
 
-## [1.0.0] 2026-10-05
+## [1.0.0]
 
 - One window with a card for each of 29 modules, 26 of them on by default: shadows and shadow edges, contact shadows, ambient occlusion and bounce light, reflections on paint, water and wet ground, fog, weather, smoke and particles, the night sky and its stars, tonemap, bloom and colour grade, scenery detail and grass reach, and the Next Gen logo.
 - Apply builds the game's files for exactly what is ticked, from the copies the program keeps of the game's own files, and installs them. Restore puts every file back as it was.
