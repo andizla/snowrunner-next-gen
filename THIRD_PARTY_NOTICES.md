@@ -101,8 +101,8 @@ panoramas published by Poly Haven (https://polyhaven.com) under CC0 1.0 (public 
 
 ## ambientCG panoramas
 
-Two of the cloud bands (env_cloud_02_ru_02__s_d_a, env_cloud_02_ru_03__s_d_a) are cut with make_clouds.js from "Day Sky
-HDRI 065 B" and "Day Sky HDRI 040 B" by ambientCG (https://ambientcg.com), released under CC0 1.0 (public domain
+Three of the cloud bands (env_cloud_02_ru_02__s_d_a, env_cloud_02_ru_03__s_d_a, env_cloud_01_us_02__s_d_a) are cut with
+make_clouds.js from "Day Sky HDRI 065 B", "Day Sky HDRI 040 B" and "Day Sky HDRI 012 B" by ambientCG (https://ambientcg.com), released under CC0 1.0 (public domain
 dedication).
 
 Two of the skies' night layers (env_cloud_01_ru_08__s_d_a, env_cloud_01_us_09__s_d_a) carry the Milky Way from NASA's

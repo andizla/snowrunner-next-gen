@@ -4,12 +4,18 @@
 # copy and state folder (out\enginetest) and %TEMP% was opened, read, listed, required, written, renamed, deleted or
 # made: a dev path the package still reaches, or a write outside the game and the state. In between, a changed code fingerprint in the copy's parts.json (a newer installer over an older install)
 # must make that part again with the same selection and leave the others. Takes a few minutes.
-# usage (after package.ps1): powershell -NoProfile -ExecutionPolicy Bypass -File test\package_test.ps1
+# usage (after package.ps1): powershell -NoProfile -ExecutionPolicy Bypass -File test\package_test.ps1 [-Part 1..4]
+# -Part: the engine test's part (see there), each in a package copy, a game copy and a trace of its own so the parts run
+# side by side; the fingerprint checks and the incomplete copy go with part 4, which ends with the game restored
+param([string]$Part = 'all')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $pkg = Join-Path $root 'out\package\SnowRunnerNextGen'
 if (-not (Test-Path -LiteralPath (Join-Path $pkg 'engine\ngen.js'))) { throw 'out\package is missing: run package.ps1 first' }
-$base = Join-Path ([IO.Path]::GetTempPath()) 'ngen-package-test'
+$suffix = if ($Part -eq 'all') { '' } else { '_' + ($Part -replace ',', '') }
+$base = Join-Path ([IO.Path]::GetTempPath()) ('ngen-package-test' + $suffix)
+$work = Join-Path $root ('out\enginetest' + $(if ($suffix) { '_p' + $suffix.TrimStart('_') } else { '' }))
+$last = $Part -eq 'all' -or (@($Part -split ',') -contains '4')
 if (Test-Path -LiteralPath $base) { [IO.Directory]::Delete($base, $true) }
 $copy = Join-Path $base 'SnowRunnerNextGen'
 New-Item -ItemType Directory -Force -Path $copy | Out-Null
@@ -21,14 +27,14 @@ $tracer = Join-Path $root 'test\trace_fs.js'
 $env:NODE_OPTIONS = '--require ' + $tracer
 $env:TRACE_FILE = $trace
 try {
-  & (Join-Path $root 'test\engine_test.ps1') -Engine (Join-Path $copy 'engine')
+  & (Join-Path $root 'test\engine_test.ps1') -Engine (Join-Path $copy 'engine') -Work $work -Part $Part
+  if ($last) {
 
   # a newer installer over an older install (engine\parts.json): the part whose code changed is rebuilt though the
   # selection is the same, the others are left as they are, and the new fingerprint is recorded
   'a part whose code changed (the package''s parts.json)'
   $node = Join-Path $copy 'engine\node.exe'
   $ngen = Join-Path $copy 'engine\ngen.js'
-  $work = Join-Path $root 'out\enginetest'
   $game = Join-Path $work 'game'
   $env:NGEN_STATE_ROOT = Join-Path $work 'state'
   $selection = Join-Path $work 'selection.json'
@@ -81,11 +87,12 @@ try {
     Expect "restore: $p.pak is as it was before, byte for byte" ((Get-FileHash -LiteralPath (Join-Path $paks "$p.pak")).Hash -eq $start[$p])
   }
   if ($failed) { throw "$failed fingerprint check(s) failed" }
+  }
 }
 finally { Remove-Item Env:\NODE_OPTIONS -ErrorAction SilentlyContinue; Remove-Item Env:\TRACE_FILE -ErrorAction SilentlyContinue }
 
 # every path the package's node processes touched lies in the package copy, the test's game copy and state, or TEMP
-$allowed = @($copy, (Join-Path $root 'out\enginetest'), [IO.Path]::GetTempPath().TrimEnd('\'), $tracer) | ForEach-Object { $_.ToLowerInvariant() }
+$allowed = @($copy, $work, [IO.Path]::GetTempPath().TrimEnd('\'), $tracer) | ForEach-Object { $_.ToLowerInvariant() }
 $touched = @(Get-Content -LiteralPath $trace | ForEach-Object { ($_ -split "`t")[1] } | Where-Object { $_ } | Sort-Object -Unique)
 $outside = @($touched | Where-Object { $p = $_.ToLowerInvariant(); -not ($allowed | Where-Object { $p.StartsWith($_) }) })
 '{0} distinct paths touched by the packaged engine and its tools' -f $touched.Count
@@ -98,11 +105,12 @@ if ($outside.Count) {
 
 # a copy an unzip program left incomplete (one that does not know the zip's folder paths leaves a file by the folder's
 # name): the engine names what is missing and asks to unzip again, before it looks at the game
+if (-not $last) { return }
 'an incomplete copy of the package'
 $replacements = Join-Path $copy 'engine\replacements'
 [IO.Directory]::Delete($replacements, $true)
 [IO.File]::WriteAllBytes($replacements, [byte[]]::new(0))
-$said = @(& (Join-Path $copy 'engine\node.exe') (Join-Path $copy 'engine\ngen.js') status --game (Join-Path $root 'out\enginetest\game') | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+$said = @(& (Join-Path $copy 'engine\node.exe') (Join-Path $copy 'engine\ngen.js') status --game (Join-Path $work 'game') | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
 $e = $said[$said.Count - 1]
 if ($e.type -ne 'error' -or $e.text -notmatch '^This copy of Next Gen Graphics is incomplete: engine\\replacements\\' -or $e.text -notmatch 'Unzip the download again') { throw "an incomplete copy was not reported: $($e.type) $($e.text)" }
 'ok   an incomplete copy says so, names the files and asks to unzip again'

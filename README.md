@@ -37,7 +37,7 @@ Reflections and water
 Atmosphere and image
 
 - Volumetric fog, off by default: no banding and a glow toward the sun. Sun shafts through trees and dust are a separate switch on the card, also off: they are experimental and also show over the truck and other things close to the camera.
-- Weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out, fireflies at night and pollen by day.
+- Weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out (off by default), fireflies at night and pollen by day.
 - Smoke glow: smoke glows when the sun is behind it.
 - Smoke shape and softer edges: puffs get a lit and a shaded side and fade softly where they meet the ground.
 - Sharper smoke and particles: the particle textures at twice their size.
@@ -119,7 +119,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1
 
 SnowRunner Shadows is in `dll`: `dll\build.bat` builds `dll\out\hid.dll`, and `dll\test\run_all.ps1` tests it. The package takes the DLL from `assets\engine\hid.dll` and wants the build named in `assets\engine\hid.dll.sha256`, the one the modules were tested with. A rebuild never has that hash, because the linker stamps the time into the file: copy the new DLL there and put its SHA-256 into the `.sha256` file.
 
-The tests run on copies and never touch the game folder: `test\run_tests.ps1` draws the window at four scales and checks the tick rules, `test\engine_test.ps1` runs the engine on a copy of the game made from original paks (`-Originals` names their folder), `test\package_test.ps1` runs the same against the packaged engine and fails when it reaches any file outside the package, and `test\paths_test.ps1` runs the packaged engine and the exe on a copy whose every folder has a space and a letter outside ASCII in its name, as a Windows user name gives them.
+The tests run on copies and never touch the game folder: `test\run_tests.ps1` draws the window at four scales and checks the tick rules, `test\engine_test.ps1` runs the engine on a copy of the game made from original paks (`-Originals` names their folder), `test\package_test.ps1` runs the same against the packaged engine and fails when it reaches any file outside the package, and `test\paths_test.ps1` runs the packaged engine and the exe on a copy whose every folder has a space and a letter outside ASCII in its name, as a Windows user name gives them. `test\chain.ps1` runs the whole set side by side where the steps share no folder: the engine and package tests in four parts each (`-Part`, `-Work`), each part on a game copy of its own (about 8 GB), with a log per step in `out\chain`.
 
 ## Licence and credits
 

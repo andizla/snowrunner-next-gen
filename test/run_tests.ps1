@@ -105,10 +105,10 @@ try {
   $cards['fog'].ToggleByUser()
   # the weather: the rows that are on, as the tool's comma list
   $s = & $selection
-  Check 'selection: the weather, all nine parts by default' ($s['weather']) 'shadows,showers,evening,horizon,far,fireflies,pollen,drift,land'
+  Check 'selection: the weather, eight of the nine parts by default (Far rain off)' ($s['weather']) 'shadows,showers,evening,horizon,fireflies,pollen,drift,land'
   $cards['weather'].Choice[5] = 1
   $s = & $selection
-  Check 'selection: the fireflies leave the list' ($s['weather']) 'shadows,showers,evening,horizon,far,pollen,drift,land'
+  Check 'selection: the fireflies leave the list' ($s['weather']) 'shadows,showers,evening,horizon,pollen,drift,land'
   # the map days: on by default with every row map by map (Maine's the sets of its own); each row has three values
   Check 'selection: the map days by default, every row map by map' ([string]$s['maps']) 'maineown,bcown,austriaown,washingtonown'
   $cards['maps'].Choice[3] = 0
@@ -176,7 +176,7 @@ try {
   $has.Dll = 'ours'; $has.DllCurrent = $true; $has.Factor = '1'; $has.SlopeBias = '1'; $has.AoHalf = '1'
   $has.Fill = 'ours'; $has.FillFactor = '0.55'; $has.Grade = 'ours'; $has.GradeStrength = '1'; $has.Particles = 'ours'
   $has.Stars = 'ours'; $has.StarsFactor = '3'; $has.Sky = 'ours'; $has.Logos = 'ours'; $has.LogosIntro = $true
-  $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift,land'
+  $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,fireflies,pollen,drift,land'
   $has.Scenery = 'all'; $has.SceneryHide = 'all'; $has.SceneryShadows = 'all'; $has.Grass = 'ours'; $has.GrassFactor = '2'
   $has.Maps = 'ours'; $has.MapsRows = 'maineown,bcown,austriaown,washingtonown'
   $has.Debris = 'ours'; $has.DebrisFactor = '4'; $has.Cubes = 'ours'; $has.Skies = 'ours'

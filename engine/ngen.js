@@ -558,7 +558,7 @@ async function readInitial(g, env)
 // the weather's parts as a comma list in the tool's order, for one comparison
 const WEATHER_PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen', 'drift', 'land'];
 const weatherList = (spec) => WEATHER_PARTS.filter((p) => String(spec || '').split(',').map((s) => s.trim()).includes(p)).join(',');
-const WEATHER_WORDS = { shadows: 'cloud shadows', showers: 'showers that swell and ease', evening: 'evening drizzle', horizon: 'horizon clouds', far: 'rain and snow drawn farther', fireflies: 'fireflies', pollen: 'pollen', drift: 'drifting clouds', land: 'land drawn as far as the fog' };
+const WEATHER_WORDS = { shadows: 'cloud shadows', showers: 'showers that swell and ease', evening: 'evening drizzle', horizon: 'horizon clouds', far: 'rain drawn farther', fireflies: 'fireflies', pollen: 'pollen', drift: 'drifting clouds', land: 'land drawn as far as the fog' };
 // the photo grade: the daytime colour LUTs in boot.pak ({ state, strength })
 async function readGrade(g, env)
 {

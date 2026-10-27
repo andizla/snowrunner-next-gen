@@ -9,13 +9,16 @@
 //   shadows  cloud shadows in every day state that has none, the way ru_17 has them (scale 6, speed 2, direction
 //            (1; 0.5)): the plain states the light map (cloud_shadow_01), the variants the medium one (02), the
 //            variants with heavy rain or snow the dense one (03)
-//   showers  the rain and snow of the day states swell and ease: a range (min, max) becomes (0.3 min, 1.2 max)
+//   showers  the rain and snow of the day states swell and ease: a range (min, max) becomes (0.3 min, max), so the peaks stay at the
+//            game's own (1.2 max until 2026-10-27: heavy snow cost too much frame rate)
 //   evening  the regions with rain in their day states get a light drizzle at dusk, at night and at dawn, the way the
 //            snow regions have flurries then: light_rain 0 to 0.15 at dusk and dawn, 0 to 0.2 at night
 //   horizon  the horizon cloud layer (env/cloud_01_horizon__d_a, frame sphere_ground) that 17 sky files hold commented
 //            out, put in. The stock blocks name another region's states (sky_us_01's names us_02's), so the overrides are
 //            written anew for the file's own states, each from the block's line for the same part of the day
-//   far      rain and snow drawn out to 1.5 times as far from the camera (32 m -> 48 m)
+//   far      rain drawn out to 1.5 times as far from the camera (32 m -> 48 m); off by default. Snow keeps the game's distance:
+//            drawn as far it fills about three times the space around the camera with flakes, and heavy snow lagged badly
+//            (seen in the game, 2026-10-27)
 //   fireflies  fireflies at night in the regions with rain in their day states (where the night has no weather of its
 //            own; with the evening part their nights take the fireflies and the drizzle keeps to dusk and dawn)
 //   pollen   pollen drifting in the clear day states of the same regions
@@ -38,8 +41,8 @@ const SKY_ENTRY = /classes[\\/]skies[\\/](sky_[^\\/]+)\.xml$/i;
 const WEATHER_ENTRY = /classes[\\/]weather[\\/]([^\\/]+)\.xml$/i;
 const PARTS = ['shadows', 'showers', 'evening', 'horizon', 'far', 'fireflies', 'pollen', 'drift', 'land'];
 const LAND_MAX = 3000;   // metres: the farthest the land part lets a state draw its terrain
-const WEATHER_DEFAULT = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift';
-const RAIN_SNOW = /^(light|heavy)_(rain|snow)(_|$)/i;
+const WEATHER_DEFAULT = 'shadows,showers,evening,horizon,fireflies,pollen,drift';
+const RAIN_SNOW = /^(light|heavy)_(rain|snow)(_|$)/i, RAIN = /^(light|heavy)_rain(_|$)/i;
 const SHADOW_LINE = (map) => '<CloudShadowMap Map="env/shadow_clouds/cloud_shadow_0' + map + '.tga" Scale="6" Speed="2.0" Direction="(1.0; 0.5)"/>';
 const fmt = (v) => v.toFixed(3).replace(/\.?0+$/, '');
 // the two new weather types: Expeditions' values, SnowRunner's firefly sprite
@@ -182,7 +185,7 @@ function weatherEdit(text, entryName, parts, ctx = { rainRegions: new Set() })
             {
                 const type = /\bType="([^"]+)"/.exec(tag), lo = /\bMinIntensity="([^"]+)"/.exec(tag), hi = /\bMaxIntensity="([^"]+)"/.exec(tag);
                 if (!type || !lo || !hi || !RAIN_SNOW.test(type[1]) || !(Number(hi[1]) < 10) || !(Number(lo[1]) >= 0)) return tag;
-                const a = fmt(Number(lo[1]) * 0.3), b = fmt(Number(hi[1]) * 1.2);
+                const a = fmt(Number(lo[1]) * 0.3), b = fmt(Number(hi[1]));
                 notes.push(type[1] + ' ' + lo[1] + '-' + hi[1] + ' -> ' + a + '-' + b);
                 kinds.add('showers');
                 return tag.replace(/\bMinIntensity="[^"]+"/, 'MinIntensity="' + a + '"').replace(/\bMaxIntensity="[^"]+"/, 'MaxIntensity="' + b + '"');
@@ -238,7 +241,7 @@ function weatherEdit(text, entryName, parts, ctx = { rainRegions: new Set() })
             if (next !== out) { out = next; kinds.add('drift'); }
         }
     }
-    else if (def && parts.has('far') && RAIN_SNOW.test(def[1]))
+    else if (def && parts.has('far') && RAIN.test(def[1]))
     {
         out = out.replace(/\bDrawDistance="(\d+(?:\.\d+)?)"/, (all, v) =>
         {

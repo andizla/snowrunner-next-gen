@@ -11,7 +11,9 @@
 # usage (after build.ps1): powershell -NoProfile -ExecutionPolicy Bypass -File test\engine_test.ps1
 # -Engine <folder>: test that engine instead (a package's engine\ with its own node.exe, see package_test.ps1)
 # -Originals <folder>: where shader.pak.orig, shared.pak.orig, initial.pak.orig, boot.pak.orig and gfx.pak.orig are
-param([string]$Engine = '', [string]$Originals = $(if ($env:SR_ORIGINALS) { $env:SR_ORIGINALS } else { 'C:\Games\SnowRunner-shaders\pak_backup' }))
+# -Work: the folder for the game copy and its state (out\enginetest by default); -Part: 1 to 4, or a comma list, to run
+# those parts alone, each from a fresh copy of the originals, so that the parts can run side by side in folders of their own
+param([string]$Engine = '', [string]$Originals = $(if ($env:SR_ORIGINALS) { $env:SR_ORIGINALS } else { 'C:\Games\SnowRunner-shaders\pak_backup' }), [string]$Work = '', [string]$Part = 'all')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ngen = if ($Engine) { Join-Path $Engine 'ngen.js' } else { Join-Path $root 'out\engine\ngen.js' }
@@ -21,7 +23,7 @@ if (-not $node) { $node = 'C:\Program Files\nodejs\node.exe' }
 if ($Engine) { $node = Join-Path $Engine 'node.exe' }
 $originals = $Originals
 
-$work = Join-Path $root 'out\enginetest'
+$work = if ($Work) { $Work } else { Join-Path $root 'out\enginetest' }
 if (Test-Path -LiteralPath $work) { [System.IO.Directory]::Delete($work, $true) }   # the previous run's copy
 $game = Join-Path $work 'game'
 $paks = Join-Path $game 'preload\paks\client'
@@ -32,6 +34,9 @@ foreach ($p in 'shader', 'shared', 'initial', 'boot', 'gfx') { Copy-Item -Litera
 Set-Content -LiteralPath (Join-Path $bin 'SnowRunner.exe') -Value 'stand-in'
 $env:NGEN_STATE_ROOT = Join-Path $work 'state'
 $script:failed = 0
+function Part([int]$n) { return $Part -eq 'all' -or (@($Part -split ',') -contains [string]$n) }
+$noPack = Join-Path $work 'no_sky_pack'   # an empty folder where a sky pack would be
+New-Item -ItemType Directory -Force -Path $noPack | Out-Null
 
 function Engine([string[]]$arguments) {
   $lines = & $node $ngen @arguments --game $game
@@ -126,29 +131,31 @@ $default = 'gtao', 'aofar', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonem
 # place of the rebuilt edges (so both filters' sets get made, and the seam dither goes with the rebuilt edges)
 $less = @($default | Where-Object { $_ -notin 'fog', 'seam', 'contact', 'headglow' } | ForEach-Object { if ($_ -eq 'revec') { 'crisp' } else { $_ } })
 
+$everything = [ordered]@{ shader = $default; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = 'all'; grass = '3'; fill = '0.7'; grade = '1'; particles = '1'; sky = '1'; stars = '3'; weather = 'shadows,showers,evening,horizon,far,fireflies,pollen'; logos = '1'; debris = '4'; cubes = '1'; skies = '1' }
+
+if (Part 1) {
 'the untouched copy'
 Check 'status: the originals' (Summary (Status)) 'stock [] dll none / scenery vanilla grass vanilla fill vanilla grade vanilla particles vanilla stars vanilla sky vanilla logos vanilla weather vanilla debris vanilla cubes vanilla skies vanilla'
 
 'every part: the default set with the scenery detail, the grass reach and every weather part'
-$everything = [ordered]@{ shader = $default; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = 'all'; grass = '3'; fill = '0.7'; grade = '1'; particles = '1'; sky = '1'; stars = '3'; weather = 'shadows,showers,evening,horizon,far,fireflies,pollen'; logos = '1'; debris = '4'; cubes = '1'; skies = '1' }
 $r = Apply $everything
 Check 'every part: done' (Last $r) 'done'
 Check 'every part: status' (Summary (Status)) ('ours [' + ($default -join ',') + '] dll ours 1/1 scenery all grass ours3 fill ours0.7 grade ours1 particles ours stars ours3 sky ours logos ours weather oursshadows,showers,evening,horizon,far,fireflies,pollen debris ours4 cubes ours skies ours')
-# the tool of the engine under test, run from a copy of the test in TEMP: a packaged engine reads nothing of the working tree
-$levelTest = Join-Path $env:TEMP 'ngen_level_states_test.js'
+# the tool of the engine under test, run from a copy of the test in the work folder: a packaged engine reads nothing of the working tree
+$levelTest = Join-Path $work 'ngen_level_states_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'level_states_test.js') -Destination $levelTest -Force
 $levelTools = if ($Engine) { Join-Path $Engine 'tools' } else { Join-Path $root 'engine\tools' }   # the dev engine's tools are the working tree's
 Check 'map days: the tool on stand-in level files' ([string](& $node $levelTest $levelTools | Select-Object -Last 1)) 'all passed'
 # the load list tool, which the map days' own sets go through (lod_patch.js requires it, so a package carries it)
-$listTest = Join-Path $env:TEMP 'ngen_load_list_test.js'
+$listTest = Join-Path $work 'ngen_load_list_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'load_list_test.js') -Destination $listTest -Force
 Check 'load list: the tool on a made-up list' ([string](& $node $listTest $levelTools | Select-Object -Last 1)) 'all passed'
 # the start without the intro: the edits of the start-up movie on a made-up bundle
-$introTest = Join-Path $env:TEMP 'ngen_gfx_intro_test.js'
+$introTest = Join-Path $work 'ngen_gfx_intro_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'gfx_intro_test.js') -Destination $introTest -Force
 Check 'intro: the edits on a made-up bundle' ([string](& $node $introTest $levelTools | Select-Object -Last 1)) 'all passed'
-# (a sky texture at the stock texture's size goes in with the game's own .pct_header, byte for byte: 26 of the 49)
-Check 'every part: boot.pak holds the grade (its LUTs and the emptied lens dirt), the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 213'
+# (a sky texture at the stock texture's size goes in with the game's own .pct_header, byte for byte: 25 of the 49)
+Check 'every part: boot.pak holds the grade (its LUTs and the emptied lens dirt), the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 214'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'every part: initial.pak has the sky levels the photo skies need' ((LastInitial $r) -match 'the sky alpha that boot\.pak''s photo night skies need') 'True'
 Check 'every part: the note in the game folder names the five paks' (Note) 'boot.pak gfx.pak initial.pak shader.pak shared.pak'
@@ -168,14 +175,12 @@ Check 'intro off again: the status says so' ([string](Status).logos.intro) ''
 Check 'Bin has hid.dll, its ini and the stock twins' ((Test-Path (Join-Path $bin 'hid.dll')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'True'
 
 'the skies in, the sky pack not beside the program (a new version unzipped into a new folder): another boot.pak part, then Restore'
-$noPack = Join-Path $work 'no_sky_pack'
-New-Item -ItemType Directory -Force -Path $noPack | Out-Null
 $env:SR_SKIES_DIR = $noPack
 $halfGrade = [ordered]@{}; foreach ($k in $everything.Keys) { $halfGrade[$k] = $everything[$k] }; $halfGrade['grade'] = '0.5'
 $r = Apply $halfGrade
 Check 'no sky pack: the grade changes, done' (Last $r) 'done'
 Check 'no sky pack: the skies stay in' ([string](Status).skies.state) 'ours'
-Check 'no sky pack: boot.pak holds the same entries changed' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 213'
+Check 'no sky pack: boot.pak holds the same entries changed' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 214'
 $r = Engine @('restore')
 Check 'no sky pack: Restore goes through' (Last $r) 'done'
 Check 'no sky pack: boot.pak is the original byte for byte' (Hash $boot) (Hash (Join-Path $originals 'boot.pak.orig'))
@@ -187,6 +192,20 @@ Check 'the sky pack back: every part in again' ('{0} {1}' -f (Last $r), [string]
 $cut = Join-Path $work 'cut_sky_pack'; $cutPct = Join-Path $cut 'pct'
 New-Item -ItemType Directory -Force -Path $cutPct | Out-Null
 $skySrc = @(Get-ChildItem -LiteralPath (Join-Path $root 'engine\replacements\skies\pct') -File | Sort-Object Name)
+# every sky texture's header agrees with its length: the tail's u32 is the file's size, and the header's end record
+# (0xff 0x00, then a u32) is where the tail starts. Five domes whose end record held the data's length alone crashed
+# the game in the graphics driver at start (2026-10-27)
+$badPct = @(foreach ($f in ($skySrc | Where-Object { $_.Extension -eq '.pct' }))
+{
+  $b = [IO.File]::ReadAllBytes($f.FullName); $n = $b.Length
+  $tail = [BitConverter]::ToUInt32($b, $n - 4) -eq $n
+  $end = $false; for ($o = 0x20; $o -lt 0x100 -and -not $end; $o++) { if ($b[$o] -eq 0xff -and $b[$o + 1] -eq 0 -and [BitConverter]::ToUInt32($b, $o + 2) -eq $n - 6) { $end = $true } }
+  # the one-level kind with an 82-byte header (the 0xff record at 0x4C): its level's size at 0x3E (the 07 record), the
+  # 04 record at 0x42. The size first written at 0x40 left 0 there and broke the 04 record: the same crash at start
+  $level = $b[0x4C] -ne 0xff -or ([BitConverter]::ToUInt32($b, 0x3E) -eq $n - 88 -and $b[0x42] -eq 4 -and $b[0x43] -eq 1)
+  if (-not ($tail -and $end -and $level)) { $f.Name }
+})
+Check 'every sky texture: its header''s end record and its tail match its length' ($badPct -join ', ') ''
 $packList = [ordered]@{}; foreach ($f in $skySrc) { $packList['pct/' + $f.Name] = $f.Length }
 [IO.File]::WriteAllText((Join-Path $cut 'pack.json'), (([ordered]@{ version = 'test'; files = $packList }) | ConvertTo-Json))
 $skySrc | Select-Object -First ($skySrc.Count - 1) | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $cutPct }
@@ -211,6 +230,10 @@ $clock.Stop()
 Check 'same again: done' (Last $r) 'done'
 Check 'same again: nothing rebuilt (under 30 s)' ($clock.Elapsed.TotalSeconds -lt 30) 'True'
 
+}
+
+if (Part 2) {
+if (-not (Part 1)) { $r = Apply $everything; Check 'part 2: the default set first' (Last $r) 'done' }
 'the fog with its sun shafts (off in the default set)'
 $shaderDefault = Hash (Join-Path $paks 'shader.pak')
 $withShafts = @($default | ForEach-Object { $_; if ($_ -eq 'fog') { 'fogsun' } })
@@ -268,6 +291,9 @@ $s = Status
 Check 'scenery extras off again: status' ('{0} {1} {2}' -f $s.scenery, $s.sceneryHide, $s.sceneryShadows) 'all off off'
 Check 'scenery extras off again: the plain build byte for byte' ((Hash (Join-Path $paks 'shared.pak')) -eq $sharedPlain) 'True'
 
+}
+
+if (Part 3) {
 'every part changed'
 $r = Apply ([ordered]@{ shader = $less; shadows = [ordered]@{ factor = '3'; slopeBias = '0'; aoHalf = '0' }; scenery = 'nature'; grass = '2'; fill = '0.55'; grade = '0.5'; stars = '2'; weather = 'showers,shadows'; debris = '8' })
 Check 'changed: done' (Last $r) 'done'
@@ -391,6 +417,9 @@ Check 'restore: the other mod''s hid.dll is back' (Hash (Join-Path $bin 'hid.dll
 Check 'restore: no hid_chain.dll, ini or stock twins left' ((Test-Path (Join-Path $bin 'hid_chain.dll')) -or (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -or (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'False'
 Check 'restore: the note in the game folder is gone' (Note) 'none'
 
+}
+
+if (Part 4) {
 'the kept originals lost while the changes are still in the game'
 $small = [ordered]@{ shader = @('gtao'); shadows = $null; scenery = $null; grass = $null; fill = '0.7'; grade = '1' }
 $r = Apply $small
@@ -472,6 +501,8 @@ Check 'another layout: initial.pak''s parts read as changed' ([string](Status).g
 Copy-Item -LiteralPath $initialKept -Destination $initial -Force
 Remove-Item -LiteralPath $initialKept
 Check 'another layout: back as it was, the original reads again' ([string](Status).grass.state) 'vanilla'
+
+}
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }
 'all passed'

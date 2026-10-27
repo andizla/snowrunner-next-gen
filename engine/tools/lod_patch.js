@@ -41,7 +41,7 @@
 //        build. The photo night skies (Scandinavia, Kola, Quebec) carry their stars in the picture's alpha when
 //        boot.pak holds those builds; their sky alpha then follows in every build, with or without the stars part
 //        node lod_patch.js weather-status | weather-install [parts] | weather-restore   the weather (daytime_weather.js:
-//        cloud shadows on every map, showers, drizzle at dusk and night, the horizon clouds, rain and snow drawn farther;
+//        cloud shadows on every map, showers, drizzle at dusk and night, the horizon clouds, rain drawn farther;
 //        fireflies, pollen, drift, land; the parts as one comma list, WEATHER_PARTS or by default every part but land): a fourth part of the
 //        same build
 //        node lod_patch.js debris-status | debris-install [drops] | debris-restore   debris and splashes (particle_debris.js)
