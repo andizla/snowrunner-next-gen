@@ -11,11 +11,12 @@
 // the game's bands do. The colour is the texel's luminance over the brightest cloud's, so a state's tint works on it
 // as on the game's. The header and the tail come from the stock texture, so size, mips and format are the game's.
 // usage: node make_clouds.js band <panorama.hdr> <out.pct> --header <stock.pct> --from <deg> --to <deg>
-//            [--coverage <0..1>] [--shade <0..1>] [--white] [--yaw <degrees>] [--soft <w>] [--blur <texels>] [--min-island <texels>] [--preview]
+//            [--coverage <0..1>] [--shade <0..1>] [--white] [--yaw <degrees>] [--soft <w>] [--blur <texels>] [--min-island <texels>] [--top-edge <share>] [--drop-top] [--preview]
 //        --from and --to: the elevation of the band's lower and upper edge; --shade: the clouds' mean grey (the stock
 //        band's, weighted by its alpha); --white: plain white colour;
 //        --preview writes <out>.png, the band over a mid grey; --soft (0.3), --blur (1) and --min-island (0) shape the
-//        clouds' edges: the soft step's width, the radius the alpha is softened over, patches of cloud left out below that size
+//        clouds' edges: the soft step's width, the radius the alpha is softened over, patches of cloud left out below that size;
+//        --top-edge (0.16): the share of the height the upper edge fades over; --drop-top: clouds that reach into the upper half of that fade left out whole
 'use strict';
 const fs = require('fs'), zlib = require('zlib');
 const { readHdr, encodeBlock, removeSun, zenithCap, pctHeader } = require('./make_cube.js');
@@ -116,13 +117,15 @@ function coreGrey(grey, alpha, w, h)
 }
 // the band as RGBA8: the alpha a soft step over the cloudiness whose foot is found so the mean alpha is `coverage`;
 // look.soft: the step's width (0.3), look.blur: the radius in texels the alpha is softened over (1), look.minIsland: a
-// patch of cloud of fewer texels than this, not touching another, is left out (0: none); the defaults are the bands as
-// first built
+// patch of cloud of fewer texels than this, not touching another, is left out (0: none), look.topEdge: the share of the
+// height the upper edge fades over (EDGE; wider, a cloud that runs into it thins out instead of ending in a straight
+// line), look.dropTop: a patch of cloud that reaches into the upper half of that fade is left out whole; the defaults
+// are the bands as first built
 function renderBand(band, w, h, coverage, white, shade = 0, look = {})
 {
-    const soft = look.soft || 0.3, blur = look.blur || 1, minIsland = look.minIsland || 0;
+    const soft = look.soft || 0.3, blur = look.blur || 1, minIsland = look.minIsland || 0, topEdge = look.topEdge || EDGE, dropTop = !!look.dropTop;
     const env = new Float32Array(h);
-    for (let j = 0; j < h; j++) { const t = (j + 0.5) / h; env[j] = smooth(0, EDGE, t) * smooth(0, EDGE, 1 - t); }
+    for (let j = 0; j < h; j++) { const t = (j + 0.5) / h; env[j] = smooth(0, topEdge, t) * smooth(0, EDGE, 1 - t); }
     const alphaAt = (k, j, foot) => smooth(foot, foot + soft, band.cloud[k]) * env[j];
     const meanAlpha = (foot) => { let s = 0; for (let j = 0; j < h; j += 2) for (let i = 0; i < w; i += 2) s += alphaAt(j * w + i, j, foot); return s / (Math.ceil(h / 2) * Math.ceil(w / 2)); };
     // the foot never goes under FOOT_MIN: below it the clear sky's own haze would come in as a veil, so a sky with
@@ -131,24 +134,47 @@ function renderBand(band, w, h, coverage, white, shade = 0, look = {})
     for (let k = 0; k < 24; k++) { const mid = (lo + hi) / 2; if (meanAlpha(mid) > coverage) lo = mid; else hi = mid; }
     const foot = (lo + hi) / 2, alpha = new Float32Array(w * h), bright = [];
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = j * w + i; alpha[k] = alphaAt(k, j, foot); if (alpha[k] > 0.8 && (i & 3) === 0 && (j & 3) === 0) bright.push(band.lum[k]); }
-    // small patches of cloud, each on its own (texels over 0.05 alpha joined to their four neighbours, the band wrapping
-    // around), left out: the broken edge of a cloud field would show as hard specks
-    if (minIsland > 0)
+    // the patches of texels where in(k) holds, each joined to its four neighbours (the band wrapping around)
+    const patches = (inside, each) =>
     {
         const seen = new Uint8Array(w * h), stack = [];
         for (let s = 0; s < w * h; s++)
         {
-            if (seen[s] || alpha[s] <= 0.05) continue;
+            if (seen[s] || !inside(s)) continue;
             const part = []; seen[s] = 1; stack.push(s);
             while (stack.length)
             {
                 const k = stack.pop(), i = k % w, j = (k - i) / w;
                 part.push(k);
                 for (const q of [j * w + (i + 1) % w, j * w + (i + w - 1) % w, j > 0 ? k - w : -1, j < h - 1 ? k + w : -1])
-                    if (q >= 0 && !seen[q] && alpha[q] > 0.05) { seen[q] = 1; stack.push(q); }
+                    if (q >= 0 && !seen[q] && inside(q)) { seen[q] = 1; stack.push(q); }
             }
-            if (part.length < minIsland) for (const k of part) alpha[k] = 0;
+            each(part);
         }
+    };
+    // small patches of cloud, each on its own (texels over 0.05 alpha), left out: the broken edge of a cloud field would
+    // show as hard specks
+    if (minIsland > 0) patches((k) => alpha[k] > 0.05, (part) => { if (part.length < minIsland) for (const k of part) alpha[k] = 0; });
+    // dropTop: the clouds the upper edge would cut, left out whole. A cloud is its solid part (over 0.35 before the
+    // edges' fade, so thin haze does not join it to the clouds below); it goes with its soft rim, the texels within
+    // 3 % of the height of it that are not solid cloud of their own
+    if (dropTop)
+    {
+        const cutRow = Math.max(1, Math.floor(h * topEdge * 0.5)), solid = (k) => smooth(foot, foot + soft, band.cloud[k]) > 0.35;
+        const gone = new Uint8Array(w * h), rim = Math.max(2, Math.round(h * 0.03));
+        patches(solid, (part) => { if (part.some((k) => k < cutRow * w)) for (const k of part) gone[k] = 1; });
+        for (let j = 0; j < h; j++)
+            for (let i = 0; i < w; i++)
+            {
+                if (!gone[j * w + i]) continue;
+                for (let dj = -rim; dj <= rim; dj++)
+                    for (let di = -rim; di <= rim; di++)
+                    {
+                        const jj = j + dj; if (jj < 0 || jj >= h || di * di + dj * dj > rim * rim) continue;
+                        const q = jj * w + (i + di + w) % w;
+                        if (gone[q] || !solid(q)) alpha[q] = 0;
+                    }
+            }
     }
     bright.sort((a, b) => a - b);
     const top = bright.length ? bright[Math.floor(bright.length * 0.97)] : 1, rgba = new Uint8Array(w * h * 4), grey = new Float32Array(w * h);
@@ -241,7 +267,7 @@ if (require.main === module)
             removeSun(p);   // the sun and its glare are as white as a cloud: out with them before the clouds are told from the sky
             const from = Number(opt('from')), to = Number(opt('to')), coverage = Number(opt('coverage') || 0.3), yaw = Number(opt('yaw') || 0);
             if (!(to > from && from >= -10 && to <= 90)) throw new Error('--from and --to: the band\'s lower and upper elevation in degrees');
-            const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'), Number(opt('shade') || 0), { soft: Number(opt('soft') || 0), blur: Number(opt('blur') || 0), minIsland: Number(opt('min-island') || 0) });
+            const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'), Number(opt('shade') || 0), { soft: Number(opt('soft') || 0), blur: Number(opt('blur') || 0), minIsland: Number(opt('min-island') || 0), topEdge: Number(opt('top-edge') || 0), dropTop: args.includes('--drop-top') });
             // a band that reaches high gets make_cube.js's zenith cap (rows above 72 degrees blended towards their mean), unless
             // --no-cap: its rows meet at the zenith as a dome's do
             if (!args.includes('--no-cap')) zenithCap(r.rgba, w, h, (j) => to - (to - from) * (j + 0.5) / h);

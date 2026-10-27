@@ -87,17 +87,23 @@ included; the tool is written fresh.
 
 ## Poly Haven panoramas
 
-The skies (engine\replacements\skies\pct) are made with engine\tools\make_cube.js and make_clouds.js from 25 "pure sky"
+The skies (engine\replacements\skies\pct) are made with engine\tools\make_cube.js and make_clouds.js from 27 "pure sky"
 panoramas published by Poly Haven (https://polyhaven.com) under CC0 1.0 (public domain dedication):
 
-- Greg Zaal and Jarod Guest: "Kloofendal 38d Partly Cloudy", "Kloofendal 48d Partly Cloudy", "Kloppenheim 01", "Kloppenheim 03",
-  "Kloppenheim 06", "Kloppenheim 07", "Mpumalanga Veld", "Qwantani Dusk 2", "Qwantani Sunset", "Rocky Ridge",
-  "Table Mountain 1", "Table Mountain 2"
+- Greg Zaal and Jarod Guest: "Aristea Wreck", "Kloofendal 38d Partly Cloudy", "Kloofendal 48d Partly Cloudy", "Kloppenheim 01",
+  "Kloppenheim 03", "Kloppenheim 05", "Kloppenheim 06", "Mpumalanga Veld", "Qwantani Dusk 1", "Qwantani Dusk 2",
+  "Qwantani Sunset", "Rocky Ridge", "Rustig Koppie", "Table Mountain 1", "Table Mountain 2"
 - Jarod Guest and Sergej Majboroda: "Evening Road 01", "Hilly Terrain 01", "Industrial Sunset", "Industrial Sunset 02",
   "Overcast Soil", "Scythian Tombs", "Sunflowers", "Wasteland Clouds"
-- Dimitrios Savva and Jarod Guest: "Citrus Orchard Road", "Farm Field", "Rosendal Park Sunset"
+- Dimitrios Savva and Jarod Guest: "Citrus Orchard Road", "Farm Field"
 - Greg Zaal: "Kloofendal Overcast"
 - Sergey Rudavin and Jarod Guest: "Mud Road"
+
+## ambientCG panoramas
+
+Two of the cloud bands (env_cloud_02_ru_02__s_d_a, env_cloud_02_ru_03__s_d_a) are cut with make_clouds.js from "Day Sky
+HDRI 065 B" and "Day Sky HDRI 040 B" by ambientCG (https://ambientcg.com), released under CC0 1.0 (public domain
+dedication).
 
 Two of the skies' night layers (env_cloud_01_ru_08__s_d_a, env_cloud_01_us_09__s_d_a) carry the Milky Way from NASA's
 Deep Star Maps 2020 (see above), laid into the game's patch.
