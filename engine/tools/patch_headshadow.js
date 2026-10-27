@@ -6,6 +6,10 @@
 // scales, or right before that colour multiply, whose intensity it scales; fed the pixel's world position (what the
 // shader subtracts g_vHeadLightPos[0], cb2[24], from: an input, or a temp that still holds it there), it returns the
 // share of the lamp's light that gets past what stands in the way. Everything else the shader does with the light stays.
+// The helper's second input is the pixel's place on the screen, the shader's SV_Position (read where the shader reads it,
+// declared where only its signature names it, -1 for the one shader whose signature has none): the helper finds the
+// pixel's point where that camera ray meets the depth, as the terrain's own world position is not on the surface the
+// camera saw (stripes and grain over lit snow, seen in the game on 2026-10-27).
 // The shader also gets what the helper reads and it lacked: t121 (the previous frame's linear depth, which SnowRunner
 // Shadows binds when it sees it declared; declared in front of dcl_temps, where fxc puts textures) and cb1 up to register
 // 13 (the previous frame's view-projection, c10..c13: the declaration is widened in place, or added in front of dcl_temps
@@ -30,7 +34,7 @@ const W = path.resolve(__dirname, '..');
 const DUMP = process.env.SR_DUMP_DIR || path.join(W, 'dump');   // the game's shaders (extract.js output): SR_DUMP_DIR, else dump\
 const HELPER = path.join(W, 'replacements', 'headlight', 'headshadow.cso');
 const CB1_REGS = 14;   // the helper reads cb1 up to c13 (the previous frame's view-projection)
-const OP = { add: 0, mul: 56, sample_d: 73, dcl_resource: 88, dcl_constantbuffer: 89, dcl_temps: 104 };
+const OP = { add: 0, mul: 56, sample_d: 73, dcl_resource: 88, dcl_constantbuffer: 89, dcl_input_ps_siv: 100, dcl_temps: 104 };
 const PATTERN_SLOT = 54, PATTERN_SAMPLER = 2, DEPTH_SLOT = 121;
 
 const words = (...w) => { const b = Buffer.alloc(w.length * 4); w.forEach((v, i) => b.writeUInt32LE(v >>> 0, i * 4)); return b; };
@@ -44,6 +48,24 @@ const tokens = (b, o) => b.subarray(o.off, o.off + o.size);
 const dclTexture2D = (slot) => words(OP.dcl_resource | (3 << 11) | (4 << 24), 0x00107000, slot, 0x00005555);
 // dcl_constantbuffer cbN[size], immediateIndexed: opcode 89, 4 tokens (as fxc writes it)
 const dclConstantBuffer = (slot, size) => words(OP.dcl_constantbuffer | (4 << 24), 0x00208e46, slot, size);
+// dcl_input_ps_siv linear noperspective vN.xy, position: opcode 100, interpolation 4 in bits 11..14, 4 tokens (as fxc writes it)
+const dclInputPosition = (reg) => words(OP.dcl_input_ps_siv | (4 << 11) | (4 << 24), 0x00101032, reg, 1);
+const inputSrc = (reg) => words(0x00101046, reg);   // vN.xyxx: only x and y, the components its declaration names (see dxbc_lint.js)
+// l(-1, -1, -1, -1): no screen position (the helper then works from the position the shader was given)
+const noScreen = () => words(0x00004002, 0xbf800000, 0xbf800000, 0xbf800000, 0xbf800000);
+// the input register the shader's signature gives SV_Position (the pixel's place on the screen), or -1
+function screenRegister(b)
+{
+    const c = chunks(b).ISGN;
+    if (!c) return -1;
+    const n = b.readUInt32LE(c.data);
+    for (let k = 0; k < n; k++)
+    {
+        const e = c.data + 8 + k * 24, at = c.data + b.readUInt32LE(e);
+        if (b.toString('ascii', at, b.indexOf(0, at)).toUpperCase() === 'SV_POSITION' && b.readUInt32LE(e + 8) === 1) return b.readUInt32LE(e + 16);
+    }
+    return -1;
+}
 
 // bytes inserted at a byte offset inside the shader code; the container's sizes, chunk offsets and checksum follow
 // (dcl_temps is not touched: this is for declarations in front of it)
@@ -128,9 +150,15 @@ function patchHeadShadow(b, helper = fs.readFileSync(HELPER))
         if (world.type === 0 && writesXyz(e, world.idx[0])) return { reason: 'the world position temp is overwritten before the light' };
     }
     const base = b.readUInt32LE(w.insts.find((x) => x.op === OP.dcl_temps).off + 4);
-    const h = helperBody(helper, base, 1);
+    const h = helperBody(helper, base, 2);
     const x = at.x, orig = b.subarray(x.off, x.off + x.len * 4);
-    const feed = movInst(tempDest(h.IN(0), 7), tokens(b, world));   // the world position, as the shader measures it
+    // the helper's second input, the pixel's place on the screen: the shader's SV_Position (declared where the shader
+    // does not read it; every input its signature names may be declared), or -1 where its signature has none
+    const screen = screenRegister(b);
+    const screenDcl = screen < 0 ? null : L.find((e) => e.x.op >= 95 && e.x.op <= 100 && e.o[0].type === 1 && e.o[0].idx[0] === screen);
+    if (screenDcl && (screenDcl.o[0].sel & 3) !== 3) return { reason: 'the screen position is declared without x and y' };
+    const feed = Buffer.concat([movInst(tempDest(h.IN(0), 7), tokens(b, world)),   // the world position, as the shader measures it
+        movInst(tempDest(h.IN(1), 3), screen < 0 ? noScreen() : inputSrc(screen))]);
     let spliced, note;
     if (mode === 'pattern')
     {
@@ -154,9 +182,10 @@ function patchHeadShadow(b, helper = fs.readFileSync(HELPER))
     // t121, and cb1 when the shader has none, declared in front of dcl_temps (the spliced code lies after it, so this offset holds too)
     const temps = w.insts.find((y) => y.op === OP.dcl_temps).off;
     if (!textures.has(DEPTH_SLOT)) out = insertAt(out, temps, dclTexture2D(DEPTH_SLOT));
+    if (screen >= 0 && !screenDcl) out = insertAt(out, temps, dclInputPosition(screen));
     if (!cb1) out = insertAt(out, temps, dclConstantBuffer(1, CB1_REGS));
     dxbcChecksum(out.subarray(20)).copy(out, 4);
-    return { blob: out, note: note + ' at ' + at.i + ', world ' + (world.type ? 'v' : 'r') + world.idx[0] + (cb1 ? ', cb1 ' + cb1Size + (cb1Size < CB1_REGS ? ' -> ' + CB1_REGS : '') : ', cb1 added') + (textures.has(DEPTH_SLOT) ? '' : ', t121 added') };
+    return { blob: out, note: note + ' at ' + at.i + ', world ' + (world.type ? 'v' : 'r') + world.idx[0] + (cb1 ? ', cb1 ' + cb1Size + (cb1Size < CB1_REGS ? ' -> ' + CB1_REGS : '') : ', cb1 added') + (textures.has(DEPTH_SLOT) ? '' : ', t121 added') + (screen < 0 ? ', no screen position' : screenDcl ? ', screen v' + screen : ', screen v' + screen + ' declared') };
 }
 
 const index = () => JSON.parse(fs.readFileSync(path.join(DUMP, 'index.json')));

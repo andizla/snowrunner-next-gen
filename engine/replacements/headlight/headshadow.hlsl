@@ -80,6 +80,12 @@
 #ifndef HS_SNAP_SLOPE         // 15 cm under a surface is about a metre behind it along the view
 #define HS_SNAP_SLOPE 0.25
 #endif
+#ifndef HS_PIXEL
+#define HS_PIXEL 1            // 1: the walk starts where the pixel's own camera ray meets the depth (the splice hands the
+#endif                        // helper the pixel's screen position); 0: from the position the shader was given, as before
+#ifndef HS_PIXEL_AGREE
+#define HS_PIXEL_AGREE 0.15   // metres, plus 2 % of the distance: how far the last frame's depth may stay from the point
+#endif                        // after its reprojection before the pixel counts as one the last frame did not see
 
 cbuffer CB_GLOBAL_CAMERA : register(b1)
 {
@@ -107,6 +113,16 @@ float4 PrevClip(float3 p)
 {
     const float4 q = float4(p, 1.0);
     return float4(dot(q, g_vViewProjPrevCol[0]), dot(q, g_vViewProjPrevCol[1]), dot(q, g_vViewProjPrevCol[2]), dot(q, g_vViewProjPrevCol[3]));
+}
+// the point on this frame's camera ray through screen position s (-1..1, y up) whose distance from the camera is z:
+// x / w and y / w fixed by s, w = z; the rows a, b, c of that system, solved with its inverse's columns (b x c, c x a,
+// a x b over the determinant)
+float3 OnRay(float2 s, float z)
+{
+    const float4 m0 = g_vViewProjCol[0], m1 = g_vViewProjCol[1], m3 = g_vViewProjCol[3];
+    const float3 a = m0.xyz - s.x * m3.xyz, b = m1.xyz - s.y * m3.xyz, c = m3.xyz;
+    const float3 r = float3(-(m0.w - s.x * m3.w), -(m1.w - s.y * m3.w), z - m3.w);
+    return (cross(b, c) * r.x + cross(c, a) * r.y + cross(a, b) * r.z) / dot(a, cross(b, c));
 }
 
 // one lamp: 1 = its light arrives, 0 = blocked (one exit: the splice inlines the helper, which cannot return early);
@@ -173,13 +189,42 @@ float Lamp(float3 P, float3 L, float3 lampDir, float2 size, float jitter)
     return 1.0 - blocked * HS_STRENGTH;
 }
 
-float4 main(float4 posIn : TEXCOORD0) : SV_Target0
+float4 main(float4 posIn : TEXCOORD0, float4 screen : SV_Position) : SV_Target0
 {
     uint w, h;
     g_txSceneZ.GetDimensions(w, h);
     float3 P = posIn.xyz;
     const float3 L = g_vHeadLightPos[0].xyz;
     const float2 size = float2(w, h);
+    // the pixel's own point: where its camera ray meets the depth. The position the shader is given does not always lie
+    // on the surface the camera saw there (the terrain's: metres off on a snow bank, and on lit snow a little off at
+    // every pixel, so the first steps of each walk met the depth's own steps: a grain and stripes over the snow, worse
+    // without TAA; seen in the game, 2026-10-27). The depth (t121) is the last frame's: read at the pixel itself (exact
+    // with the camera still), then twice where that point was in the last frame, the point moved along the ray by the
+    // difference. A point the last frame did not see (the depth stays off) keeps the game's own light for that frame.
+    // screen.x < 0: the splice found no screen position in the shader (24 of 5,569), so the old way below
+    bool onPixel = false;
+    float agree = 0.0;   // HS_DEBUG 1: 1 within 10 cm of the depth, 0.5 within the snap's reach, 0.25 beyond it, 0 off the screen
+    if (HS_PIXEL && w != 0 && screen.x >= 0.0)
+    {
+        const float2 s = float2(screen.x / size.x * 2.0 - 1.0, 1.0 - screen.y / size.y * 2.0);
+        float z = g_txSceneZ.Load(int3(screen.xy, 0));
+        float off = 1e9;
+        if (z > 0.05)
+        {
+            [unroll] for (int k = 0; k < 2; k++)
+            {
+                const float4 pc = PrevClip(OnRay(s, z));
+                const float2 suv = float2(pc.x / max(pc.w, 0.05) * 0.5 + 0.5, 0.5 - pc.y / max(pc.w, 0.05) * 0.5);
+                const float zs = pc.w > 0.05 && all(suv >= 0.0) && all(suv < 1.0) ? g_txSceneZ.Load(int3(suv * size, 0)) : 0.0;
+                off = zs > 0.05 ? zs - pc.w : 1e9;
+                if (zs > 0.05) z += off;
+            }
+            onPixel = true;
+            P = OnRay(s, z);
+            agree = abs(off) < 0.1 ? 1.0 : abs(off) < HS_PIXEL_AGREE + 0.02 * z ? 0.5 : 0.25;
+        }
+    }
     // a pixel shaded below the surface the camera saw there starts on that surface: a road overlay or decal over the
     // ground, parallax-mapped asphalt or a depth bias leave the point the shader lights a few centimetres under the depth,
     // and seen at a grazing angle those centimetres put the first steps tens of centimetres behind the road itself, which
@@ -189,8 +234,7 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
     // edges (seen in the game, 2026-10-27). A shaded pixel is a visible one, so the surface the camera saw there is
     // where it lies: moved along this frame's camera ray to the depth there, as O below, from either side; a pixel
     // further off (an edge, or something the last frame did not see) stays where it is
-    float agree = 0.0;   // HS_DEBUG 1: 1 within 10 cm of the depth, 0.5 within the snap's reach, 0.25 beyond it, 0 off the screen
-    if (w != 0 && HS_SNAP > 0.0)
+    if (!onPixel && w != 0 && HS_SNAP > 0.0)
     {
         const float4 pc = PrevClip(P);
         const float2 suv = float2(pc.x / max(pc.w, 0.05) * 0.5 + 0.5, 0.5 - pc.y / max(pc.w, 0.05) * 0.5);
@@ -209,7 +253,7 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
     const float3 hd = g_vHeadLightDir[0].xyz, lampDir = dot(hd, hd) > 1e-6 ? normalize(hd) : float3(0.0, 0.0, 1.0);
     // the pixel's place on the screen, for the per-pixel offset of the steps
     const float4 cp = Clip(P);
-    const float2 pix = (float2(cp.x / cp.w * 0.5 + 0.5, 0.5 - cp.y / cp.w * 0.5)) * size;
+    const float2 pix = onPixel ? screen.xy : (float2(cp.x / cp.w * 0.5 + 0.5, 0.5 - cp.y / cp.w * 0.5)) * size;
     const float jitter = frac(52.9829189 * frac(dot(pix, float2(0.06711056, 0.00583715))));
     float v = 1.0;                                            // no depth from the DLL: the game's own light
     if (w == 0 || agree == 0.25) v = 1.0;                   // (one exit: the splice inlines this, no early return)
