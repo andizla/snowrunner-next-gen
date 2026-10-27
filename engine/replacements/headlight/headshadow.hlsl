@@ -24,7 +24,13 @@
 // Build: fxc -T ps_5_0 -E main headshadow.hlsl -Fo headshadow.cso. Every knob can be set with -D NAME=value.
 
 #ifndef HS_STEPS
-#define HS_STEPS 24           // steps along each ray
+#define HS_STEPS 24           // steps along each ray, at least
+#endif
+#ifndef HS_STEPS_MAX
+#define HS_STEPS_MAX 64       // and at most, one step per HS_PX pixels of the ray on the screen in between
+#endif
+#ifndef HS_PX
+#define HS_PX 6.0
 #endif
 #ifndef HS_SPREAD
 #define HS_SPREAD 1.4         // metres between the two lamps of the pair (0: one lamp in the middle)
@@ -56,20 +62,23 @@
 #ifndef HS_BODY
 #define HS_BODY HS_NEAR       // metres around a lamp within which what the camera sees is the truck's own front and does
 #endif                        // not block (0: it does)
+#ifndef HS_DEBUG
+#define HS_DEBUG 0            // 1: no shadows; the beam shows how the pixel's position agrees with the depth (a test build)
+#endif
 #ifndef HS_LIFT
 #define HS_LIFT 0.1           // metres above the surface (straight up) where a ray starts: lumps lower than that do not block
 #endif
 #ifndef HS_ROWS
-#define HS_ROWS 1             // pixel rows above and below a step whose farther depth counts (0: the step's own pixel only)
+#define HS_ROWS 0             // pixel rows above and below a step whose farther depth counts (0: the step's own pixel only)
 #endif
 #ifndef HS_STRENGTH
 #define HS_STRENGTH 1.0       // 1 = a fully blocked lamp gives no light; less leaves some
 #endif
 #ifndef HS_SNAP
-#define HS_SNAP 1.0           // metres, plus HS_SNAP_SLOPE times the distance: a pixel up to this far behind the depth the
+#define HS_SNAP 3.0           // metres, plus HS_SNAP_SLOPE times the distance: a pixel up to this far off the depth the
 #endif                        // camera saw where it lies starts its walk on that surface; 0 = never. At a grazing view
 #ifndef HS_SNAP_SLOPE         // 15 cm under a surface is about a metre behind it along the view
-#define HS_SNAP_SLOPE 0.05
+#define HS_SNAP_SLOPE 0.25
 #endif
 
 cbuffer CB_GLOBAL_CAMERA : register(b1)
@@ -122,11 +131,15 @@ float Lamp(float3 P, float3 L, float3 lampDir, float2 size, float jitter)
     const float2 s0 = c0.xy / cw, s1 = e1.xy / ew;
     const float iw0 = 1.0 / cw, iw1 = 1.0 / ew;
     // no ray: the pixel is within the lamp's reach of the truck, or behind the camera
-    const int steps = (span > 0.0 && c0.w > 0.05) ? HS_STEPS : 0;
+    // one step per HS_PX pixels of the ray on the screen, HS_STEPS to HS_STEPS_MAX: a long ray in 24 steps jumped over a
+    // caster a few pixels thin (a fence's rail), whose shadow came out as a comb of bars, the worse the wider the field
+    // of view (seen in the game, 2026-10-27)
+    const float pxLen = length((s1 - s0) * 0.5 * size);
+    const int steps = (span > 0.0 && c0.w > 0.05) ? (int)clamp(ceil(pxLen / HS_PX), HS_STEPS, HS_STEPS_MAX) : 0;
     float blocked = 0.0;
     [loop] for (int i = 0; i < steps; i++)
     {
-        const float f = (i + jitter) / HS_STEPS;
+        const float f = (i + jitter) / steps;
         const float2 s = lerp(s0, s1, f);
         const float2 uv = float2(s.x * 0.5 + 0.5, 0.5 - s.y * 0.5);
         if (any(uv < 0.0) || any(uv > 1.0)) break;          // off the screen: nothing known further on
@@ -171,8 +184,12 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
     // ground, parallax-mapped asphalt or a depth bias leave the point the shader lights a few centimetres under the depth,
     // and seen at a grazing angle those centimetres put the first steps tens of centimetres behind the road itself, which
     // then blocks them all (a hard-edged dark patch the size of the overlay, gone from a steep view; seen in the game,
-    // 2026-10-23). Moved along this frame's camera ray to the depth there, as O below; a pixel further behind (an edge,
-    // or something the last frame did not see) stays where it is
+    // 2026-10-23). A pixel shaded in front of that surface does the same: an overlay's or a decal's own geometry stands
+    // above the ground the camera saw through it, and a whole stretch of road or snow in the beam went dark with straight
+    // edges (seen in the game, 2026-10-27). A shaded pixel is a visible one, so the surface the camera saw there is
+    // where it lies: moved along this frame's camera ray to the depth there, as O below, from either side; a pixel
+    // further off (an edge, or something the last frame did not see) stays where it is
+    float agree = 0.0;   // HS_DEBUG 1: 1 within 10 cm of the depth, 0.5 within the snap's reach, 0.25 beyond it, 0 off the screen
     if (w != 0 && HS_SNAP > 0.0)
     {
         const float4 pc = PrevClip(P);
@@ -180,8 +197,13 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
         if (pc.w > 0.05 && all(suv >= 0.0) && all(suv < 1.0))
         {
             const float zs = g_txSceneZ.Load(int3(suv * size, 0));
-            const float under = pc.w - zs;
-            if (under > 0.0 && under < HS_SNAP + HS_SNAP_SLOPE * pc.w) P = g_vEyePos + (P - g_vEyePos) * (zs / pc.w);
+            const float off = pc.w - zs;
+            if (zs > 0.05 && abs(off) < HS_SNAP + HS_SNAP_SLOPE * pc.w) { P = g_vEyePos + (P - g_vEyePos) * (zs / pc.w); agree = abs(off) < 0.1 ? 1.0 : 0.5; }
+            // further off than that, with the depth there: the position the shader was given is not where the pixel lies
+            // (on a snow bank it was metres off in every direction, so no walk along its own camera line found the
+            // surface, and the whole bank went dark with straight edges; seen in the game, 2026-10-27). Its walk would
+            // start from the wrong place: the game's own light, unshadowed
+            else if (zs > 0.05) agree = 0.25;
         }
     }
     const float3 hd = g_vHeadLightDir[0].xyz, lampDir = dot(hd, hd) > 1e-6 ? normalize(hd) : float3(0.0, 0.0, 1.0);
@@ -190,7 +212,7 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
     const float2 pix = (float2(cp.x / cp.w * 0.5 + 0.5, 0.5 - cp.y / cp.w * 0.5)) * size;
     const float jitter = frac(52.9829189 * frac(dot(pix, float2(0.06711056, 0.00583715))));
     float v = 1.0;                                            // no depth from the DLL: the game's own light
-    if (w == 0) v = 1.0;
+    if (w == 0 || agree == 0.25) v = 1.0;                   // (one exit: the splice inlines this, no early return)
     else if (HS_SPREAD > 0.0)
     {
         // the pair across the truck: sideways from the headlight's direction, level
@@ -199,5 +221,6 @@ float4 main(float4 posIn : TEXCOORD0) : SV_Target0
         v = 0.5 * (Lamp(P, L - side, lampDir, size, jitter) + Lamp(P, L + side, lampDir, size, frac(jitter + 0.5)));
     }
     else v = Lamp(P, L, lampDir, size, jitter);
+    if (HS_DEBUG == 1) v = agree;
     return float4(v, v, v, 1.0);
 }
