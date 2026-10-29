@@ -11,17 +11,18 @@
 // the game's bands do. The colour is the texel's luminance over the brightest cloud's, so a state's tint works on it
 // as on the game's. The header and the tail come from the stock texture, so size, mips and format are the game's.
 // usage: node make_clouds.js band <panorama.hdr> <out.pct> --header <stock.pct> --from <deg> --to <deg>
-//            [--coverage <0..1>] [--shade <0..1>] [--white] [--yaw <degrees>] [--soft <w>] [--blur <texels>] [--min-island <texels>] [--top-edge <share>] [--drop-top] [--preview]
+//            [--coverage <0..1>] [--shade <0..1>] [--white] [--yaw <degrees>] [--soft <w>] [--blur <texels>] [--min-island <texels>] [--top-edge <share>] [--drop-top] [--lum] [--floor <0..1>] [--preview]
 //        --from and --to: the elevation of the band's lower and upper edge; --shade: the clouds' mean grey (the stock
 //        band's, weighted by its alpha); --white: plain white colour;
 //        --preview writes <out>.png, the band over a mid grey; --soft (0.3), --blur (1) and --min-island (0) shape the
 //        clouds' edges: the soft step's width, the radius the alpha is softened over, patches of cloud left out below that size;
 //        --top-edge (0.16): the share of the height the upper edge fades over; --drop-top: clouds that reach into the upper half of that fade left out whole
+//        --lum: the alpha also the clouds' brightness and the colour white, as the game's own near band; --floor (0.04): the alpha under which a texel is clear
 'use strict';
 const fs = require('fs'), zlib = require('zlib');
 const { readHdr, encodeBlock, removeSun, zenithCap, pctHeader } = require('./make_cube.js');
 
-const TAIL = 6, EDGE = 0.16, FOOT_MIN = 0.12;   // the .pct's last bytes; the share of the height each edge fades over; the least cloudiness that counts as cloud
+const TAIL = 6, EDGE = 0.16, FOOT_MIN = 0.12, FLOOR = 0.04;   // the .pct's last bytes; the share of the height each edge fades over; the least cloudiness that counts as cloud; the alpha under which a texel is clear
 const srgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -124,9 +125,22 @@ function coreGrey(grey, alpha, w, h)
 function renderBand(band, w, h, coverage, white, shade = 0, look = {})
 {
     const soft = look.soft || 0.3, blur = look.blur || 1, minIsland = look.minIsland || 0, topEdge = look.topEdge || EDGE, dropTop = !!look.dropTop;
+    const floor = look.floor === undefined ? FLOOR : look.floor;
     const env = new Float32Array(h);
     for (let j = 0; j < h; j++) { const t = (j + 0.5) / h; env[j] = smooth(0, topEdge, t) * smooth(0, EDGE, 1 - t); }
-    const alphaAt = (k, j, foot) => smooth(foot, foot + soft, band.cloud[k]) * env[j];
+    // look.lum: the alpha is also the cloud's brightness, as in the game's own near band (white colour, its alpha the
+    // clouds' light): a cloud's shaded underside thins out instead of turning into an opaque dark patch under a dark tint
+    let lumOf = null;
+    if (look.lum)
+    {
+        const lit = [];
+        for (let k = 0; k < w * h; k += 7) if (band.cloud[k] > 0.3) lit.push(band.lum[k]);
+        lit.sort((a, b) => a - b);
+        const peak = lit.length ? lit[Math.floor(lit.length * 0.97)] : 1;
+        lumOf = new Float32Array(w * h);
+        for (let k = 0; k < w * h; k++) lumOf[k] = srgb(Math.max(0, Math.min(1, band.lum[k] / peak)));
+    }
+    const alphaAt = (k, j, foot) => smooth(foot, foot + soft, band.cloud[k]) * env[j] * (lumOf ? lumOf[k] : 1);
     const meanAlpha = (foot) => { let s = 0; for (let j = 0; j < h; j += 2) for (let i = 0; i < w; i += 2) s += alphaAt(j * w + i, j, foot); return s / (Math.ceil(h / 2) * Math.ceil(w / 2)); };
     // the foot never goes under FOOT_MIN: below it the clear sky's own haze would come in as a veil, so a sky with
     // fewer clouds than the coverage asks for gives a thinner band
@@ -190,9 +204,13 @@ function renderBand(band, w, h, coverage, white, shade = 0, look = {})
         {
             let a = 0, n = 0;
             for (let dy = -blur; dy <= blur; dy++) for (let dx = -blur; dx <= blur; dx++) { const y = j + dy; if (y < 0 || y >= h) continue; a += alpha[y * w + (i + dx + w) % w]; n++; }
-            softA[j * w + i] = a / n;
+            // the faintest alpha set to 0: left in, the clear sky's slight cloudiness lay in rings of 1 to 8 (of 255)
+            // that the night states' strong multipliers (x 3) drew as outlines around the clouds (found in the game,
+            // 2026-10-29); the game's own bands hold their clear sky at 0
+            a /= n; softA[j * w + i] = a * smooth(floor, floor * 3, a);
         }
     // the grey: the clouds' own carried out over their edges and the clear sky (coreGrey)
+    if (look.lum) white = true;
     const core = white ? null : coreGrey(grey, softA, w, h);
     for (let k = 0; k < w * h; k++)
     {
@@ -267,7 +285,7 @@ if (require.main === module)
             removeSun(p);   // the sun and its glare are as white as a cloud: out with them before the clouds are told from the sky
             const from = Number(opt('from')), to = Number(opt('to')), coverage = Number(opt('coverage') || 0.3), yaw = Number(opt('yaw') || 0);
             if (!(to > from && from >= -10 && to <= 90)) throw new Error('--from and --to: the band\'s lower and upper elevation in degrees');
-            const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'), Number(opt('shade') || 0), { soft: Number(opt('soft') || 0), blur: Number(opt('blur') || 0), minIsland: Number(opt('min-island') || 0), topEdge: Number(opt('top-edge') || 0), dropTop: args.includes('--drop-top') });
+            const band = readBand(p, w, h, from, to, yaw), r = renderBand(band, w, h, coverage, args.includes('--white'), Number(opt('shade') || 0), { soft: Number(opt('soft') || 0), blur: Number(opt('blur') || 0), minIsland: Number(opt('min-island') || 0), topEdge: Number(opt('top-edge') || 0), dropTop: args.includes('--drop-top'), lum: args.includes('--lum'), floor: opt('floor') === undefined || opt('floor') === null ? undefined : Number(opt('floor')) });
             // a band that reaches high gets make_cube.js's zenith cap (rows above 72 degrees blended towards their mean), unless
             // --no-cap: its rows meet at the zenith as a dome's do
             if (!args.includes('--no-cap')) zenithCap(r.rgba, w, h, (j) => to - (to - from) * (j + 0.5) / h);

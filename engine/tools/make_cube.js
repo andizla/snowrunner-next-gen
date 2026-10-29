@@ -313,12 +313,16 @@ function encodeBlock(px)
             p1[c] = Math.max(0, Math.min(255, (saa * sbc[c] - sab * sac[c]) / det));
         }
     }
-    // 7 bit endpoints with one shared low bit each: the bit that rounds the four channels best
+    // 7 bit endpoints with one shared low bit each: the bit that rounds the four channels best, except that a clear or a
+    // full alpha stays exact (the bit the colour wanted made a clear sky's alpha 0 or 1 in rings along the colour's
+    // gradient, outlines around the clouds at night, found in the game 2026-10-29)
     const quant = (e) =>
     {
         let bestP = 0, bestErr = Infinity, bestQ = null;
+        const only = e[3] < 0.5 ? 0 : e[3] > 254.5 ? 1 : -1;
         for (let p = 0; p < 2; p++)
         {
+            if (only >= 0 && p !== only) continue;
             const q = [], err = e.reduce((s, v, c) => { q[c] = Math.max(0, Math.min(127, Math.round((v - p) / 2))); return s + (q[c] * 2 + p - v) * (q[c] * 2 + p - v); }, 0);
             if (err < bestErr) { bestErr = err; bestP = p; bestQ = q; }
         }

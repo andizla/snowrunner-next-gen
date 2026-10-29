@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.2]
+
+- Skies: no more outlines around the clouds at night. Fifteen cloud bands kept a clear sky's alpha at 1 instead of 0, in rings, which the night states' strong multipliers drew as contour lines around every cloud. The bands are made again with their clear sky at 0, the clouds themselves unchanged.
+- Skies: Michigan's overcast days without the dark blue blots. The near bands were cut-out cumulus with shaded undersides; under the overcast tint they came out as opaque dark shapes with hard edges. They are now built as the game's own: white, with the clouds' light as their alpha, so a shaded underside thins out instead of darkening. Day 3a's band (also on Taymyr and Tennessee) is a soft overcast deck, Kloofendal Overcast.
+
 ## [1.1.1]
 
 - Headlight shadows no longer draw grain, stripes, combs and large dark straight-edged patches across lit snow and roads. Most of it came from the terrain: its shaders hand the headlight a position that is not on the surface the camera saw (on lit snow a little off at every pixel, on a snow bank metres off), so each pixel's walk to the lamp started inside or above the depth image and met its own steps. Each pixel's walk now starts where its own camera ray meets the depth: the splice hands the helper the pixel's place on the screen. A long ray in 24 steps also jumped over casters a few pixels thin (a fence's rail) and drew their shadow as a comb of bars, the worse the wider the field of view: a ray now takes one step per 6 pixels of its length on the screen, 24 to 64, and starts 10 cm above the surface. Posts, rails, rocks, walls and snow banks still cast. Measured in the game at 3840 x 2160: about 4 ms a frame with the beam ahead filling the view, the same while the camera turns.
