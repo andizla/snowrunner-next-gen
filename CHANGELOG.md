@@ -2,7 +2,8 @@
 
 ## [1.1.2]
 
-- Skies: no more outlines around the clouds at night. Fifteen cloud bands kept a clear sky's alpha at 1 instead of 0, in rings, which the night states' strong multipliers drew as contour lines around every cloud. The bands are made again with their clear sky at 0, the clouds themselves unchanged.
+- Night sky: no more dark outlines and contour lines around the Milky Way. The star map's empty sky was stored a hair short of transparent, a little brighter than the Milky Way's faint edge, so a dark rim ran along the glow; inside it, the texture compression rounded the glow's faint light to whole steps, drawn as contours. The star map is encoded again: the empty sky fully clear, the glow smooth, the stars as they were.
+- Skies: fifteen cloud bands had the same fault, a clear sky a hair short of transparent in rings around every cloud. They are made again with their clear sky fully clear, the clouds themselves unchanged.
 - Skies: Michigan's overcast days without the dark blue blots. The near bands were cut-out cumulus with shaded undersides; under the overcast tint they came out as opaque dark shapes with hard edges. They are now built as the game's own: white, with the clouds' light as their alpha, so a shaded underside thins out instead of darkening. Day 3a's band (also on Taymyr and Tennessee) is a soft overcast deck, Kloofendal Overcast.
 
 ## [1.1.1]

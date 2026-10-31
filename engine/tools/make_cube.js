@@ -266,8 +266,10 @@ function halve(face, size)
     return out;
 }
 
-// ---- BC7 mode 6: a 4 x 4 block of RGBA8 texels (px[16][4]) into 16 bytes
-function encodeBlock(px)
+// ---- BC7 mode 6: a 4 x 4 block of RGBA8 texels (px[16][4]) into 16 bytes; aw: the weight of an alpha error against a
+// colour error (1). Where the alpha is the light and the colour only carries the rest (the star map's faint glow, alpha 1 to
+// 8), one alpha step is half the light and must count for more than one step of grey
+function encodeBlock(px, aw = 1)
 {
     // the two texels farthest apart start the line
     let best = -1, e0 = px[0], e1 = px[0];
@@ -287,7 +289,7 @@ function encodeBlock(px)
             for (let w = 0; w < 16; w++)
             {
                 let e = 0;
-                for (let c = 0; c < 4; c++) { const v = ((64 - W4[w]) * p0[c] + W4[w] * p1[c] + 32) >> 6; e += (v - px[k][c]) * (v - px[k][c]); }
+                for (let c = 0; c < 4; c++) { const v = ((64 - W4[w]) * p0[c] + W4[w] * p1[c] + 32) >> 6; e += (v - px[k][c]) * (v - px[k][c]) * (c === 3 ? aw : 1); }
                 if (e < be) { be = e; bi = w; }
             }
             idx[k] = bi;
@@ -323,7 +325,7 @@ function encodeBlock(px)
         for (let p = 0; p < 2; p++)
         {
             if (only >= 0 && p !== only) continue;
-            const q = [], err = e.reduce((s, v, c) => { q[c] = Math.max(0, Math.min(127, Math.round((v - p) / 2))); return s + (q[c] * 2 + p - v) * (q[c] * 2 + p - v); }, 0);
+            const q = [], err = e.reduce((s, v, c) => { q[c] = Math.max(0, Math.min(127, Math.round((v - p) / 2))); return s + (q[c] * 2 + p - v) * (q[c] * 2 + p - v) * (c === 3 ? aw : 1); }, 0);
             if (err < bestErr) { bestErr = err; bestP = p; bestQ = q; }
         }
         return { q: bestQ, p: bestP, v: bestQ.map((x) => x * 2 + bestP) };
