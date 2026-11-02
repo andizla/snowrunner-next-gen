@@ -2,6 +2,7 @@
 
 ## [1.1.2]
 
+- GTAO at half size no longer leaves a ghost image: a faint outline of an old view stayed on the screen wherever the camera pointed. At half size the pass drew into SnowRunner Shadows' own textures and never into the game's AO target, so a pass reading that target saw the last frame drawn at full size. The result now goes into the game's target too. GTAO's quality is full size by default.
 - Night sky: no more dark outlines and contour lines around the Milky Way. The star map's empty sky was stored a hair short of transparent, a little brighter than the Milky Way's faint edge, so a dark rim ran along the glow; inside it, the texture compression rounded the glow's faint light to whole steps, drawn as contours. The star map is encoded again: the empty sky fully clear, the glow smooth, the stars as they were.
 - Skies: fifteen cloud bands had the same fault, a clear sky a hair short of transparent in rings around every cloud. They are made again with their clear sky fully clear, the clouds themselves unchanged.
 - Skies: Michigan's overcast days without the dark blue blots. The near bands were cut-out cumulus with shaded undersides; under the overcast tint they came out as opaque dark shapes with hard edges. They are now built as the game's own: white, with the clouds' light as their alpha, so a shaded underside thins out instead of darkening. Day 3a's band (also on Taymyr and Tennessee) is a soft overcast deck, Kloofendal Overcast.

@@ -58,14 +58,14 @@ try {
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
   Check 'SnowRunner Shadows: 1x by default' (& $keyOf 'shadows') '1'
   Check 'cascade seams: blended by default' ($cards['edges'].Module.Options[1].Keys[$cards['edges'].Choice[1]]) 'seam'
-  Check 'GTAO: half size by default' (& $keyOf 'gtao') 'half'
+  Check 'GTAO: full size by default' (& $keyOf 'gtao') 'full'
   Check 'fill light: 55 % by default' (& $keyOf 'fill') '0.55'
   Check 'grass reach: 2x by default' (& $keyOf 'grass') '2'
   Check 'scenery detail: all meshes, everything far away, small shadows for everything by default' ((0..2 | ForEach-Object { $cards['scenery'].Module.Options[$_].Keys[$cards['scenery'].Choice[$_]] }) -join ' ') 'all all all'
   # what Apply sends: the seam dither only with the rebuilt edges (the bundle refuses it with the 16-tap filter)
   $selection = { $viewType.GetMethod('Selection', $flags).Invoke($view, @()) }
   $s = & $selection
-  Check 'selection: rebuilt edges, the seam dither, AO at half size' ((@($s['shader']) -contains 'revec') -and (@($s['shader']) -contains 'seam') -and ($s['shadows']['aoHalf'] -eq '1')) 'True'
+  Check 'selection: rebuilt edges, the seam dither, AO at full size' ((@($s['shader']) -contains 'revec') -and (@($s['shader']) -contains 'seam') -and ($s['shadows']['aoHalf'] -eq '0')) 'True'
   Check 'selection: the night sky, the stars at 3x and the logos with the Next Gen splash' ('{0} {1} {2}' -f $s['sky'], $s['stars'], $s['logos']) '1 3 intro'
   Check 'selection: the reflection cubes by default, the bounce light not' ('{0} {1}' -f (@($s['shader']) -contains 'gi'), $s['cubes']) 'False 1'
   $cards['edges'].Choice[0] = 1
@@ -173,7 +173,7 @@ try {
   $s = & $selection
   $has = [Activator]::CreateInstance($asm.GetType('SnowRunnerNextGen.GameStatus'))
   $has.Shader = 'ours'; foreach ($m in @($s['shader'])) { $has.Modules.Add($m) }
-  $has.Dll = 'ours'; $has.DllCurrent = $true; $has.Factor = '1'; $has.SlopeBias = '1'; $has.AoHalf = '1'
+  $has.Dll = 'ours'; $has.DllCurrent = $true; $has.Factor = '1'; $has.SlopeBias = '1'; $has.AoHalf = '0'
   $has.Fill = 'ours'; $has.FillFactor = '0.55'; $has.Grade = 'ours'; $has.GradeStrength = '1'; $has.Particles = 'ours'
   $has.Stars = 'ours'; $has.StarsFactor = '3'; $has.Sky = 'ours'; $has.Logos = 'ours'; $has.LogosIntro = $true
   $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,fireflies,pollen,drift,land'

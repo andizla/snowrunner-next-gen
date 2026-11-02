@@ -1954,7 +1954,7 @@ struct AOHalfResources
 };
 static AOHalfResources g_aoHalfRes;                 // under g_feedLock; a set made for another size is put aside: it comes back
 static std::vector<AOHalfResources> g_aoHalfOld;    // when its size does, and only the last four put aside are kept
-static std::atomic<uint64_t> g_aoHalfPasses{ 0 }, g_aoHalfUpsamples{ 0 };
+static std::atomic<uint64_t> g_aoHalfPasses{ 0 }, g_aoHalfUpsamples{ 0 }, g_aoHalfCopies{ 0 };
 
 // under g_feedLock: a set put aside long ago, let go (a command list recorded with it holds what it uses)
 static void AOHalfRelease(AOHalfResources &r)
@@ -2092,6 +2092,26 @@ static void AOHalfEnd(ID3D11DeviceContext *ctx, const ContextOrig *o, ContextSta
         s->giBound = false;
     }
     s->aoHalfReady = AOHalfResolve(ctx, s);
+    // the result into the game's own AO target as well: at half size the pass never draws there, so any reader of it
+    // the substitution does not reach (a second apply pass, another shader) saw the last frame drawn at full size, a
+    // faint picture of an old view that stayed on the screen wherever the camera turned (players' reports, 1.1.1)
+    if (s->aoHalfReady && s->aoHalfGameRtv)
+    {
+        ID3D11Resource *game = nullptr, *ours = nullptr;
+        s->aoHalfGameRtv->GetResource(&game);
+        {
+            std::lock_guard<std::mutex> lock(g_feedLock);
+            ours = g_aoHalfRes.tex[4];
+            if (ours) ours->AddRef();
+        }
+        if (game && ours && game != ours)
+        {
+            ctx->CopySubresourceRegion(game, 0, 0, 0, 0, ours, 0, nullptr);   // level 0: the game's target may carry mips
+            if (g_aoHalfCopies++ == 0) Log("AO at half size: the full-size result copied into the game's AO target too");
+        }
+        if (game) game->Release();
+        if (ours) ours->Release();
+    }
 }
 
 // the apply pass reads the full-size result at t1 (what the game bound there is held, and put back after it)

@@ -1602,6 +1602,28 @@ static int AOHalfOddTest()
         inner, beforeRight, right, beforeBottom, bottom, corner);
     auto one = [](float v) { return std::fabs(v - 1.0f) < 1e-3f; };
     Check(one(inner) && one(right) && one(bottom) && one(corner) && one(beforeRight) && one(beforeBottom), line);
+    // the game's own AO target holds the result too: a reader the apply pass's substitution does not reach (players saw
+    // a faint old view stay on the screen with the pass at half size, 1.1.1) reads this frame's AO, not what it held
+    {
+        D3D11_TEXTURE2D_DESC md = sd;
+        md.Format = DXGI_FORMAT_R8_UNORM;
+        ID3D11Texture2D *ms = nullptr;
+        r.dev->CreateTexture2D(&md, nullptr, &ms);
+        int lo = 256, hi = -1;
+        if (ms)
+        {
+            r.ctx->CopyResource(ms, aoMask.tex);
+            D3D11_MAPPED_SUBRESOURCE m = {};
+            if (SUCCEEDED(r.ctx->Map(ms, 0, D3D11_MAP_READ, 0, &m)))
+            {
+                for (UINT y = 0; y < H; y++) for (UINT x = 0; x < W; x++) { const int v = ((const BYTE *)m.pData)[y * m.RowPitch + x]; if (v < lo) lo = v; if (v > hi) hi = v; }
+                r.ctx->Unmap(ms, 0);
+            }
+            ms->Release();
+        }
+        snprintf(line, sizeof line, "AO at half size, odd size: the game's own AO target holds the result, %d to %d of 255 (255 everywhere)", lo, hi);
+        Check(lo == 255 && hi == 255, line);
+    }
     // on a deferred context too
     ID3D11DeviceContext *d = nullptr;
     r.dev->CreateDeferredContext(0, &d);

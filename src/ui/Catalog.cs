@@ -75,8 +75,8 @@ namespace SnowRunnerNextGen
 
             Module gtao = M("gtao", "LIGHT", "GTAO", true,
                 "Ground-truth ambient occlusion instead of the game's SSAO: soft contact shadows in corners, under trucks and in wheel arches.");
-            // AOHalf in SnowRunner Shadows' ini: the pass at half size (the default) or full size
-            gtao.Options.Add(new OptionSet("Quality", new[] { "half size", "full size" }, new[] { "half", "full" }, 0));
+            // AOHalf in SnowRunner Shadows' ini: the pass at half size or full size (the default since 1.1.2)
+            gtao.Options.Add(new OptionSet("Quality", new[] { "half size", "full size" }, new[] { "half", "full" }, 1));
             list.Add(gtao);
             list.Add(M("aofar", "LIGHT", "Wide occlusion", true,
                 "GTAO's search reaches on to 6 metres, gently: soft shade under trucks, roofs and tree crowns, with the contact shadows unchanged.",
