@@ -121,4 +121,7 @@ Check 'clean: scenery detail at everything' ('{0} {1} {2}' -f $s.scenery, $s.sce
 Restored $newDir $game 'clean'
 
 if ($script:failed) { throw "$($script:failed) check(s) failed" }
+# the copies of the game (16 GB) go when every check passed; after a failure they stay to be looked at
+Remove-Item Env:NGEN_STATE_ROOT
+[System.IO.Directory]::Delete($work, $true)
 'all passed'

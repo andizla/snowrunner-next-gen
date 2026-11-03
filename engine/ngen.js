@@ -1144,7 +1144,20 @@ async function apply(g, state, sel, adopt, leave)
     // (review 3, N8: it said nothing was)
     writeJson(path.join(state, 'nextgen.json'), Object.assign({ selection: sel, parts: PARTS, date: stamp() }, goneNow.length ? { gone: goneNow } : {}));
     g.touched = false;
+    dropOldOriginals(state);
     emit(warned ? finished('Installed') : { type: 'done', warnings: 0, text: 'Installed. Start the game to see it.' });
+}
+
+// the originals kept under a dated name when a newer one took their place (keptName: a game update, another mod's
+// changes taken as the original): nothing reads them, and each is as big as its pak (shared.pak 2.1 GB), so a finished
+// Apply removes them. The originals Restore uses (<pak>.orig) stay
+function dropOldOriginals(state)
+{
+    for (const f of fs.readdirSync(state).filter((f) => /\.pak\.orig\.\d{4}-\d{2}-\d{2}(-\d+)?$/.test(f)))
+    {
+        try { fs.unlinkSync(path.join(state, f)); emit({ type: 'log', text: 'removed ' + f + ', an original from before a game update or another mod\'s changes (Restore does not use it)' }); }
+        catch (e) { emit({ type: 'log', text: f + ' could not be removed: ' + e.message }); }
+    }
 }
 
 async function restore(g, state, adopt, leave)

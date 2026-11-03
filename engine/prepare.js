@@ -115,6 +115,12 @@ function main()
         have.clear();
         const pak = require(path.join(tools, 'pak_shader_patch.js')), side = require(path.join(tools, 'sdc_side.js'));
         const buf = fs.readFileSync(orig), z = pak.parseZip(buf);
+        // a folder a run that was stopped midway left behind (older than a day, so never another engine's at work)
+        for (const d of fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('ngen-caches-')))
+        {
+            const p = path.join(os.tmpdir(), d);
+            try { if (Date.now() - fs.statSync(p).mtimeMs > 864e5) fs.rmSync(p, { recursive: true, force: true }); } catch (e) { /* left for the next run */ }
+        }
         const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ngen-caches-'));
         try
         {

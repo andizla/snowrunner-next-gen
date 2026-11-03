@@ -386,6 +386,7 @@ Check 'leave them out: the three untouched' (Untouched) 'True'
 $r = Apply (& $sel '1' '1') @('--adopt')
 Check 'take them as the originals: done' (Last $r) 'done'
 Check 'take them as the originals: status' (Summary (Status)) ('ours [' + ($less -join ',') + '] dll ours 3.5/1 scenery nature grass vanilla fill ours0.85 grade ours1 particles vanilla stars vanilla sky ours logos ours weather vanilla debris vanilla cubes vanilla skies vanilla')
+Check 'take them as the originals: the three earlier originals removed after, the new ones kept' ('{0} {1} {2}' -f @($r | Where-Object { $_.type -eq 'log' -and $_.text -match '^removed (initial|boot|gfx)\.pak\.orig\.\d{4}-\d\d-\d\d' }).Count, @(Get-ChildItem -LiteralPath $stateDir | Where-Object { $_.Name -match '\.pak\.orig\.\d' }).Count, @('initial', 'boot', 'gfx' | Where-Object { Test-Path -LiteralPath (Join-Path $stateDir "$_.pak.orig") }).Count) '3 0 3'
 Check 'take them as the originals: the other mod''s file is still in the three' ('{0} {1} {2}' -f (Entries $boot)[$modFile1], (Entries $initial)[$modFile1], (Entries $gfx)[$modFile1]) ('{0:x8}/20 {0:x8}/20 {0:x8}/20' -f $modCrc1)
 
 'the night sky and a changed initial.pak: its photo skies need their levels set there'
