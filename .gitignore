@@ -1,6 +1,8 @@
 # build outputs; the release zip goes to GitHub Releases
 out/*
 !out/docs/
+# the DLL's build output (out/* above only covers the root's out)
+dll/out/
 # the guide's sources are tracked in out/docs; make_guide.js builds these two from them (the released PDF is docs/SnowRunner_Next_Gen_Guide.pdf)
 out/docs/guide.html
 out/docs/SnowRunner_Next_Gen_Guide.pdf
