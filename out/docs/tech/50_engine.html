@@ -1,0 +1,87 @@
+<h2 id="t-engine">The engine: building, checking, undoing</h2>
+<p class="lead">What happens when you click Apply or Restore. The window hands a selection (the ticked cards and their rows) to
+the engine, a set of Node.js tools that ships in the download's engine folder.</p>
+
+<h3>The paks are zips</h3>
+<p>Each pak is a plain zip: entries back to back, stored or deflate, no zip64 in the paks Next Gen touches, padded with zeros to a
+multiple of 4096 bytes behind the end record. Some of them are large (shared.pak 2 GB, boot.pak 1.1 GB, gfx.pak 0.7 GB), so a
+writer copies unchanged entries raw, in large chunks, and writes only what changed. A changed entry gets a new local header (its
+CRC-32 and sizes), the central directory gets every entry's new offset, and added entries go after the last one.</p>
+
+<h3>Always from the original</h3>
+<p>Before its first change to a pak the engine keeps a copy of it in %LOCALAPPDATA%\SnowRunnerNextGen (one folder per game
+install), checked by hash after the copy. Every build starts from that copy, never from the file in the game: a build is a function
+of the original and the selection, so applying twice gives the same file, and taking a card out is the same as never having had it.
+Several cards can share one pak: initial.pak, for example, carries grass reach, fill light, brighter stars, weather, debris and Map
+days' own sets, in one build.</p>
+
+<h3>Write, read back, then replace</h3>
+<p>A new pak is written next to the old one (name.tmp), read back and checked: the same entries in the same order, every changed
+entry inflated and compared with what was planned, every other record unchanged, and every 50th untouched entry read and its CRC
+checked. Only then does it replace the old file, by a rename after a flush to disk, so a crash or a power cut leaves either the old
+file or the new one, never half of one. The engine refuses to write while SnowRunner.exe runs; it asks Windows for the game's
+process in UTF-8, so a game folder with letters outside the console's code page (D:\Игры\SnowRunner) is recognised too.</p>
+
+<h3>Knowing its own builds</h3>
+<p>For each pak the engine notes (in a small JSON next to the kept original) the SHA-256 of the build's central directory, its size
+and what went into it. Hashing the directory is enough to recognise a file: every entry's CRC-32, size and offset is in it. So the
+status of a pak is one of four:</p>
+<table class="rows"><thead><tr><th>State</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>ours</td><td>the file is the engine's last build (its directory hash matches the note); the note says which cards are in</td></tr>
+<tr><td>vanilla</td><td>the file is the kept original</td></tr>
+<tr><td>changed</td><td>neither: another mod or a game update wrote it since</td></tr>
+<tr><td>missing</td><td>no such file</td></tr>
+</tbody></table>
+<p>The note is written in two steps around the replace (a pending entry first, the final one after), so a build interrupted between
+the two is still recognised. A pak no tool can read (a zip64 file, bytes behind its end record, more than 65535 entries: another
+tool's layout) reads as changed, and the log says why: status, Apply and Restore go on with every other file instead of all
+stopping. Only such a layout counts: any other failure of a tool (a lock, a full disk) stops as before, since a yes to the question
+that follows would keep the engine's own shared.pak or shader.pak as the original.</p>
+<p>The engine's own state for a game (the kept originals, the notes) is named after the game's folder as it really is, so the same
+game reached through a junction, a subst drive or another drive letter finds it. Before a first copy of an original it checks that
+the drive has room for it, with 256 MB to spare, and a copy that fails on the way leaves nothing half written behind. Only one
+Apply or Restore runs on a game at a time, held by a lock file with the process's number; a lock whose number now belongs to
+another program, or older than six hours, is taken over.</p>
+<p>The skies are a download of their own (the sky pack). Every change to boot.pak builds it again from the original with the parts
+already in, so a new version unzipped into a new folder without the sky pack still keeps the skies: they come from the boot.pak
+in the game, the engine's own build. Restore takes the skies out first. The pack carries a list of its files and their sizes
+(pack.json): a pack an unzip left short, the list itself included, is told apart, and Apply leaves the skies out and says to unzip it again instead of
+writing the textures it has. With the skies in and the pack not there, a yes to taking a changed boot.pak as the original is
+refused until the pack is back: the last build's skies are told from the other mod's changes by the pack's own files, and
+without them the whole last build would stay in the new original, out of Restore's reach. A texture or LUT a game update renamed or took away is
+left out with a warning instead of stopping every Apply at the same step, and a shader module the game's shaders can no longer
+take is remembered as left out, so the next Apply does not build shader.pak again for it.</p>
+
+<h3>Other mods and game updates: adopt</h3>
+<p>When a pak is "changed", Apply asks. "Take it as the original" adopts the file: the engine walks its entries, and every entry that
+still holds exactly what the engine's last build wrote (same CRC, same size, same bytes) goes back to the old original's bytes. What
+the other mod changed stays. The result becomes the new original, and the build runs over
+it. The old original is kept under a dated name until that Apply finishes, then removed: nothing reads it, and
+shared.pak's is 2.1 GB. Restore then puts that modded state back, the other mod's changes included. "Leave it out" keeps the file and its cards as they
+are.</p>
+<p>A game update replaces the paks, so after one the game shows its own look until Apply has run again, and Apply asks the same
+question. The game update of 20 October 2026 (exe build 6ab52f5d, a new region) was tried that way on copies of the new files: every
+card applied with no warning. The engine also knows the game's own shader.pak by its hash, for July's version and that update's, so
+a first install takes it as the original without asking. One part of SnowRunner Shadows reads the game's code itself, the texture base rule. The game keeps a
+texture's smallest mips in a block whose start it works out from one value, 512, and upscaled textures with sides like 192 only load
+when that value is 256. On the build it was made for (6a607c05) the DLL sets it at load, at a known address. On any other build it
+looks for the value when the game makes its Direct3D device, before any texture exists: through the one instruction sequence that
+reads it (mov ecx, [value]; mov eax, ecx; cdq; sub eax, edx; sar eax, 1), in the game's code, pointing at an int of 512. If none is
+found, or the readers point at two different values, it leaves the game's rule alone and says so in its log.</p>
+
+<h3>The note in the game folder</h3>
+<p>Next to the paks the engine leaves SnowRunnerNextGen.json, naming the files that hold its changes with their directory hashes. If
+the kept originals are ever lost (a new Windows install with the game on another drive), the engine can still see that those files
+are not the game's own; it then changes nothing and asks for the store's file check first, instead of keeping a modded file as the
+"original". Restore takes the note away.</p>
+
+<h3>The shaders</h3>
+<p>The first Apply reads the game's own shader cache and prepares the shader cards from it (a minute or two): every patch tool runs
+over the stock shaders, and what it made is noted with its hashes. Later Applies combine the prepared modules for the ticked cards
+and write shader.pak in one pass. The DLL, hid.dll, is copied next to SnowRunner.exe with its settings file; another mod's hid.dll
+is kept as hid_chain.dll and still loaded.</p>
+
+<h3>Tests</h3>
+<p>Every change to Next Gen passes a test chain before it ships: the window's tests (the cards, the rows, the selection it sends),
+the engine's tests on stand-in game folders built from real originals (every card on, off, changed by another mod, adopted,
+restored byte for byte), the package, and the packaged engine run again. The last full chain on this version passed 454 checks.</p>

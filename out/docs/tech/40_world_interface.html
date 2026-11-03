@@ -1,0 +1,118 @@
+<h2 id="t-scenery">Scenery detail and grass reach</h2>
+<p class="lead">Cards: Scenery detail (rows: the near switches, hide, shadows), Grass reach.</p>
+
+<h3>Levels of detail</h3>
+<p>Each mesh carries simpler versions of itself and the distances at which the game switches to them. Many meshes swap 10 to 15 m
+from the camera. With GTAO and sharper shadows, that swap shows as a flip in shading at a fixed distance, rock outcrops most of
+all. The meshes live in shared.pak (2 GB) as "[meshes]\models_&lt;name&gt;" and "[meshes]\plants_&lt;name&gt;": each a 32-bit size,
+an XML header, then binary data. The header holds the switches:</p>
+<div class="eq">&lt;MeshLod Distances="10, 25, 45" ... /&gt;</div>
+<p>A mesh whose first switch is nearer than 40 m gets its switches raised to at least 40, 70, 110 and 160 m; a value already
+further stays. The card's set is either "nature" (rocks, trees and bushes by name; stumps, twigs, crops, ruins, walls and signs
+left out) or every mesh with switches. Two extra rows take out the distance beyond which a mesh is no longer drawn
+(HidingDistance), and the tag that ends a small thing's shadow or keeps it from casting one (MeshShadow), for plants or for
+everything.</p>
+<p>The XML must keep its byte length, so the binary data after it and its size prefix stay byte for byte: the whitespace between
+tags gives or takes the difference.</p>
+
+<h3>Re-compressing only what changed</h3>
+<p>shared.pak is a zip; many of its entries are deflate-compressed, and a mesh's XML sits at the start of its stream. A deflate
+stream is a series of blocks, each with its own Huffman tables. Re-compressing whole meshes would take long; the tool instead
+re-encodes only the blocks that hold the XML header and appends the rest of the original compressed bit stream as it is, shifted
+to its new bit position (a block need not start on a byte boundary). The result is inflated again and checked before the pak is
+written. Unchanged entries are copied raw, stored ones stay stored.</p>
+
+<h3>Grass reach</h3>
+<p>Grass meshes carry no switches; the game fades grass by distance per grass type, in initial.pak:</p>
+<div class="eq">&lt;GrassBrand FadeDistances="7, 17, 30"&gt;&nbsp;&nbsp;&nbsp;density steps, then the end of the grass</div>
+<p>Most grass is gone at 30 m. The card multiplies the distances by its factor, with one limit: the game draws grass only to
+about 64 m from the camera, and a step set beyond that no longer fades, so the grass at the edge appears whole at once
+(found by Milliath). Step n of k therefore ends at most at</p>
+<div class="eq">d'<sub>n</sub> = max(d<sub>n</sub>, min(f &middot; d<sub>n</sub>, 60 &minus; 5 (k &minus; 1 &minus; n)))</div>
+<p>which gives 21, 51, 60 m at 3 and 14, 34, 60 m at 2 for the common "7, 17, 30"; a step the game itself sets farther (some
+brands end at 80 to 150 m) stays. Cost: more grass blades drawn, which on dense meadows is the card's real cost.</p>
+
+<h2 id="t-maps">Map days</h2>
+<p class="lead">Card: Map days. Which region's time-of-day states and sky each map cycles through.</p>
+
+<h3>Where a map names its days</h3>
+<p>Each level's pak (level_us_06_01.pak) holds [scene]\data_for_ssl.bin, stored, which begins with its names, each a 16-bit length,
+the text and a zero: the level's name, its description, then the states of the night, the dawn, the three days (each a ; list of
+a state and its weather variants), the dusk, and the region's sky file. Four regions ship no states of their own and name another
+region's: Maine names Yukon's and Alaska's, British Columbia Michigan's, Austria Belozersk's and North Carolina's, Washington
+North Carolina's. The game takes the names as they stand: the file's own check value is not compared (tested in the game), and
+any state initial.pak knows can be named. A name it does not know stops the load.</p>
+
+<h3>The edit</h3>
+<p>Every region code in the head is replaced by another of the same length (us_04 &rarr; us_01), in the player's own file, in
+place. The zip's CRC of the entry follows in both of its places, the local header and the central directory. Nothing is kept for
+the way back: Restore writes the game's codes, which the tool's table holds, and the CRC comes out as it was. A level file another
+mod changed is left as it is. Apply and Restore check that the level files can be written only when they may write them (Map days
+chosen or in), so a read-only level file stops no run that leaves the maps alone.</p>
+
+<h3>The choices</h3>
+<p>Each level's snow and ice textures were counted from its load list (Yellowrock National Forest has two to four times the snow
+and ice of The Lowland, which is at Michigan's level), and each region's season taken from the wiki and checked against the game (Scandinavia, filed under spring, is late winter
+there, with snow). The map by
+map value then picks per level: The Lowland Michigan's days, Yellowrock Yukon's spring with its blizzards turned to flurries,
+Duncan Bay Wisconsin's summer with its heavy rain, North Peak North Carolina's, Unterfeld Tennessee's, Washington Michigan's
+autumn and its Mountains Zurdania's. Every target region has all ten state names each level uses.</p>
+
+<h3>Sets of a map's own</h3>
+<p>Maine's two maps get sets of their own, us_91 and us_92, numbers no region of the game uses. A set is made from a source
+region's states and sky as they stand in the build: the files under the new names, the state names inside the sky file
+(DayTimeOverride DayTime="day__1_us_04") renamed with them, and the weather changed by a table (Yellowrock: heavy_snow becomes
+light_snow at 0.4 of its intensity). The engine adds the 20 files to initial.pak, stored, at the end, with their directory records
+where their names belong; then it names every file in the pak's load list, without which the game does not know them (next
+chapter). A level file names a set only while initial.pak holds it: the tool puts the set in before writing the level files, and
+takes it out after none names it. If a game update replaces initial.pak while a level still names a set, the status reads "part"
+and the next Apply mends it. Restore keeps initial.pak as it is while a level file still names a set: with one of Maine's two
+files changed by another mod the level files are not put back, and the game's own initial.pak, which holds no such set, would
+stop the other map from loading; Restore says so instead.</p>
+
+<h2 id="t-loadlist">The load list: how a pak tells the game what it holds</h2>
+<p class="lead">The engine part behind Map days' own sets, and behind any file added to a pak.</p>
+<p>The first entry of every pak, pak.load_list, lists everything the pak loads and in what order: a start, stages ("TEMPLATES
+load", "CLASSES load", "TEXTURE load", "MESH load"), the assets between them, an end. A class file (a truck, a daytime state, a
+sky) that is in the pak but not in this list is unknown to the game: a level that names it crashes. That was tested in the game:
+twelve states added to initial.pak without list entries crashed the level; the same states with entries loaded.</p>
+<p>The layout follows the reading in SnowRunnerTools by chase-000:</p>
+<table class="rows"><thead><tr><th>Part</th><th>Bytes</th></tr></thead><tbody>
+<tr><td>head</td><td>i32 1, u8 1, i32 count, i32 3, u8 1</td></tr>
+<tr><td>types</td><td>count bytes: 5 the start, 1 a stage, 2 an asset, 6 the end; then u8 1</td></tr>
+<tr><td>waits</td><td>per entry: i32 n, u8 1, n &times; i32, the entries it waits for (counted from 0, ascending); then u8 1</td></tr>
+<tr><td>strings</td><td>per entry: i32 s, i32 2, s + 2 bytes of 01, then s strings (u32 length and text)</td></tr>
+</tbody></table>
+<p>An asset has three strings (its name, its loader, its pak: "&lt;media&gt;\classes\daytimes\x.xml", "cls_loader", "initial.pak")
+or four (a texture in a level pak: a JSON text naming its base). The rules the game's own lists keep: an asset waits for one
+entry (the stage before its run, or, for a texture's faces, its header); a stage after assets waits for exactly those nothing
+else waits for; a stage after a stage waits for that stage; the class files stand together in the byte order of their names.
+The tool reads all 73 of the game's lists and writes them back byte for byte. Adding a class file means: the new entry where its
+name belongs among the class files, waiting for the stage before them; every number naming a later entry raised by one; the stage
+after the class files waiting for the new one too.</p>
+
+<h2 id="t-interface">Next Gen logo and the start without the intro</h2>
+<p class="lead">Card: Next Gen logo (row Start-up).</p>
+
+<h3>The logos</h3>
+<p>NEXT GEN appears under the game's logo on five textures in gfx.pak. Three are pictures of their own (the title screen, the
+first loading screen at 3840 &times; 2160, the main menu) and are replaced whole. Two are sheets of many sprites (the pause menu,
+500 &times; 504, and the map screen, 512 &times; 508), where only the logo sprite should change, so that an interface mod's other
+sprites stay. The sheets are BC7: every 4 &times; 4 block of texels is 16 bytes of its own, independent of its neighbours. So the
+tool copies exactly the blocks inside the logo sprite's rectangle (multiples of 4 texels) from Next Gen's sheet into the sheet the
+pak holds, and every other block stays bit for bit. A sheet of another size or format is left as it is.</p>
+
+<h3>The start without the intro</h3>
+<p>The game's intro is not a video: one Flash (Scaleform) movie in gfx.pak's [gfx]\gfxbundle.gfxbundle runs it, at 35 frames a
+second. Frames 2 to 259 show the epilepsy and legal warning (7.4 s); a script on frame 259 stops the movie and tells the loading
+screen it is ready (OnSkippableReadyToStart); the loading screen then calls StartSkippables, which plays the publisher logos (about
+11 s, skippable by a key); at their end OnAllAnimFinished hands over (OnLogoEnd) and the bootup loading screen shows: the Next Gen
+splash. The row edits the movie's ActionScript bytecode, in the movie and its Japanese twin:</p>
+<table class="rows"><thead><tr><th>Where</th><th>Game's bytes</th><th>Next Gen's</th></tr></thead><tbody>
+<tr><td>the constructor's addFrameScript</td><td>pushshort 258 (25 82 02)</td><td>pushbyte 9, nop (24 09 02): the "ready" script runs at frame 10</td></tr>
+<tr><td>StartSkippables (38 bytes)</td><td>focus, input listener, gotoAndPlay("skippable")</td><td>nops, then this.OnAllAnimFinished(): the logos end at once</td></tr>
+</tbody></table>
+<p>Each edit keeps its size, so the bundle's header (which lists the movies' names and lengths, no offsets or checksums) stays
+valid; only the pak's zip CRC of the entry changes. Each edit is found by the whole method's bytes as the game ships them; a game
+version whose movie differs keeps its intro. Measured: the title screen came 41 s after start with the intro and 24 to 25 s without
+(warm disk cache). The loading behind the intro still has to finish; the saving is the part of the intro that outlasted it.</p>

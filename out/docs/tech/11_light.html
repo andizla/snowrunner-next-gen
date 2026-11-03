@@ -1,0 +1,282 @@
+<h2 id="t-contact">Contact shadows</h2>
+<p class="lead">Card: Contact shadows. Fine sun shadows traced on screen where things touch or overlap: under a tyre, where a
+log lies on another, the creases of a cab.</p>
+
+<h3>Why the shadow map misses them</h3>
+<p>A shadow texel covers centimetres to decimetres of ground, and the depth bias that prevents acne pushes the comparison
+back further. Shadows smaller than that, such as the thin dark line where a wheel meets mud, fall between texels. The
+camera's own depth buffer has a pixel's resolution, so tracing towards the sun in screen space finds them.</p>
+
+<h3>The trace (Bend Studio's screen-space shadows)</h3>
+<p>The pass is Bend Studio's screen-space shadow method (from Days Gone; Apache 2.0, a modified copy ships in the DLL). The
+sun is projected to a point on screen. Every pixel lies on a line through that point, so the screen is cut into lines
+radiating from it, and one wavefront of 64 threads walks 64 neighbouring pixels of one line together, sharing the depths they
+read. For each pixel, 60 depth samples are read towards the sun along its line: a contact shadow can be up to 60 pixels long.
+A sample occludes when it lies in front of the ray from the pixel towards the sun, every sample standing for a surface of a
+set thickness (ContactThickness, 0.005 in the pass's depth units); a contrast of 4 sharpens the result. The first 4 samples
+count as hard shadow, the last 8 fade out, and the result is a mask m from 1 (lit) to 0 (shadowed). The pass reads the game's
+linear depth as 1/z and skips pixels beyond 50 m (ContactMaxDepth).</p>
+
+<h3>Into the picture: only the sunlight</h3>
+<p>A screen-space shadow must not darken light that is not sunlight. So the patch (module contact) makes each of the 1269
+sun-receiving material shaders write the sun visibility it found (the shadow map's lit fraction after the game's floor,
+g_fShadowAtten) to render target 6. After the lit pass the DLL draws a full-screen pass that multiplies the colour by</p>
+<div class="eq">k = 1 &minus; (1 &minus; m) &middot; share &middot; strength &middot; fade</div>
+<div class="eq">share = sun / (sun + sky),&nbsp;&nbsp; sun = L(C<sub>sun</sub>) &middot; m<sub>pbr</sub> &middot; max(0, N &middot; L) &middot; v,&nbsp;&nbsp; sky = L(the three sky colours blended by N<sub>y</sub>)</div>
+<p>with v the visibility from render target 6, C<sub>sun</sub> the game's sun colour and m<sub>pbr</sub> its PBR multiplier,
+L() the luminance, N the shading normal (render target 7 where a material wrote it, else rebuilt from the depth buffer).
+A pixel the sun lights fully darkens to about what a shadow-map shadow would give there; one already in shadow or facing
+away is not touched. With distance the effect fades: fade = 1 &minus; smoothstep(30 m, 50 m, z). Far away a contact shadow is
+smaller than a pixel, and ground seen at a flat angle starts to shadow itself in screen space.</p>
+
+<h3>Limits</h3>
+<ul>
+<li>Screen space only: an occluder outside the picture, or hidden behind something nearer, casts nothing.</li>
+<li>The thickness is one number for everything: very thin things (wires) may cast too long a shadow behind them.</li>
+<li>F4 switches the pass off and on.</li>
+</ul>
+
+<h2 id="t-headshadow">Headlight shadows</h2>
+<p class="lead">Card: Headlight shadows, on by default. The truck's headlights cast shadows: a post, a tree or a rock in the
+beam leaves the ground behind it dark.</p>
+
+<h3>How the game lights with its headlights</h3>
+<p>The headlight is a projected spot light. CB_GLOBAL_SCENE holds its position (g_vHeadLightPos), direction, cone, distance
+falloff and colour, and the matrix that projects a world position into the lamp's light pattern (g_tmHeadLightViewProj).
+Each of the about 5100 lit pixel shaders that take the headlight measures the pixel from the lamp, tests the reach and the
+cone, fades the light out within 3 to 6 m of the lamp and applies the distance falloff and the colour. The objects'
+shaders (about 2600) also sample the pattern texture g_txHeadLightMap once; the terrain's (about 2300) work out the
+intensity alone and multiply the lamp's colour by it. Nothing in either chain asks whether anything stands between the
+lamp and the pixel: the game has no shadow map for its headlights.</p>
+
+<h3>The walk to the lamps</h3>
+<p>The patch (module headshadow) splices a helper in right after the pattern sample and multiplies the sample by what the
+helper returns, or, in the terrain's shaders, right before the lamp's colour multiply and multiplies the intensity by it:
+v, the share of the light that arrives. For a pixel at P and a lamp at L the helper walks from 0.12 m off
+the surface towards L and stops 2.5 m short of the lamp (the truck's own body stands there, and the game has faded its
+light out that close anyway). Both ends are projected with the previous frame's view-projection (cb1 c10..c13), as the
+depth they are compared with is that frame's, and the walk takes one step per 6 pixels of its length on the screen, at
+least 24 and at most 64, evenly spaced, so a pole wider than the gap between two steps is not stepped over (a thinner one
+can be: see the limits). With a fixed 24 steps a long walk jumped over a fence's rail a few pixels thin, and its shadow
+came out as a comb of bars, the worse the wider the field of view (seen in the game, 2026-10-27). A step's distance from the
+camera is interpolated as 1/w:</p>
+<div class="eq">w(f) = 1 / lerp(1/w<sub>0</sub>, 1/w<sub>1</sub>, f),&nbsp;&nbsp; f = (i + j) / n</div>
+<p>with j an offset per pixel (interleaved gradient noise, Jimenez 2014) that the game's TAA averages out. At each step the
+scene's linear depth z on that pixel (SnowRunner Shadows' copy of the previous frame's depth, t121, taken at the AO pass,
+which comes after the lit pass) is compared with w:</p>
+<div class="eq">d = w &minus; z &minus; (0.04 + 0.006 w),&nbsp;&nbsp; b = saturate(d / 0.15) &middot; [d &lt; 1.5 + 0.03 w] &middot; e</div>
+<p>d &gt; 0 means the scene stands in front of the step. More than the thickness (1.5 m plus 3 % of the distance) in front,
+the ray passed behind the caster, not through it. e fades the test out over the last 3 % of the screen at its border. The
+lamp's visibility is 1 &minus; max b over the steps.</p>
+<p>What blocks is placed in the world: on the camera's line through the step, at the scene's depth there,
+O = eye + (S &minus; eye) &middot; z / w, with S the step's own position. An obstacle less than 0.3 m in front of the lamps' plane
+does not count: nothing behind a lamp can stand between it and a lit point. Without that rule the truck's own cab and roof
+rack, seen from a camera above and behind, lay within the thickness in front of the road and darkened the beam next to
+the truck (seen in the game, 2026-10-23).</p>
+<p>A low headlight's rays leave the ground at a flat angle: for the first metre they run a few centimetres above it.
+There snow's small lumps blocked them, at a different point for each pixel's offset: a fine grain over the whole lit
+snow, with stripes on some slopes (seen in the game, 2026-10-26). Each ray now starts 10 cm above the surface, straight up
+(HS_LIFT), so lumps lower than that do not block. In the test scene with 12 cm drifts and 4 cm roughness and no casters,
+the share of the beam read as blocked is 0.01 % from behind the truck and 0.02 % from the chase camera, against 5.1 % and
+5.2 % without the lift. A second change tried with it, letting the farther of the depths one pixel row above and below count where a step
+seemed blocked (HS_ROWS, still in the code), cleared the rest in the test scene but cut thin rails' shadows into combs,
+so it is off.</p>
+<p>Nor does an obstacle within 2.5 m of a lamp (HS_BODY, the same as the walk's stop). The walk never comes that close, so
+what the camera sees there is the truck's own front (a bumper, a winch, a bull bar), found only where it stood in front of
+a step further out. From a low view beside the bumper it blocked every ray passing behind it: a hard-edged dark quad on
+the road, its upper edge level with the bumper's (seen in the game, 2026-10-24). In the test scene's view beside the bumper
+the rule lights 14,272 of 175,948 beam pixels that were blocked, from beside the truck 1,585, and changes nothing from
+behind or from the chase camera; the posts, the guardrail, the wall and the pole cast as before. In the game the same rule
+also took away hard-edged dark patches on the road ahead of a truck climbing a hill, which looked like the road's own mesh
+casting (seen in the game, 2026-10-24).</p>
+<p>The first builds projected the steps with this frame's camera. With the camera still that is the same; with the camera
+moving (shaking on a rough road) each step met whatever the previous frame had at that spot on the screen, and the road
+ahead went dark until the camera settled (seen in the game, 2026-10-23). With the previous frame's camera a step meets the
+depth that camera saw there; O is still placed from this frame's eye, a frame's movement off, which moves it by that
+movement times (1 &minus; z / w), a few centimetres.</p>
+<p>The walk starts on the surface the camera saw, at the pixel's own point: where the pixel's camera ray meets the depth.
+The splice hands the helper the pixel's place on the screen (the shader's own SV_Position: 3,822 of the 5,123 shaders read
+it already, 1,300 get it declared, as their signature names it), and the helper reads the depth at that pixel. The depth
+is the last frame's, exact while the camera stands still; while it moves, the point is reprojected into the last frame
+twice and moved along the ray by what the depth there says. A point the last frame did not see (the depth stays more
+than 15 cm plus 2 % of the distance off) keeps the game's own light for that frame.</p>
+<p>The position the shader is handed is not used for that. On the terrain it is not on the surface the camera saw: on lit
+snow a little off at every pixel, on a snow bank ahead of a truck metres off in every direction. Each walk then started
+inside or just above the depth image and met its own steps, which drew a grain and stripes over the snow, worse without
+TAA, and on the bank a large dark patch with straight edges (seen in the game, 2026-10-27). The first version of the
+helper did not have them only because it shadowed no terrain: the terrain's shaders, which light the headlight without
+its pattern, came a day later. Moving the shader's position onto the depth along its own line of sight (1.1.1's first
+attempt) left the stripes, since that position does not project to its own pixel. Starting from the pixel's own ray,
+the stripes and the grain were gone at the same spot, with TAA and without. The one shader whose signature has no
+screen position still moves its position onto the depth that way.</p>
+<p>A truck's two headlights stand about 1.4 m apart, and the game hands its shaders one position between them. The helper
+walks to a point 0.7 m to each side, level and across the lamp's direction, and averages the two, so a pixel that only
+one lamp reaches gets half the light: a shadow's edge comes out as a half-lit band, the wider the nearer its caster stands
+to the truck. That is at most
+128 depth reads for a pixel in the beam, and
+none outside it, since the splice sits inside the game's own test of the reach and the cone.</p>
+
+<h3>Which shaders</h3>
+<p>The helper needs the pixel's world position as the shader measured it from the lamp: an input from the vertex shader,
+or a temporary register, taken only where no instruction overwrites it before the helper runs. 5123 of the 5143 shaders
+take it; the other 20 (particles whose position comes without its third component, or none at all) keep the game's
+light. Each patched shader gets its camera constants declared up to the previous frame's view-projection (c13), and t121
+declared. The grass's and the bushes' shaders (267) take the headlight but declare no camera constants at all; the patch
+declares them (b1, which every pixel shader of the game that uses it binds to CB_GLOBAL_CAMERA). Until 2026-10-23 they were
+left out, and a post or a guardrail standing in a verge cast nothing, while a road cone on the asphalt did (seen in the
+game): their shadows fall on grass. The module is patched last, on top of what the other modules made of each shader.
+All 5123 pass the build's input check and are created by Direct3D 11, on WARP and by the GPU's driver (checked offline,
+2026-10-23). The first build reached the objects alone: in the game a post's shadow fell on the pole behind it but not on
+the ground, which is how the terrain's own way of lighting was found.</p>
+
+<h3>Limits</h3>
+<ul>
+<li>Screen space only: a caster outside the picture, or hidden behind something nearer the camera, casts nothing, so a
+shadow can change as the camera turns.</li>
+<li>Nothing within 2.5 m of the lamps casts: the truck's own bumper, winch and bull bar do not, and neither does a post
+that close.</li><li>Thin casters can still be missed: where the walk is longer than 384 pixels on the screen, its 64 steps lie further
+apart than a thin pole is wide. A walk over the pyramid of the nearest depths (t125, the reflection pass's), which cannot step over
+anything, is the next step if the game still shows such gaps now that the grass takes the shadows (see Which shaders).</li>
+<li>A raised overlay's far edge can shade a short band of the ground behind it, as a step that high would (see the start of
+the walk).</li>
+<li>Grass is drawn several times over where it is thick, and each layer in the beam now walks to the lamps: there the
+helper costs more than the times below.</li>
+<li>The game has slots for four headlights; only the first is shadowed.</li>
+<li>Without SnowRunner Shadows, or from 250 ms after its copies stop (a menu), t121 is unbound and the light is the
+game's own.</li>
+<li>Seen working in the game once (a post's shadow on the pole behind it, against F8); not tuned yet.</li>
+</ul>
+
+<h3>Testing without the game</h3>
+<p>An offline test scene (test\headshadow_scene) ray-casts a synthetic night scene per pixel: ground, a truck body at the
+lamps, posts, a pole, a concrete block, a low block 1.6 m ahead of the bumper, a wall, a guardrail on posts along the left
+of the road and a thin marker post; OVERLAY_H raises the depth of a patch of road above its shaded pixels, as an overlay
+does. It writes the scene's linear depth as the DLL's t121 holds it, fills the camera and headlight constants as the game
+does, and shades the scene with the helper itself, from beside the truck, behind it (the chase camera), above, low in front
+of it beside the bumper and high behind it further off (the last two as in the game's shots of the dark patch). Each setting can be overridden there. Seen in it: the
+shadows fall away from the lamps, doubled up close; with the chase camera the truck's own cab blocks nothing; at 1.5 m
+instead of 2.5 m the low block casts too and the truck still blocks nothing, which a real truck's bull bar or winch may
+not share.</p>
+<p>Its measure.ps1 times the helper alone, against the same pass without it, one sample per pixel as in the game, the
+fastest of 60 draws on an RTX 4080: at 3840 &times; 2160, 0.19 ms with 5 % of the screen in the beam (the chase camera),
+0.52 to 0.84 ms with 15 to 23 %, 1.2 ms with the camera low behind the lamps and 39 %. With at most 24 steps, as in 1.1.0,
+the same views take 0.05, 0.26 to 0.35 and 0.54 ms: the longer walks cost about twice as much. In the game the lit shaders run once per
+surface drawn, so places drawn over several times (grass, foliage) pay more. Measured in the game at 3840 &times; 2160 on an RTX 4080 (the
+lit pass's GPU time, the truck parked with the beam filling the view ahead): 4.6 ms without the shadows, 9.0 ms with them,
+so about 4.4 ms; with the camera turning, the frame rate stays where it is parked, as nothing is redrawn.
+
+<h2 id="t-gtao">Ambient occlusion: GTAO and the wide reach</h2>
+<p class="lead">Cards: GTAO (row: half or full size), Wide occlusion. Shade in corners, under trucks and in wheel arches,
+where less of the sky reaches.</p>
+
+<h3>What occlusion measures</h3>
+<p>Ambient light comes from the whole sky. A point in a corner sees less of it. The quantity is the visibility V: the share
+of the hemisphere above the surface that is open, weighted by the cosine to the normal (light from straight above counts
+most):</p>
+<div class="eq">V = (1/&pi;) &int;<sub>&Omega;</sub> visible(&omega;) (N &middot; &omega;) d&omega;</div>
+<p>The game's own pass estimates this with 8 depth samples on a fixed kernel whose size is a fixed share of the screen,
+whatever the distance: a box looks occluded the same whether it is 2 m or 200 m away.</p>
+
+<h3>GTAO: integrating horizons</h3>
+<p>Ground truth ambient occlusion (Jimenez et al. 2016, "Practical Real-Time Strategies for Accurate Indirect Occlusion";
+the integration follows Intel's XeGTAO, MIT) splits the hemisphere into slices: planes through the view direction, at screen
+angles &phi;. In each slice the open sky is the arc between two horizons, h<sub>1</sub> on one side and h<sub>2</sub> on the
+other: the steepest angle to any surface within a radius. The integral over that arc has a closed form. With n the angle of
+the normal projected into the slice and |n<sub>p</sub>| the length of that projection:</p>
+<div class="eq">a(h) = &frac14; (&minus;cos(2h &minus; n) + cos n + 2h sin n)</div>
+<div class="eq">V &asymp; (1/S) &Sigma;<sub>slices</sub> |n<sub>p</sub>| (a(h<sub>1</sub>) + a(h<sub>2</sub>)),&nbsp;&nbsp; AO = V<sup>1.6</sup></div>
+
+<figure>
+<svg viewBox="0 0 760 170" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="11.5">
+<path d="M40,140 H300 V80 H380 V140 H720" fill="none" stroke="#8a4b12" stroke-width="2"/>
+<circle cx="230" cy="140" r="4" fill="#12324a"/>
+<line x1="230" y1="140" x2="300" y2="80" stroke="#1d5d8c" stroke-width="1.6"/><line x1="230" y1="140" x2="120" y2="128" stroke="#1d5d8c" stroke-width="1.6"/>
+<path d="M120,128 A111,111 0 0,1 300,80" fill="none" stroke="#9fb0bd" stroke-dasharray="4 3"/>
+<text x="305" y="74" fill="#1d5d8c">h&#8322;: horizon raised by the wall</text><text x="40" y="120" fill="#1d5d8c">h&#8321;</text>
+<text x="150" y="60" fill="#6b7883">open sky between the horizons</text>
+<text x="430" y="125" fill="#6b7883">taps: 8 per side, out to 1.5 m (wide: 6 m)</text>
+</svg>
+<figcaption>One slice: the open arc between the two horizons is the share of the sky the point sees in that direction.</figcaption>
+</figure>
+
+<p>The numbers: 4 slices per pixel, 8 depth taps per side of each slice (64 depth reads), a radius of 1.5 m, capped at 12 %
+of the pixel's depth so the kernel stays bounded on screen near the camera. The normal is rebuilt from the depth buffer. The
+slice angles and tap positions are rotated per pixel by interleaved gradient noise; the game's own 3 &times; 3 blur in its
+apply pass averages the noise out. The effect fades out between 150 m and 300 m, where fog takes over. The field of view
+comes from the game's camera every frame. The pass replaces the game's two SSAO shaders and keeps their inputs and outputs:
+x = visibility, yzw = the centre depth for the blur.</p>
+
+<h3>Half size</h3>
+<p>With the GTAO row at half size (and SnowRunner Shadows' AOHalf = 1) the pass runs on a quarter of the pixels, each half-size
+pixel snapped to the depth of one full-size pixel it covers, and the DLL upsamples the result weighted by depth, so occlusion
+does not bleed across object edges. The result is also copied into the game's own AO target: at half size the pass never
+drew there, and a reader the DLL's substitution did not reach drew the last frame made at full size, a faint picture of an
+old view that stayed on the screen wherever the camera turned (players' reports, 1.1.1). Full size is the default since
+1.1.2.</p>
+
+<h3>Wide occlusion</h3>
+<p>Big shapes (a truck's body, a roof, a tree crown) shade the ground further than 1.5 m. The wide reach continues each
+search past the near radius to 6 m, with 4 more taps per side, capped at 50 % of the depth near the camera. A far occluder does
+not count fully: at the near radius it raises the horizon half way (strength 0.5), fading to nothing at 6 m, so the shade
+under a truck is soft and the crisp contact occlusion near the ground stays as it was. To save time each 2 &times; 2 quad of
+pixels shares the far search: each pixel searches one of the four directions far and the four results are shared. That is a
+quarter of the far reads: 0.9 ms instead of 3.3 ms at 3840 &times; 2160.</p>
+
+<h3>Limits</h3>
+<ul>
+<li>Screen space: what is outside the picture or hidden behind something casts no occlusion.</li>
+<li>Thin things in front of a wall make a dark halo on the wall; the depth weighting and the fade keep it small.</li>
+<li>F11 compares GTAO with the game's SSAO, F5 switches between half and full size.</li>
+</ul>
+
+<h2 id="t-gi">Bounce light</h2>
+<p class="lead">Card: Bounce light (off by default, experimental). Sunlit ground and paint light up what stands next to them,
+in their colour.</p>
+
+<h3>Idea: the horizons already know who blocks the sky</h3>
+<p>The GTAO search finds, in each direction, which surfaces hide the sky. A surface that hides part of the sky sends its own
+light instead. Each tap that raises the horizon from h to h' hides a further arc of the sky, and that arc now sees the surface
+the tap found. Its share is the same cosine-weighted measure GTAO integrates, a(h') &minus; a(h). So the bounce light is</p>
+<div class="eq">B = s &middot; (1/S) &Sigma;<sub>slices, sides</sub> &Sigma;<sub>taps that raise the horizon</sub> |n<sub>p</sub>| (a(h') &minus; a(h)) &middot; min(C<sub>tap</sub>, 64)</div>
+<p>with C<sub>tap</sub> the tap's colour in the lit image of this frame (the DLL's copy, t120), clipped at 64 to drop sun
+glints, and s = 4 the strength. A pixel boxed in by sunlit snow gathers the snow's light; one next to a red truck gathers red.
+(The derivation is our own, from the GTAO arc integral; the idea is that of horizon-based indirect lighting.)</p>
+
+<h3>Keeping a feedback loop stable</h3>
+<p>The bounce light becomes part of the lit image that next frame gathers from: light can bounce again and again. Two caps
+keep the loop bounded. The stored value never exceeds 0.9 times the brightest surface it was gathered from. And the
+material side never adds more than a set multiple of the brightest of its own ambient colours.</p>
+
+<h3>Into the materials</h3>
+<p>The game lights shade with three ambient colours: from above, from the horizon and from below (cPosY, cMidY, cNegY),
+blended by the normal and multiplied by the surface colour. The patch (gi_ambient) adds the bounce light to all three, so the
+game's own code carries it on with the real albedo. Because the bounce was measured last frame, each pixel looks it up where
+it was then: projected with last frame's camera if the world stood still, or at the same screen position if it moved with
+the camera (the player's truck). Last frame's depth decides which applies; where neither matches (just uncovered), no bounce
+light this frame. The AO pass stores the bounce divided by the darkening the AO apply pass will give the pixel, so after the
+apply the bounce keeps its strength.</p>
+<p>Limits: it is experimental because in places (bright snow next to dark wood) it comes out too strong, and like every
+screen-space effect it knows only what is on screen. F10 switches it off and on.</p>
+
+<h2 id="t-ambient">Sky ambient and fill light</h2>
+<p class="lead">Cards: Sky ambient, Fill light. The colour and the amount of the light that fills in shade.</p>
+
+<h3>Sky ambient</h3>
+<p>Each daytime state sets the three ambient colours as one warm grey at three strengths, so shade has no colour variation:
+under a blue sky it should lean blue, at sunset warm. The patch (sky_ambient, spliced at the start of every material shader
+that reads those colours) keeps each colour's brightness and takes the hue of the sky in its direction from the reflection
+cube the shader already binds, at its roughest mip (close to the sky's irradiance): straight up for cPosY, straight down for
+cNegY, the mean of four horizontal directions for cMidY.</p>
+<div class="eq">c' = lerp(c, L(c) &middot; S / L(S), 0.6)</div>
+<p>with c the authored colour, S the cube's colour in that direction and L() the luminance. The game's own blend by the normal
+then works on the new colours.</p>
+
+<h3>Fill light</h3>
+<p>The daytime states give shade a lot of light: on a sunny day in Zurdania the light from above is &times; 3.9 against the
+sun's &times; 5.15. Compared with neural-rendered shots of the same scenes, what those darken is exactly this fill. The card
+scales the three ambient multipliers of every day, dusk and dawn state in initial.pak (199 states; night, garage and menu
+states stay) by one factor f. Because the fill is about half of all light even on sunlit ground, less of it darkens the whole
+picture and the game's eye adaptation would lift everything back. So each state's exposure is scaled too:</p>
+<div class="eq">ambient &times; f,&nbsp;&nbsp; HdrExposureScale &times; f<sup>0.45</sup>&nbsp;&nbsp;&nbsp;(f = 0.7 &rarr; 0.852; 0.85 &rarr; 0.929)</div>
+<p>That holds sunlit parts about where they were and leaves shade darker. The edit is made in initial.pak by the engine (see
+the engine chapter).</p>

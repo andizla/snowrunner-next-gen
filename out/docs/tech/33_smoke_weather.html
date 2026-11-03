@@ -1,0 +1,94 @@
+<h2 id="t-smoke">Smoke: glow, shape, softer edges</h2>
+<p class="lead">Cards: Smoke glow (row More kinds of smoke), Smoke shape and softer edges.</p>
+
+<h3>How the game lights a puff</h3>
+<p>Exhaust, dust, steam and smoke are sprites: flat textured squares that always face the camera. The game lights each with
+one sun value and one ambient value per vertex: either a baked top-down light map, or the sun's colour times a visibility
+factor. Nothing depends on where the sun is relative to the camera, and the sprite has no shape: a puff is a flat disc of
+light.</p>
+
+<h3>Glow: forward scattering</h3>
+<p>Smoke scatters sunlight mostly forward, so against a low sun it glows, often brighter than the sky behind it. The helper,
+spliced into the particle vertex shaders, multiplies the puff's sun light by</p>
+<div class="eq">f = min(1 + 0.15 &middot; max(4&pi; p<sub>HG</sub>(&mu;; g = 0.7) &minus; 1, 0), 2)</div>
+<p>with &mu; the cosine between the view ray and the sun's light direction and p<sub>HG</sub> the Henyey-Greenstein phase
+function (see the fog chapter). 4&pi; p<sub>HG</sub> is 1 for isotropic scattering, so f = 1 from 90 degrees away from the sun
+on, and rises towards the sun (looking straight at it, 4&pi; p<sub>HG</sub> &asymp; 18.9 and the cap of 2 applies). The factor
+rides on the sun term, so the pixel shader's shadow test, the light map's baked shade, the night fade and the fog still apply.
+Particles whose vertex shader gives them no sun light at all get the sun's colour times f &minus; 1, the glow alone.</p>
+<p>The particle vertex shaders are of a few families, and the patch has to find the sun term in each: a light map decoded from
+one register lane, the sun colour added, the sun colour times a visibility (plus the ambient). Of 205 vertex shaders, 162 take
+the glow by default. The row More kinds of smoke adds 8 whose light map decode sits in lanes x, z and w of its register
+(170 of 205). Of the other 35, 10 are normal-mapped puffs (lit in the pixel shader), 22 output no light, and 3 lack the scene
+constants.</p>
+
+<h3>Shape: a pseudo-normal from the alpha</h3>
+<p>The pixel-shader part (smoke_shade, in the 80 lit, blended puffs without a normal map of their own) gives each pixel the
+normal of a soft ball. Its direction on screen is the gradient of the puff's alpha (outward, where the alpha falls off); its
+tilt comes from the alpha itself: a thin rim faces sideways (sine of the tilt 0.9 at alpha 0), a dense core faces the camera.
+With f the flat sprite's normal (towards the camera) and L the direction to the sun, the lit colour is scaled by</p>
+<div class="eq">k = (1 + 0.3 (n &middot; L &minus; f &middot; L) + 0.15 (n<sub>y</sub> &minus; f<sub>y</sub>)) &times; (1 &minus; 0.12 &middot; smoothstep(0.5, 1, &alpha;))</div>
+<p>The side towards the sun gains what the far side loses, tops are lighter than bottoms (sky light from above), dense cores a
+little darker (light lost inside the puff). A puff seen face-on in its middle keeps its stock light. Only the lit part is
+scaled, the fog blend after it stays: out = c + (k &minus; 1)(c &minus; fog.a &middot; fog.rgb).</p>
+<p>White smoke is drawn thinner: at the game's opacity it comes out too white and too dense. Where the puff's own colour (its
+albedo, before light) has a luminance from 0.1 to 0.3, its opacity goes from the game's to 0.6 times it. Black exhaust keeps
+the game's opacity.</p>
+
+<h3>Softer edges</h3>
+<p>Where a sprite cuts through the ground it shows a hard line. The game fades sprites against the depth behind them; in the 110
+shaders that do, the fade now runs over twice the distance, so puffs meet the ground softly.</p>
+
+<h2 id="t-particles">Sharper smoke and particles</h2>
+<p class="lead">Card: Sharper smoke and particles.</p>
+<p>The game's 40 particle textures (the sfx_* files: smoke, dust, sparks, spray) are replaced with versions at twice their
+width and height, upscaled by the author with NVIDIA's DLSS 5 Visual Enhancer and stored in the game's own texture format
+(.pct, with its .pct_header). Each replaces its entry in boot.pak, stored as the game stores it. They remain Saber
+Interactive's assets and ship only for use with the game. Cost: four times the texture memory for these 40 textures.</p>
+
+<h2 id="t-weather">Weather, and debris and splashes</h2>
+<p class="lead">Cards: Weather (nine rows), Debris and splashes. Both edit the game's own XML in initial.pak: what each daytime
+state carries, and how each particle type behaves.</p>
+
+<h3>What the game's states carry</h3>
+<p>The game cycles each region through its day states and their weather variants (day__1, day__1a, on newer maps up to
+day__1e). A state can carry rain or snow, &lt;WeatherParticles Type MinIntensity MaxIntensity IntensityChangeInterval&gt;, whose
+intensity is drawn anew within the range every interval, and moving cloud shadows, &lt;CloudShadowMap Map Scale Speed
+Direction&gt;. In the stock game, 16 regions have rain or snow in their variants, only the snow regions have weather at dusk and
+night, and only 39 of 199 states have cloud shadows.</p>
+
+<h3>The rows</h3>
+<table class="rows"><thead><tr><th>Row</th><th>What it writes</th></tr></thead><tbody>
+<tr><td>shadows</td><td>cloud shadows in every day state that has none, as Zurdania has them (scale 6, speed 2, direction (1; 0.5)): the light map for plain states, the medium one for variants, the dense one for heavy rain or snow</td></tr>
+<tr><td>showers</td><td>rain and snow swell and ease: an intensity range (min, max) becomes (0.3 min, max), the peaks the game's own (1.2 max until 1.1.1: heavy snow lagged)</td></tr>
+<tr><td>evening</td><td>regions with rain by day get a light drizzle at dusk and dawn (0 to 0.15) and at night (0 to 0.2)</td></tr>
+<tr><td>horizon</td><td>the horizon cloud layer that 17 sky files hold commented out, put in, with overrides written for the file's own states</td></tr>
+<tr><td>far</td><td>rain drawn 1.5 times as far from the camera (32 m &rarr; 48 m); off by default. Snow keeps the game's distance: drawn that far it fills about three times the space around the camera with flakes, and heavy snow lagged badly in the game</td></tr>
+<tr><td>fireflies</td><td>fireflies at night in the rainy regions: a new weather type with the game's own firefly sprite, drawn to 90 m at an intensity of 0.0005 to 0.001</td></tr>
+<tr><td>pollen</td><td>pollen drifting in the clear days of the same regions, drawn to 64 m at 0.01 to 0.05</td></tr>
+<tr><td>drift</td><td>clouds the game holds still turn slowly</td></tr>
+<tr><td>land</td><td>the land drawn as far as the distant fog reaches: where a state hides terrain (TerrainHideDist) nearer than its fog ends, the distance goes up to the fog's end (on by default)</td></tr>
+</tbody></table>
+<p>Fireflies and pollen are weather types of the game's later engine (Expeditions); here they are two new files in
+classes\weather. Every attribute written is one the game's own files use.</p>
+
+<h3>Debris and splashes</h3>
+<p>Particle types are small XML files (one &lt;CombineParticles&gt; each). The card applies one rule per family:</p>
+<ul>
+<li>Fragments (leaves, grass, twigs, dirt, stones thrown by the wheels): stock they vanish after 3 or 4 s. Now they live 30 to
+40 s (LifeTime 30, Random 10) and collide with the ground, the truck and its wheels, with a 1 cm radius so a piece lies flat
+and a little bounce. Dandelion seeds float, so they only live longer (12 to 16 s).</li>
+<li>Splashes (mud, water, snow, dirt bursts): a splash throws D times its drops (Subparticles Density, D = 4 by default, between
+12 D and 64 D), the drops lie twice as long, the splash lasts twice as long and leaves twice the mud and water marks on the
+truck.</li>
+<li>Puffs (exhaust, dust, steam) hang in the air half as long again (LifeTime &times; 1.5).</li>
+<li>Snow splashes last three times as long, and their drops fall at half gravity with 0.6 of the air resistance and live 15 s:
+light snow hangs in the air.</li>
+<li>Water spray: what a wheel throws spinning in water (water_splash_small, water_flow) and its drops
+(water_splash__subparticles, water_droplet__subparticles) fly further and are bigger. Stock the spray stops within half a
+metre: its air resistance is 3.0. The air resistance of the spray and its drops is now 0.4 of the game's (3.0 to 1.2, 1.0
+to 0.4, 1.5 to 0.6), the spray's sprites are 1.5 times the size and live three times as long, the drops 1.5 times the
+scale. How hard the wheel throws stays the game's; with linear air resistance k a throw carries v / k, so the same throw
+goes about 2.5 times as far.</li>
+</ul>
+<p>Cost: more particles alive at once, so more to draw; D is 4 by default.</p>

@@ -1,5 +1,9 @@
 # build outputs; the release zip goes to GitHub Releases
-out/
+out/*
+!out/docs/
+# the guide's sources are tracked in out/docs; make_guide.js builds these two from them (the released PDF is docs/SnowRunner_Next_Gen_Guide.pdf)
+out/docs/guide.html
+out/docs/SnowRunner_Next_Gen_Guide.pdf
 *.exe
 *.dll
 # the compiled shaders: engine\tools\build_shaders.js makes them from the .hlsl sources

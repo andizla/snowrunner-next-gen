@@ -1,0 +1,151 @@
+<h2 id="t-sssr">Object reflections: the reflection pass (SSSR)</h2>
+<p class="lead">Card: Object reflections, with SnowRunner Shadows. Paint, glass and chrome mirror the scene around them. The
+name SSSR comes from AMD's FidelityFX Stochastic Screen Space Reflections, whose ray walk the pass adapts.</p>
+
+<h3>What the game does without it</h3>
+<p>A glossy material in SnowRunner reflects one thing: a cubemap, a picture of the sky in six square faces, the same for the
+whole map. The material looks it up in the direction of the mirrored view ray and blurs it by roughness through the
+cubemap's mip chain: mip level = &radic;roughness &times; 8 + 0.5. A truck's hood therefore shows a painted sky even when a
+wall stands next to it. Screen-space reflections add what the camera can see.</p>
+
+<h3>The principle</h3>
+<p>For each pixel we know its position P, the direction to the eye V and the surface normal N. A perfect mirror sends the
+view ray on in the direction</p>
+<div class="eq">R = 2 (N &middot; V) N &minus; V</div>
+<p>If that ray hits something the camera also sees, the colour of the hit is the reflection. The scene the camera sees is
+known as two pictures: the lit colour and the depth of every pixel. So the search is a walk along R across the screen,
+comparing the ray's depth with the depth stored at each pixel it passes, until the ray goes behind a surface.</p>
+
+<h3>Where normal and roughness come from</h3>
+<p>The game draws its world in one pass where each material computes its final colour; it keeps no separate buffer of
+normals. Next Gen's module sssr splices a small writer into all 3229 vehicle and prop material shaders, at their cubemap
+sample: it writes the shaded normal (world space, &times; 0.5 + 0.5) and the perceptual roughness r to an extra render
+target, RT7 (RGBA8), which the DLL binds beside the lit pass and clears to "up, fully rough" after it. A pixel with
+r &ge; 0.999 traces no ray.</p>
+
+<h3>Straight lines on screen, and why 1/z</h3>
+<p>The ray from O = P + N (0.002 z + 0.01) (lifted off the surface by 1 cm plus 0.2 % of its distance z, so it does not hit
+itself) is projected to screen coordinates at both ends. A straight line in the world stays a straight line on screen, but
+its depth z does not change linearly along it; the reciprocal 1/z does. So the pass keeps 1/z everywhere: the ray is
+o + t d in (u, v, 1/z), and the depth pyramid stores 1/z too. A larger 1/z means nearer.</p>
+
+<h3>The depth pyramid (Hi-Z)</h3>
+<p>Level 0 holds 1/z of every pixel (0 for the sky, z &ge; 3000 m, so no ray meets it). Each coarser level halves the
+size and keeps, for every cell, the <i>largest</i> 1/z of the four (or, at an odd edge, six or nine) cells below: the
+nearest surface anywhere in the cell. A ray that is nearer than that value cannot hit anything in the whole cell.</p>
+
+<figure>
+<svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="11.5">
+<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#1d5d8c"/></marker></defs>
+<rect x="20" y="20" width="720" height="190" fill="#fbfcfd" stroke="#d5dde4"/>
+<g stroke="#c9d3db"><line x1="20" y1="60" x2="740" y2="60"/></g>
+<text x="26" y="40" fill="#6b7883">near (large 1/z)</text><text x="26" y="204" fill="#6b7883">far (small 1/z)</text>
+<path d="M20,170 L110,170 L110,150 L200,150 L200,175 L290,175 L290,120 L380,120 L380,165 L470,165 L470,95 L560,95 L560,140 L650,140 L650,160 L740,160" fill="none" stroke="#8a4b12" stroke-width="2"/>
+<text x="560" y="88" fill="#8a4b12">depth buffer (level 0)</text>
+<g fill="none" stroke="#d4b48f" stroke-dasharray="5 3" stroke-width="1.5"><path d="M20,150 L200,150"/><path d="M200,120 L380,120"/><path d="M380,95 L560,95"/><path d="M560,140 L740,140"/></g>
+<text x="210" y="113" fill="#b07a3f">level 1: nearest of two cells</text>
+<path d="M40,72 L482,112" stroke="#1d5d8c" stroke-width="2" marker-end="url(#ah)" fill="none"/>
+<g fill="#1d5d8c"><circle cx="40" cy="72" r="4"/><circle cx="200" cy="86" r="3"/><circle cx="380" cy="103" r="3"/><circle cx="478" cy="112" r="4"/></g>
+<text x="60" y="66" fill="#1d5d8c">ray in (u, 1/z): skips cells while above their nearest surface</text>
+<text x="486" y="128" fill="#1d5d8c">behind the near step at level 0: hit</text>
+</svg>
+<figcaption>The walk through the pyramid, in one screen axis. Over cells whose nearest surface lies behind the ray, the
+ray takes the coarse level's long steps; where it would cross a surface it drops a level, down to single pixels.</figcaption>
+</figure>
+
+<h3>The walk</h3>
+<p>The ray starts at level 0 and moves to the far edge of the pixel it starts in. Then, at most 80 times
+(SSRSteps):</p>
+<ol>
+<li>Read the cell's nearest surface s at the current level.</li>
+<li>Find where the ray leaves the cell: the nearest of its crossings with the cell's two edge lines and, while the ray
+moves away from the camera, with the plane 1/z = s. That is t<sub>min</sub>.</li>
+<li>If the ray is in front of the cell's nearest surface (s &lt; its own 1/z), move it to t<sub>min</sub>. If it left
+through an edge rather than through the surface plane, go up one level: the next cells are bigger. Otherwise go down one
+level.</li>
+<li>Stop when the level drops below 0: the ray stands behind a surface at single-pixel size. Or when it leaves the
+screen.</li>
+</ol>
+<p>A walk over open ground passes many pixels in a few steps; near geometry it slows to pixel steps. This is the method of
+Uludag's Hi-Z tracing, in the form AMD wrote for FidelityFX SSSR, whose functions FFX_SSSR_InitialAdvanceRay,
+FFX_SSSR_AdvanceRay and FFX_SSSR_HierarchicalRaymarch the pass adapts (MIT licence, notice in the DLL).</p>
+
+<h3>Is it a real hit?</h3>
+<p>A point behind the depth buffer is not always on the surface: the buffer only stores the front of things. The pass
+checks, at the pixel where the walk ended:</p>
+<table class="rows"><thead><tr><th>Test</th><th>Rule</th></tr></thead><tbody>
+<tr><td>on screen, and moved</td><td>the hit lies inside the screen and more than one pixel from where the ray started</td></tr>
+<tr><td>not sky</td><td>stored depth z<sub>s</sub> below 3000 m</td></tr>
+<tr><td>a front face</td><td>the hit surface's normal N<sub>s</sub> faces the ray: N<sub>s</sub> &middot; R &le; 0</td></tr>
+<tr><td>thickness</td><td>how far behind the surface the ray stands, b = z<sub>ray</sub> &minus; z<sub>s</sub>, against the assumed thickness of things T = 0.3 m &times; (1 + 0.02 z<sub>s</sub>)</td></tr>
+</tbody></table>
+<p>The thickness gives the hit a confidence c between 0 and 1:</p>
+<div class="eq">c = (1 &minus; smoothstep(0, T, b))&sup2;</div>
+<p>A ray more than T behind the front went under the object: under a cab, past a load on a bed. Leaving those pixels empty
+would let the material fall back on the painted sky, which looks like bright patches beside real reflections. So within
+2.5 m (plus 5 % of the depth, SSRUnder) behind the surface, the ray takes that object's colour, darkened towards half
+(SSRUnderShade 0.5) over half a metre past T. This stands for the underside the camera cannot see. It applies in full to
+surfaces up to 25 m away and fades out by 50 m (SSRUnderNear, SSRUnderFar). It is not used behind a "speck", a small bright
+thing with nothing around it, such as a firefly or a distant lamp: on at least three of four sides, 2 % of the screen
+height away, the depth differs and the pixel is three times brighter than its brightest neighbour.</p>
+<p>The confidence then fades at the screen's border (over 5 % of its height), with roughness, and for rays turning back
+towards the camera, whose targets no picture holds:</p>
+<div class="eq">c &times;= saturate((r<sub>max</sub> &minus; r) / (0.2 r<sub>max</sub>)) &times; saturate(2 (R &middot; &minus;V + 1)),&nbsp;&nbsp; r<sub>max</sub> = 0.85</div>
+
+<h3>Roughness: the cone</h3>
+<p>A rough surface reflects a blurred picture. By default every ray is the mirror direction, and roughness only blurs the
+colour taken at the hit, from the feed's mip chain. The blur grows with the distance the ray travelled on screen, d (pixels),
+and with &alpha; = r&sup2;:</p>
+<div class="eq">mip = log<sub>2</sub>(1 + d &middot; &alpha; &middot; 0.5)&nbsp;&nbsp;&nbsp;(SSRCone = 0.5)</div>
+<p>Optionally (SSRLobe = 1) rays follow the GGX distribution itself: each frame draws a different microfacet normal H from
+the distribution of normals visible from V (Heitz 2018), and reflects about H instead of N. Two uniform numbers u<sub>1</sub>,
+u<sub>2</sub> (interleaved gradient noise, Jimenez, shifted per frame) become a point on a disc that is stretched by &alpha;
+and lifted onto the hemisphere. Only the lobe's core is used (u<sub>1</sub> scaled by 0.85) to keep rare far-off rays from
+making speckles. This is the "stochastic" in SSSR; it is off by default because the mirror direction with the cone blur is
+steadier in SnowRunner's motion.</p>
+
+<h3>Fewer rays: one per 2 &times; 2 block</h3>
+<p>With SSRHalf = 1 (the default) the trace runs on a grid of half the width and height. Each cell traces one pixel of its
+2 &times; 2 block, and the chosen pixel rotates over four frames in the order (0,0), (1,1), (1,0), (0,1), so every pixel gets its
+own ray every fourth frame. That quarters the trace's cost.</p>
+
+<h3>The resolve: from rays to a picture</h3>
+<p>The resolve runs at full size. Each reflecting pixel gathers the results of the 3 &times; 3 trace cells around it, since a
+neighbour's ray stands for a parallel ray from a nearby point. Each one is weighted by distance, depth and normal, so
+nothing crosses an edge:</p>
+<div class="eq">w = exp(&minus;|&Delta;p|&sup2; / &sigma;&sup2;) &middot; saturate(1 &minus; |&Delta;z| / (0.03 z + 0.02)) &middot; (N<sub>s</sub> &middot; N)<sup>16</sup>,&nbsp;&nbsp; &sigma;&sup2; = 2 s&sup2; (1 + 8 r&sup2;)</div>
+<p>where s is the grid step (2 with SSRHalf). From the weighted samples come the mean &mu; and the spread &sigma;
+(standard deviation) per channel.</p>
+<p>Then the history. The pixel is found where it was last frame: by the camera's reprojection, or, on a moving truck, by the
+object motion decoded from the game's own velocity buffer. Last frame's result there is used only if last frame's depth
+agrees: within 2 % + 5 cm for still things, 10 % + 30 cm along a moving object. The history is then pulled toward this
+frame's mean until it lies within the samples' spread (variance clipping, Salvi 2016). All channels move by the same factor,
+so the result stays a blend of colours that are actually there:</p>
+<div class="eq">e = max(1.5 &sigma;, 0.01 + 0.02 |&mu;|),&nbsp;&nbsp; m = max over channels |h &minus; &mu;| / e,&nbsp;&nbsp; if m &gt; 1: h = &mu; + (h &minus; &mu;) / m</div>
+<div class="eq">result = lerp(&mu;, h, k),&nbsp;&nbsp; k = lerp(0.6, 0.9, saturate(r / 0.3))</div>
+<p>Mirrors keep little history (k = 0.6); rough paint, whose rays are noisier, keeps more (up to SSRTemporal = 0.9). Where
+no ray landed near a pixel this frame, its history fades by 0.9 per frame. The output, t123, holds radiance &times;
+confidence and the confidence (RGBA16F).</p>
+
+<h3>Back into the material</h3>
+<p>The pass ran during the previous frame, so the material shader reprojects its pixel into that frame with last frame's
+view and projection, and checks last frame's depth there (3 % + 5 cm; 15 % for pixels a moving object passed). Then it
+composites, with a the confidence:</p>
+<div class="eq">colour = reflection + cubemap &times; (1 &minus; a)</div>
+<p>faded by a gloss gate: in full up to cubemap mip 2 (very glossy), the cubemap alone from mip 7 (roughness about 0.67).
+Reflected light brighter than four times the cubemap's light is compressed, so a lamp in the reflection does not burn
+out. Glass is a special case: the pass sees the cab behind the window, not the window. Where the depth the pass saw lies
+clearly behind the fragment (1 % + 2 cm + 1.5 pixels of the fragment's own depth slope), the material marches its own short
+ray instead (the per-material method of the older Object reflections build).</p>
+
+<h3>Cost, limits, artifacts</h3>
+<ul>
+<li>Cost: the resolve takes 0.21 ms at 3840 &times; 2160 (measured; it is bound by its full-size reads and writes). The
+trace is a quarter-size pass with up to 80 steps per ray. Per-pass timings can be logged with SSRTiming = 1.</li>
+<li>Only what is on screen can be reflected. Things outside the picture, behind the camera, or hidden behind other things
+are not in the depth buffer; the reflection fades to the cubemap there, most visibly at the screen's edges.</li>
+<li>The thickness is a guess: thin poles may be missed; a ray may pass under a thin object and catch the ground behind it.</li>
+<li>One frame of delay: fast camera turns show the reflection catching up for a frame, and newly revealed pixels have no
+history.</li>
+<li>F6 in the game switches the pass off and on; with it off, the material marches its own ray (or keeps the cubemap).</li>
+</ul>
