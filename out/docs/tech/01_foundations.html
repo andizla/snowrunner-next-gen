@@ -1,0 +1,100 @@
+<h2 id="t-found">How Next Gen gets into the game</h2>
+<p>SnowRunner draws with Direct3D 11. Every picture on screen comes from small programs on the graphics card, shaders,
+which the game keeps precompiled in one file, <b>shader.pak</b>. Next Gen changes the game in four ways, and every card in
+this part uses one or more of them.</p>
+
+<h3>1. Whole shaders replaced</h3>
+<p>Some of the game's shaders are swapped for ours, written in HLSL and compiled with Microsoft's compiler (fxc) to the same
+bytecode format, DXBC. The ambient occlusion pass (two shaders, hashes 0xEA2414F8 and 0xA3716E2B) becomes GTAO, the fog
+shader (0x871EF8CC) gets jitter and a phase function, the tonemap (0x221304E2) and the bloom (0x52879E18) get new curves.
+Inside shader.pak the shaders sit in one entry, <i>shadercachedx11.sdc</i>: a 12 byte header (a date stamp and two sizes)
+and one zlib stream. Inflated it is a list of includes, a count of programs, a count of blobs, then every blob (a DXBC
+shader, prefixed with its size) and a table that ties programs to blobs by index. The post-process shaders sit in a second
+cache, <i>common_pc_sm50_hdr.sdc</i>, in the same form. A replaced blob may change size: the tool rewrites the stream and the
+table and compresses it again.</p>
+
+<h3>2. Helpers spliced into the game's own shaders</h3>
+<p>Most cards keep the game's shader and add to it. The game has thousands of material shaders, one per kind of surface
+(3229 for vehicles and props alone), and replacing them all would mean rewriting the game's materials. Instead a patch tool
+finds one instruction in each, an <b>anchor</b>, and puts a call to our helper there. For the reflections the anchor is
+the material's sample of the sky cubemap:</p>
+<div class="eq">sample_l r4.xyz, r5.xyz, t86.xyzw, s8, r3.w&nbsp;&nbsp;&nbsp;// cubemap t86 at mip r3.w = &radic;roughness &times; 8 + 0.5</div>
+<p>The helper takes that sample's place. It gets what the sample got (the direction and the mip level) and what it needs
+besides (the pixel's world position), and its result goes where the sample's went, so everything the game does after it
+(the reflectivity, the Fresnel term, the scale g_fReflCubeGGXScale) still applies. The helper is compiled once from HLSL;
+its instructions are copied into each target shader with their registers renamed to free ones.</p>
+<p>Splicing compiled code is surgery on a container. A DXBC file holds chunks (the program in SHEX, its inputs and outputs,
+statistics) and a checksum. After inserting instructions the tool (dxbc_patch.js) repairs everything that depends on the
+layout: the container and chunk sizes, the chunk offsets, the program length, the number of temporary registers
+(dcl_temps), the instruction counters in the statistics chunk, and the checksum, an MD5 variant with a non-standard final
+block, verified against the game's own shaders. A target is left alone unless the patch can prove it fits: exactly one
+anchor, the inputs it needs declared, nothing after the anchor reading a register only the anchor wrote. Every patch tool
+works on a stock shader or on one another card already changed, because the cards touch different instructions.</p>
+
+<h3>3. Numbers changed in place</h3>
+<p>Some cards only change a constant: the headlight glare cap (32 becomes 6), the decode of a light map, a frame number in
+the start-up movie. These patches keep the size of everything they touch.</p>
+
+<h3>4. SnowRunner Shadows, the DLL</h3>
+<p>Some techniques need data no single shader has, such as the whole lit frame or a depth pyramid. The game loads a file
+named hid.dll from its own folder before the system's copy, so Next Gen places SnowRunner Shadows there; it passes every call
+on to the real hid.dll (or to another mod's, renamed hid_chain.dll) and hooks the Direct3D 11 device context. It watches
+which shaders the game binds, recognises the passes it needs by their shaders, and adds its own work between them.
+It never writes into DXGI's shared method tables, which other mods and Steam's overlay hook too: its diagnostic options
+(the frame log, GPU timers, the profiles) take the game's swap chain and factory, and each gets a copy of its method table of
+its own with the hook in it. Steam's client of 2026-10-21 hooks over hooks it finds in DXGI's shared Present, and a hook
+there that had saved Steam's as its real function then called itself back until the stack ran out (found in a player's
+crash dump with another mod). Its own Direct3D 11 hooks remember, for each method table they sit in, the functions they
+replaced and eight slots they never touch; if another program later gives the device or a context a private copy of that
+table (the hooks come along), the copy is known by those eight slots and takes the same functions, instead of the next
+call failing.</p>
+
+<figure>
+<svg viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#44515c"/></marker></defs>
+<g fill="#eef2f5" stroke="#9fb0bd">
+<rect x="10" y="20" width="110" height="46" rx="5"/><rect x="140" y="20" width="150" height="46" rx="5"/>
+<rect x="310" y="20" width="120" height="46" rx="5"/><rect x="450" y="20" width="140" height="46" rx="5"/>
+<rect x="610" y="20" width="140" height="46" rx="5"/></g>
+<g fill="#12324a" text-anchor="middle">
+<text x="65" y="40">sun shadow</text><text x="65" y="56">maps</text>
+<text x="215" y="40">lit pass: every material</text><text x="215" y="56">shader draws lit colour</text>
+<text x="370" y="40">velocity</text><text x="370" y="56">(motion vectors)</text>
+<text x="520" y="40">AO pass</text><text x="520" y="56">and its apply pass</text>
+<text x="680" y="40">fog, particles, TAA,</text><text x="680" y="56">tonemap, bloom, UI</text></g>
+<g stroke="#44515c" marker-end="url(#ar)"><line x1="120" y1="43" x2="138" y2="43"/><line x1="290" y1="43" x2="308" y2="43"/><line x1="430" y1="43" x2="448" y2="43"/><line x1="590" y1="43" x2="608" y2="43"/></g>
+<g fill="#f7f2ec" stroke="#d4b48f"><rect x="140" y="110" width="150" height="70" rx="5"/><rect x="450" y="110" width="300" height="120" rx="5"/></g>
+<g fill="#8a4b12" font-size="11.5"><text x="148" y="128">beside it, bound by the DLL:</text><text x="148" y="145">RT6: sun visibility (contact)</text><text x="148" y="162">RT7: normal, roughness (SSR)</text><text x="148" y="176">GI target (bounce light)</text>
+<text x="458" y="128">the DLL's own work, at the AO pass:</text><text x="458" y="146">feed: copy of the lit scene (with mips) t120,</text><text x="458" y="162">linear depth t121</text><text x="458" y="180">SSR: depth pyramid, trace, resolve: t123, t124</text><text x="458" y="198">contact shadows into the sunlight</text><text x="458" y="216">AO at half size, then upsampled</text></g>
+<g stroke="#d4b48f" stroke-dasharray="4 3"><line x1="215" y1="66" x2="215" y2="108"/><line x1="520" y1="66" x2="520" y2="108"/></g>
+<path d="M600,232 C600,300 215,300 215,182" fill="none" stroke="#1d5d8c" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="250" y="300" fill="#1d5d8c" font-size="11.5">next frame: the material shaders read t120, t121, t123 and t124 (last frame's results)</text>
+</svg>
+<figcaption>One frame as Next Gen sees it. The game's passes are on top; what Next Gen adds is below them. Results of the
+DLL's passes reach the material shaders one frame later, so every reader reprojects into the previous frame.</figcaption>
+</figure>
+
+<p>The DLL's parts that the cards rely on:</p>
+<table class="rows"><thead><tr><th>What</th><th>Where it lives</th><th>Who reads it</th></tr></thead><tbody>
+<tr><td>The feed: the lit scene of the last frame with a mip chain, and its linear depth</td><td>t120 and t121, bound to every shader that declares them</td><td>object reflections, water, wet ground, bounce light</td></tr>
+<tr><td>Render target 7: world normal &times; 0.5 + 0.5 and perceptual roughness (RGBA8)</td><td>bound beside the lit pass, written by the material shaders (card SnowRunner Shadows with Object reflections)</td><td>the reflection pass</td></tr>
+<tr><td>The reflection pass's result: radiance &times; confidence and confidence (RGBA16F), and object motion</td><td>t123, t124</td><td>the material shaders, next frame</td></tr>
+<tr><td>Render target 6: the sun's visibility each receiver found</td><td>bound beside the lit pass</td><td>the contact shadow pass</td></tr>
+<tr><td>A second AO target: light bounced from nearby surfaces</td><td>written by the AO pass</td><td>Bounce light</td></tr>
+</tbody></table>
+<p>Without the DLL every spliced shader still runs: a helper that finds its textures unbound returns exactly what the game's
+own instruction would have returned. F8 in the game switches all of Next Gen's shader work off and on, so a look can be
+compared from one spot. For that the DLL keeps a table of the game's original of every changed shader (SnowRunnerShadows.stock,
+about 5,600 of them) and draws the original in place of the changed one while F8 holds (F11 the same for the AO pass alone). The
+originals are built the first time F8 or F11 asks for them, each shader once, and kept: the first press takes a moment, and a
+start builds none. Until October 2026 they were built while the game started, about 5,600 shader builds before the first
+frame that no comparison needed.</p>
+<p>The same switches are buttons in the NEXT GEN overlay, the menu the Next Gen mods share (F2 opens it; NextGen.ini beside the game's exe can name another key). The DLL exports
+the list (NgGraphicsGetApi, version 1): every switch whose feature the ini turned on, with a name, a tip, its state and a way
+to set it, and a few status lines (device hooked, shadow map size, stock shaders, ReShade). The overlay finds the DLL by its
+full path in the game's folder and draws the Graphics tab from that list on the game's present thread. A button and its key
+flip one flag, so they never disagree; a change lasts until the game closes, and SnowRunnerShadows.ini sets the start. While
+a NEXT GEN menu has the Graphics tab the keys F4 to F11 are silent, because other mods use some of the same keys
+(KeysWithMenu=1 in the ini keeps them); with Next Gen Graphics alone they work as before. Every
+Next Gen mod writes the game's import slots under one lock (Local\NextGen.Slots.&lt;pid&gt;) with a compare-exchange that keeps
+what was there as the original, so two mods hooking D3D11CreateDevice chain in either order.</p>

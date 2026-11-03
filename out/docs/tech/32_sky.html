@@ -1,0 +1,196 @@
+<h2 id="t-cubes">Reflection cubes from photographs</h2>
+<p class="lead">Card: Reflection cubes. The painted sky cubes that paint and chrome mirror and the ambient light reads, made
+anew from photographs for every region and hour.</p>
+
+<h3>What a reflection cube is in SnowRunner</h3>
+<p>Each daytime state names one cube (EnvMap="env/day_al_01__d_ggxrefl.tga"; in boot.pak a .pct texture). It has six square
+faces of 256 &times; 256 texels in Direct3D's order +X, &minus;X, +Y, &minus;Y, +Z, &minus;Z, compressed as BC7, with 8 mip levels
+down to 2 &times; 2, each a plain downsample of the one before. Materials sample it at mip &radic;roughness &times; 8 + 0.5,
+so the mips stand for rougher and rougher reflections. Sky ambient and Bounce light read its last level as the sky's and the
+ground's colour. The game shares a few painted cubes between all regions. Next Gen makes 25 of the 26 the states name from
+21 photographic panoramas (CC0, Poly Haven; the garage keeps the game's).</p>
+
+<h3>From a panorama to six faces</h3>
+<p>A panorama in equirectangular form maps every direction to a point of a 2:1 picture. For a direction d = (x, y, z), y up:</p>
+<div class="eq">&phi; = atan2(x, z),&nbsp;&nbsp; &theta; = asin(y),&nbsp;&nbsp; u = &frac12; + &phi; / 2&pi;,&nbsp;&nbsp; v = &frac12; &minus; &theta; / &pi;</div>
+<p>Each face texel is a direction (the texel's centre on the face of a cube around the origin, normalised); make_cube.js
+looks the panorama up at 3 &times; 3 points inside the texel and averages them, so the faces are not aliased. The source is
+Radiance HDR (RGBE: a shared exponent per texel), linear light.</p>
+
+<h3>Exposure, colour, and the game's brightness</h3>
+<p>A photograph has its own exposure. The cube is scaled so that its upper half (the sky) lands at the brightness of the stock
+cube's sky, an sRGB luminance (SKY_MEAN). Options set the sky straight overhead and the ground apart from the sky, and
+white-balance a dusk, dawn or night to the hue of the game's cube for that hour. Then the texels are encoded sRGB, as the
+game's are, and box-filtered down the mips: each texel of mip k + 1 is the mean of four of mip k.</p>
+
+<h3>BC7 encoding</h3>
+<p>BC7 stores each 4 &times; 4 block in 16 bytes. The tool uses mode 6: one subset, two RGBA end points of 7 bits per channel
+plus a shared low bit each, and a 4-bit index per texel that picks one of 16 points on the line between them. For a block of
+texels c<sub>i</sub>, the indices are chosen by projecting each texel on the line, then the end points A and B are refined by
+least squares for those indices:</p>
+<div class="eq">minimise &Sigma;<sub>i</sub> | c<sub>i</sub> &minus; ((1 &minus; w<sub>i</sub>) A + w<sub>i</sub> B) |&sup2;,&nbsp;&nbsp; w<sub>i</sub> = index<sub>i</sub> / 15</div>
+<p>which is a 2 &times; 2 linear system per channel. The shared low bit is the one that rounds the four channels best,
+except that an end point whose alpha is 0 or 255 keeps it exact: picked for the colour, the bit had made a clear sky's
+alpha 1 here and 0 there, in rings that followed the colour's gradient, and the night states' multipliers (&times; 3 on
+Michigan's back bands) drew them as outlines around the clouds (seen in the game). The file's 138 header bytes and its 6-byte tail are copied from the stock
+cube, so the game sees exactly the layout it ships with.</p>
+
+<h3>The winter cube rule</h3>
+<p>The game names cubes per state by family, and two of its choices stop holding once the snow families' cubes are real snow
+photographs. Kola and Yukon give their clear days 1 and 2 the Michigan summer cube and only day 3 the snow cube; with the
+rule, a clear day of a region with snow that names a summer cube takes the snow cube its region's other clear days use. And a
+few states of regions without snow name a snow cube (a weather variant of Wisconsin, North Carolina's dusk); they take the
+cube their region's other states of the same kind use. The engine applies this to initial.pak whenever boot.pak holds the new
+cubes.</p>
+
+<h2 id="t-sky">Night sky, brighter stars, skies</h2>
+<p class="lead">Cards: Night sky, Brighter stars, Skies.</p>
+
+<h3>Night sky: a real star map</h3>
+<p>The game's stars are one texture (4096 &times; 1024) wrapped around the sky, with stars a texel wide. Next Gen's is NASA's
+Deep Star Maps 2020 at 8192 &times; 2048: point stars at their catalogued brightness and the Milky Way's glow. The two photo
+night skies of Scandinavia, Kola and Quebec (one picture each, an aurora photograph) get the same star points painted in.</p>
+<p>The glow is faint: at the galaxy's edge its light is 1 to 3 in the alpha's 255 steps, each step half again or more, which the
+layer's multiplier (up to &times; 5) showed as flat islands with hard edges along the band (seen in the game on Washington's
+night sky). Since the shader weights the colour by the alpha, the faint glow is stored as both: the alpha rounded up and
+the grey carrying the rest, so its light steps by alpha / 255 of a step. The glow under that is found again smooth from the
+texture itself (the smallest alpha in 5 &times; 5, which leaves the stars out, then a 17 &times; 17 box where it is faint and 5 &times; 5
+where it is bright); the stars and the bright glow are as they were.</p>
+<p>The BC7 encoder then undid part of that (seen in the game, 2026-10-31): its shared low bit left the empty sky at
+alpha 1 with white colour, a little brighter than the glow's faint edge, so a dark rim ran along the Milky Way, and it
+weighed an alpha step like a step of grey, so inside the glow the light snapped to whole alpha steps in contours. The
+star map is encoded again (out\skies_build\encode_raw.js with an alpha weight of 256, mips that average the light):
+the empty sky is 0, and the faint glow's light is off by 0.003 on average where it was off by 0.9.</p>
+
+<h3>Brighter stars: why the level must rise</h3>
+<p>A sky layer's brightness is "g(r; g; b; a) &times; N": N scales the colour, the alpha is a / 255, and the sky shader
+outputs the colour weighted by the alpha. The night states draw the star layer at &times; 0.07 to &times; 0.5, levels set for the
+stock texture's wide stars. NASA's point stars put about a quarter of the light into each star's texel, so at the stock
+levels they come out at 1 to 2 nits (the brightest at 6 to 9) on a sky of 0.15 to 0.4 nits; the texture's alpha is already
+at its 8-bit ceiling for the bright ones. So the card multiplies N in the night overrides of the star layer by one factor
+(dusk and dawn keep their level where a region shows stars then, as they are bright skies).</p>
+<p>The photo skies cannot take that factor: one picture holds the photograph and the stars, so N would brighten the photo
+too. Their build carries the stars' share in the alpha instead: 85 where a texel is all photo, up to 255 on star points. The
+layer's own alpha is raised three times (50 &rarr; 150): the photo stays as it was (85 &times; 150 = 255 &times; 50), the star
+points come out three times as bright.</p>
+
+<h3>Skies: domes and cloud bands from photographs</h3>
+<p>A SnowRunner sky is layers on a sphere: a sky dome (sphere_sky) and up to three cloud bands (clouds_rear, clouds_mid,
+clouds_near) that turn around the map, each tinted per daytime state. The card (on by default since 1.1.0) replaces 49 of
+those textures, every region's, with ones made from 25 photographs of real skies: domes by make_cube.js at the stock
+texture's size and mean colour with the photograph's sun taken out, and cloud bands. Two night layers that are black but
+for a patch of the Milky Way get the real one: a strip around the galactic centre sampled from NASA's Deep Star Maps
+2020 through the galactic to equatorial rotation, laid along the stock patch's long axis (its moments give the centre,
+tilt and spread), faded by an ellipse of that spread, and its light mapped onto the stock patch's own distribution of
+brightness, quantile for quantile. The cloud bands are cut from panoramas by
+make_clouds.js: a band is a texture 8 (or 4) times as wide as high whose alpha is the clouds' shape and whose colour is their
+shading in grey. What is cloud and what is sky is told by colour, since a clear sky is blue and a cloud is not:</p>
+<div class="eq">b = (B &minus; R) / (B + R),&nbsp;&nbsp; b<sub>sky</sub> = 85th percentile of b in the row,&nbsp;&nbsp; cloudiness = b<sub>sky</sub> &minus; b</div>
+<p>The alpha is a soft step over the cloudiness, set so that the band's mean alpha matches the stock band's coverage; the band
+fades out at its upper and lower edge as the game's do; the colour is the texel's luminance over the brightest cloud's, so a
+state's tint works on it as on the game's. The alpha is softened over its neighbours, so a cloud's soft edge reaches out
+over texels that are sky in the photograph; their grey is the sky's, darker than the cloud, and showed at night as a dark
+rim round every cloud (seen in the game, 2026-10-23). Averaging the grey over the same neighbours, each weighted by its
+alpha squared, did not take it away: a thin edge is part sky in the photograph and came out darker than its cloud (219
+inside, 186 at the edge, 173 just outside in a near band), and filtering between texels and every smaller mip mixes
+that in. Now every texel carries the grey of the clouds near it: each grey weighted by its alpha to the fourth (a solid
+cloud counts, a thin edge hardly), summed down a pyramid of 2 &times; 2 cells and pulled back up, so a cloud fades out by
+its alpha alone. The smaller mips average the colour by alpha too, so a clear texel's colour does not count where cloud
+is near. On the top level the clear texels beside a cloud were 5 to 19 levels of 255 below the soft edge; now they are
+at most 8 below it, and in some bands above it.</p>
+<p>The zenith: every column of a dome meets at the top, and the game closes its dome above about 81 degrees with a fan of
+triangles, so whatever a photograph has up there is squeezed into wedges around a point with a ring around it (seen in the
+game looking straight up, and as streaks running to the zenith on the overcast skies). From 66 degrees up each row of
+a dome, and of a cloud band that reaches that high, is blended towards its own mean colour and alpha, smoothly, wholly
+at 86 degrees: the sky straight overhead is plain, as in the game's own textures. Yukon's night dome (sky_01a_us_04_night) keeps its first build for now: rebuilt with the options on record it does not match the shipped texture, so it is not rebuilt from a guess. The near cloud band most maps use
+(cloud_03_us_01) is cut with a wider soft edge (0.45), its alpha softened over 3 texels and patches under 400 texels
+left out: at night small hard-edged fragments showed as specks against the stars.
+Around the photograph's sun a band holds only the fill, with no cloud of its own; cut clear there it left a round hole
+with a hard edge in the band. That stretch now takes the band's clouds from the far side, half way round at the same
+height, faded in over the fill's edge.</p>
+<p>Twenty textures were made again for 1.1.1 after a look at every sky texture against shots from the game
+(2026-10-26). Kola's clear-day domes (sky_01_ru_03_day, sky_02_ru_03_day), the first ones built (2026-10-12), had a
+flat grey patch where the sun was taken out, a green and pink ring around it and the photograph's hills drawn into the
+sky; they are now Rustig Koppie and Kloppenheim 05. The layer over Kola's day 2 (sky_03_ru_03_day) had a dark notch at the horizon where its sun was taken out; it is now Qwantani Dusk 1 at 8192 &times; 2048. The five domes the game draws at 2048 &times; 512, one level with an
+82-byte header (cloud_us_02_0044, 0049, 0237, 0331 and cloud_us_19_0001), are 8192 &times; 2048, the photographs' own
+size: their header takes the new width and height at 0x10, the level's size at 0x40 and the data's at 0x4E, and the
+tail the file's size. Built by out\skies_build\domes_111.ps1. cloud_02_us_01 is four times its size too, and
+make_clouds.js --drop-top leaves out whole every cloud that reaches into the upper half of the top edge's fade: a cloud
+is its solid part (over 0.35 before the fade, so thin haze does not join it to the clouds below) with its soft rim.
+The game showed one more cut flat along a straight line in Kola's clear day (2026-10-27): every cumulus band was then
+measured for solid cloud 8 % below its top (cloud_01_us_01 12 % of its width, cloud_01_ru_02 13 %, cloud_01_us_02 48 %,
+cloud_02_us_02 31 %, cloud_03_us_02 26 %) and made again with --drop-top, cloud_01_ru_02 and cloud_02_us_02 at 4096
+&times; 512. In cloud_01_us_02 nearly every Sunflowers cloud reached the top, so it is now ambientCG's Day Sky HDRI 012
+B.</p>
+<p>cloud_02_ru_02 and cloud_02_ru_03, Kola's and Taymyr's back band, had plain white clouds with no shading in 1024
+&times; 128 texels, so a dusk tint lit them as flat cut-outs, and a cloud that ran into the band's upper edge ended in a
+straight line; both were the same picture. They are now two photographs of low cumulus from ambientCG (Day Sky HDRI
+065 B and 040 B, CC0) in 4096 &times; 512, cut with a lower coverage than the game's (0.24 and 0.13) so that the
+photographs' thin haze stays out. ambientCG ships its panoramas as OpenEXR with PIZ compression; out\skies_build\exr2hdr.py
+(Python with the OpenEXR package) writes them as the Radiance .hdr make_cube.js reads. The game reads a texture's size
+from its header, which holds no name, so a band takes the header of another band of the size it wants. make_clouds.js
+takes --top-edge, the share of the height the upper edge fades over (0.16 by default, as the game's): at 0.4 to 0.45 a
+cloud that reaches the edge thins out instead. cloud_03_ru_02 (plain white blobs) is now Sunflowers in 4096 &times;
+1024, cloud_03_us_01 Wasteland Clouds, and cloud_04_ru_03, the grey layer of Kola's and Amur's day 1a and six of
+Zurdania's states, Aristea Wreck: it was Kloppenheim 07, the same smeared night photograph as Kola's overcast dome
+below. Each photograph was picked so that no daytime state shows it twice. Built by out\skies_build\bands_111.ps1 and
+build.ps1.</p>
+<p>The near bands of Michigan's overcast days (cloud_03_ru_02 on day 3a, cloud_03_us_01 on 1a and 2a) are tinted at
+&times; 0.3, and the cut-out cumulus with their shaded undersides in the colour came out as opaque dark blue shapes with
+hard edges, stretched tall straight overhead (seen in the game on Black River). The game's own near band is plain white,
+and its alpha is the clouds' light: a lit top is opaque, a shaded underside thin, so a dark tint gives a soft grey veil.
+make_clouds.js --lum builds a band that way: the alpha is the soft step over the cloudiness times the texel's
+brightness over the band's brightest clouds, and the colour is white. cloud_03_ru_02 is now Kloofendal Overcast, a soft
+cloud deck, and cloud_03_us_01 keeps Wasteland Clouds, both with --lum. Every band's faintest alpha, under 0.04, also
+goes to 0 (--floor). The fifteen bands make_clouds.js built were made again with the encoder above
+(out\skies_build\bands_112.ps1); the others keep their texels.</p>
+<p>The sun: the game draws its own, so the photograph's comes out, with its glare. The glare is measured as a gain over the
+sky on the far side, degree by degree out from the sun, and divided out. Each degree's gain comes from the ring of texels
+at that angle, ranked by brightness, from the ones a quarter of the way up: clouds near the sun are lit by it and stand
+above the sky, and the median of a ring half covered by them took the sky beside them too far down, a dark ring around
+the spot. The gains are eased from one degree to the next, since a step showed as a coloured ring. The disc itself, 2 to
+6 degrees where the glare is over 30 times the sky, holds nothing usable and is filled over a 4 degree edge. The first
+fill carried each direction's colour straight in from the ring outside it, and a disc beside a cloud met at its centre
+as a pinwheel of cloud and sky with a ring around it (seen in the game on a clear day, 2026-10-23, where it looked like
+the zenith but stood at the sun's 48 degrees). Now it is a membrane over that ring: at the rim each direction keeps the
+colour that stands there, and towards the middle the differences fade, finer ones faster, to the ring's mean. On it goes
+the detail of a patch as big at the same elevation 60 to 300 degrees round the sky, as its brightness over that patch's
+own membrane (between half and twice), so a cloud deck carries on through the disc; of those patches, the one whose ring
+varies most like the disc's. Under a cloud sheet the glow is the sheet's own and stays, and the fill rises with it towards
+the middle, level from the disc's edge in: a level fill under the glow showed as a dark spot.</p>
+<p>Where the fill still read as a patch in the game (a soft blurred disc where the sun had been, seen on 2026-10-23), and at
+the zenith, the spot is now repainted by an image model, Google's Gemini. engine\tools\sky_edit.js cuts flat views of a
+built dome: one centred on the sun's old place, 50 degrees wide with a circle of 10 degrees, and one straight up, 110
+degrees wide with a circle of 35. Each goes to the model with the circle drawn in red and a prompt to repaint only inside
+it and take the circle out. Its apply puts the answers back. Each picture's colour is matched to the dome's own just
+outside the circle (the model shifts a whole picture a little: Zurdania's three answers were off by 1 to 2 levels of 255
+there), taken wholly up to half a degree past the circle and faded out by 4, the zenith's view first, so the sun's edit
+has the last word where they meet. Then the cap: from 64 degrees up blended towards one colour, wholly at 80, the median
+of the sky between 76 and 80 degrees (their mean, with a cloud reaching the ring, left a lighter disc, and a blend over 7
+degrees still showed its edge). Every level is encoded again from the edited one, and a before and after of each view is
+written beside it. The first two: Zurdania's clear day (cloud_04_ru_02_day_01, the sun at 48 degrees and the zenith) and
+its overcast (cloud_04_ru_02_day_02, the zenith), in the game since 2026-10-23. A dome built again from its panorama loses
+its edits until apply runs on it again; the views, the answers and their records are kept in out\gemini.</p>
+<p>Three overcast domes were made again after they read as plain in the game (2026-10-24), where the game's own are heavy,
+stormy skies: Kola's day__2a, which its dawn uses too (sky_02a_ru_03_day), had come out as a fair sky of small clouds with
+a round hole where the photograph's sun had been taken out; Kola's day__3a (sky_03a_ru_03_day) as thin streaks running to
+one point near the horizon; Zurdania's overcast (cloud_04_ru_02_day_02) as an even grey. They are now made from
+Overcast Soil (both of Kola's, day__2a's turned 180 degrees so the two days do not show the same clouds) and Mud Road.
+Kloppenheim 07, which day__2a had first, is a night photograph: its clouds moved during the long exposure and showed in
+the game as smeared streaks (Kola's dawn, 2026-10-26). Overcast photographs are flat (all eight of Poly Haven's pure
+overcast skies are marked low contrast), so make_cube.js sky takes --contrast k, which spreads each texel's light around
+the sky half's geometric mean luminance, L' = G (L / G)<sup>k</sup>, the colour kept, before the mean colour is matched:
+1.4, 1.4 and 1.6 here. No sun is taken out of them: their glow is soft, as in the game's own overcast textures. Built by
+out\skies_build\overcast.ps1.</p>
+<p>The aurora: the two layers that hold it (cloud_01_ru_03 and cloud_01_us_11, the second the first's mirror image to
+within about 6 levels of 255) had it blue and violet, green only along its lower edge and in a curl. A real aurora is
+mostly green, the light of oxygen at 557.7 nm, often with red above it where the oxygen is higher and thinner (630 nm).
+It was cut out as a square on black, 2080 texels wide, and Gemini repainted it in those colours with its shape and
+curtains kept. The answer goes back scaled to the square, its black floor (3 of 255, JPEG noise that would veil the sky)
+taken off, its colour strengthened 1.6 times around each texel's own grey and its total light set to the stock aurora's
+(a gain of 0.78). The second texture is the first mirrored, and both keep the stock alpha. The answer, the crop and the
+scripts are kept in out\gemini\aurora.</p>
+<p>Each texture goes in with its .pct_header, which the game keeps beside every .pct: the .pct's header with its last
+record (type 0xff, the length of the data after it) turned into type 1 with the header's own length, as all 349 pairs in
+the stock boot.pak have it. Until 2026-10-23 the tools wrote the .pct's head as it stands, and the domes made smaller to
+the stock size (4096 &times; 1024) kept an older header of 8192 &times; 2048; now every pair agrees.</p>

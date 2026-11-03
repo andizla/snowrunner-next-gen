@@ -1,0 +1,106 @@
+<h2 id="t-water">Water: reflections, Fresnel, depth colour, crest glow</h2>
+<p class="lead">Cards: Water reflections (row Sun glitter in shade), River depth colour, Sun glow through waves. The game draws
+water with about 200 shaders: 20 for rivers and mud, 176 for lakes and seas ("domain" water), 88 of those with a planar
+reflection image. Next Gen changes what they reflect, how reflection and body colour mix, and how deep water is coloured.</p>
+
+<h3>Screen-space reflections on rivers and plain lakes</h3>
+<p>The river and mud shaders, and the lakes without a planar image, reflect only the sky cubemap. The patch replaces their
+one cubemap sample with a ray march (ssr.hlsl, after McGuire and Mara, "Efficient GPU Screen-Space Ray Tracing", JCGT 2014,
+simplified for water, whose rays leave the surface upwards). Unlike the object pass it marches in view space with steps that
+grow geometrically, which suits long reflections over flat water:</p>
+<div class="eq">step<sub>k</sub> = 0.05 m &times; 1.25<sup>k</sup>,&nbsp;&nbsp; k = 0 &hellip; 35&nbsp;&nbsp;&nbsp;(the last step is 0.05 &times; 1.25<sup>36</sup> &asymp; 150 m)</div>
+<p>The first step is small so a wheel standing in a puddle is found. At each step the ray's point is projected and its depth
+compared with the scene's linear depth (g_txZ). When it passes behind a surface, 5 halvings between the last point in front
+and the first behind find the crossing. A hit counts when the ray is at most 0.25 m behind the surface (deeper, it went under
+the object); the bias is 0.02 m plus a share of the distance. The colour comes from the opaque scene the game already has
+(g_txBBOpaque). Hits brighter than 3 times the reflected sky are compressed, so lamps do not burn out; the reflection fades over
+the outer 8 % of the screen. Where the ray leaves the screen or finds nothing, the sky sample stays exactly as before.</p>
+
+<h3>The lakes' planar image</h3>
+<p>88 lake, sea and puddle shaders reflect an image the game renders for one water plane, at half the frame's size, with its
+own screen-space pass (SpinTires/WaterCompute, "Reflections" and "ReflectionsWithTAA"). For every water texel that pass
+walks up the screen one texel a step, finds the first thing standing out of the water, and takes the colour twice as far up.
+Its hit rule has a flaw: it asks that what it finds rises at least minRise = 0.01 + 0.04 s metres <i>per texel</i>
+(s grows with the depth). An upright thing 20 m away rises 3.0 cm per texel at 1080 rows but only 1.5 cm at 2160 rows, so at
+3840 &times; 2160 a hull, a tyre or a pier standing in the water is found only beyond about 75 m, and the lake shows sky where a
+truck should be. The patch (patch_refl_hits.js) makes the rule independent of resolution:</p>
+<div class="eq">minRise = 0.5 &times; (the height one texel covers at the sampled depth &minus; tol)</div>
+<p>On top, the same ray march as the rivers runs at the planar sample (ssr_planar.hlsl). Where it hits, it replaces the planar
+image (which leaves out the trucks); where it finds nothing the planar sample stays. A ray that ends well behind a surface is
+not handed to the planar image: under an object it takes that object's colour, darkened, as the object pass does.</p>
+
+<h3>How reflection and water colour mix</h3>
+<p>Light at a water surface splits: a share F is reflected, the rest enters the water. F follows Schlick's approximation of
+Fresnel's equations, with F<sub>0</sub> = 0.02 for water:</p>
+<div class="eq">F = F<sub>0</sub> + (1 &minus; F<sub>0</sub>)(1 &minus; cos &theta;)<sup>5</sup></div>
+<p>The game's river shaders end with out = reflection &middot; F + colour, adding the reflection on top of the full body
+colour. That works while the reflection is bright sky; with real reflections of darker banks the water turns milky. The
+patch (blend.hlsl) makes the colour give way:</p>
+<div class="eq">out = colour &middot; (1 &minus; F) + reflection &middot; F</div>
+<p>except for the sun's highlight, which the larger variants add into the body colour and which is reflected light already:
+its share, highlight &middot; (1 &minus; T), stays as it is.</p>
+
+<h3>River depth colour: coloured absorption</h3>
+<p>The game fades the riverbed behind the water into the water's body colour with one grey factor, T = exp(&minus;k &middot;
+path), so deep water goes grey at the same rate in every channel. Real water absorbs some wavelengths faster (Beer-Lambert):
+clear water loses red first and deepens to teal, muddy water loses blue first and goes brown. The patch (absorb.hlsl) gives
+each channel its own exponent, shaped by the water's own colour c (its lit body colour with the sky's tint divided out):</p>
+<div class="eq">rel<sub>c</sub> = c / max(c),&nbsp;&nbsp; a<sub>c</sub> = 1 &minus; ln(max(rel<sub>c</sub>, 0.02)),&nbsp;&nbsp; w<sub>c</sub> = a<sub>c</sub> / L(a)</div>
+<div class="eq">&tau; = &minus;ln T,&nbsp;&nbsp; &tau;' = &tau;&sup2; / (&tau; + 0.7),&nbsp;&nbsp; T<sub>c</sub> = exp(&minus;w<sub>c</sub> &tau;')</div>
+<p>The brightest channel gets a = 1 and darker ones more; the weights average 1 by luminance L, so the overall depth the
+artists set stays and only its hue changes. A grey water colour gives the stock fade. The second line clears the shallows:
+thin water (small &tau;) lets the bed show much further, deep water fades as before.</p>
+
+<h3>Sun glow through waves</h3>
+<p>Looking towards a low sun across a river, the thin tops of waves glow: light enters the back of a wave and leaves through
+its crest. The term is the "fast translucency" of Barre-Brisebois and Bouchard (GDC 2011): the direction to the sun, bent by the
+wave's normal, against the view direction:</p>
+<div class="eq">glow = 0.15 &middot; C<sub>sun</sub> &middot; S &middot; hue &middot; crest &middot; saturate(V &middot; &minus;(L + 0.5 N))<sup>6</sup></div>
+<p>with S the sun's shadow-map visibility at the pixel (looked up as the game's materials do; the 12 river shaders that read the
+shadow map get it), hue the water's own colour, and crest a weight that rises as a facet tilts away from flat (a tilted facet
+is a thin crest; factor 4). It is added outside the reflection, as light that came through the water.</p>
+
+<h3>Sun glitter in shade (row, off by default)</h3>
+<p>The game's highlight term on water ignores part of the sun's shadow: water in shade still glitters a little. The row
+multiplies the highlight's power term, in the 64 lake and 8 river shaders drawn with the shadow map, by</p>
+<div class="eq">g = saturate(1 &minus; (1 &minus; S) / max(1 &minus; f, 0.001))</div>
+<p>with S the shader's own shadow test and f the game's shadow floor (g_fShadowAtten): where the test says the sun is hidden,
+the highlight goes out. Where it was tried, the game's test said the water was lit, so nothing changed; it stays off.</p>
+
+<h3>Limits</h3>
+<ul>
+<li>Screen space: what is off screen is not mirrored; the reflection fades at the screen's edges.</li>
+<li>The march samples in steps: very thin things (a rope) can be stepped over at a distance.</li>
+<li>The glow needs the shadow map; 8 of the 20 river shaders do not read it and get no glow.</li>
+</ul>
+
+<h2 id="t-puddles">Wet ground reflections and the glare cap</h2>
+<p class="lead">Cards: Wet ground reflections, Headlight glare cap.</p>
+
+<h3>Reflections in mud and puddles</h3>
+<p>The terrain lights its reflections from the sky cubemap alone (scaled by the local ambient light), so a puddle next to a truck
+mirrors the sky and nothing else. Terrain is drawn before the game has an image of the scene, so the patch (puddle_ssr, in 1208
+wet-ground shaders) reads the previous frame's, which the DLL copies at the AO pass and binds at t120 (colour) and t121 (depth).
+The ray is marched in world space and projected with the previous frame's camera, so the depth and the colour it meets belong
+together; for a moving truck the reflection lags one frame. Only glossy pixels march: the cube's mip level, &radic;roughness
+&times; 8 + 0.5, must be below a limit. Rough mud takes its colour from the feed's mip chain, blurred like the cubemap would be.
+Without the DLL (or with F9) every pixel keeps the cubemap sample.</p>
+
+<h3>The headlight glare cap</h3>
+<p>The terrain lights every surface with a GGX highlight per headlight. Its distribution term D is capped at 32 by the game:
+min(D, 32). On the smooth, rippled surface of a road puddle that cap is reached along a long stretch in front of the truck, and
+the lamps draw a long bright band across the water. The patch (patch_glare.js, about 1216 shaders) lowers the cap for the
+headlights only:</p>
+<div class="eq">min(D, 32) &rarr; min(D, 6)&nbsp;&nbsp;&nbsp;(the headlight terms; the sun's and the baked lights' keep 32)</div>
+<p>A cap belongs to a headlight when a read of that lamp's colour (g_cHeadLightColor[k]) lies between it and the previous cap.
+The number is rewritten in place. Rough surfaces, whose highlight never gets near the cap, look as they did.</p>
+
+<h2 id="t-headglow">Headlights in reflections</h2>
+<p class="lead">Card: Headlights in reflections. At night, paint that finds nothing to reflect shows the light of the
+headlights.</p>
+<p>Where a reflected ray from the object pass finds nothing on screen, the material falls back on the sky cubemap: at night,
+a dark blue. But the ray passes through the headlights' beams, which light the air (the game draws that as its own beam).
+This build of the object reader adds, along the reflected ray, the beam's light in the air: the cone, reach and colour come
+from the game's own constants (CB_GLOBAL_SCENE), so a hood at night shows the lamps' warm light where its rays cross the beam.
+With the lamps off, or the pass unbound, the result equals the plain reader's at no cost. With two lamps on it adds 0.15 ms
+for a whole 3840 &times; 2160 screen of glossy pixels (measured on an RTX 4080); a real frame has far fewer.</p>

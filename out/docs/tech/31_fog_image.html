@@ -1,0 +1,81 @@
+<h2 id="t-fog">Volumetric fog and sun shafts</h2>
+<p class="lead">Card: Volumetric fog (off by default), with its row Sun shafts (off by default, experimental).</p>
+
+<h3>How the game draws fog</h3>
+<p>The fog pass (shader 0x871EF8CC) marches along each view ray: 128 steps of 0.5 m (0.5 + 0.1 &times; the lighting mode) from a
+start depth. At each step the density is a fog mask times a height falloff; the colour is a shadow colour plus the light of
+lamps and headlights. Two things show. Every pixel samples the same depth slices, which at grazing angles shows as layers or
+bands. And the light does not depend on the sun's direction: fog looks the same towards the sun and away from it.</p>
+
+<h3>Jitter</h3>
+<p>Every pixel starts its march up to one step later, by an interleaved gradient noise value n &isin; [0, 1) on the fog
+target's coordinates:</p>
+<div class="eq">t<sub>i</sub> = t<sub>start</sub> + (i + n) &middot; &Delta;t</div>
+<p>Neighbouring pixels then sample different slices; the bands become fine noise that the fog buffer's filtering smooths out.</p>
+
+<h3>Forward scattering</h3>
+<p>Fog droplets scatter light mostly forward, so fog between the eye and the sun glows. The standard model is the
+Henyey-Greenstein phase function, with &theta; the angle between the view ray and the light's direction and g the
+anisotropy:</p>
+<div class="eq">p<sub>HG</sub>(&theta;) = (1 &minus; g&sup2;) / (4&pi; (1 + g&sup2; &minus; 2g cos &theta;)<sup>3/2</sup>)</div>
+<p>The patch multiplies the in-scattered light (not the density, so the fog's opacity stays) by a blend of isotropic and
+Henyey-Greenstein scattering, relative to isotropic (1/4&pi;):</p>
+<div class="eq">P = (1 &minus; K) + K &middot; p<sub>HG</sub>(&theta;) / (1/4&pi;),&nbsp;&nbsp; g = 0.3, K = 0.4&nbsp;&nbsp;&nbsp;&rArr;&nbsp; P = 1.66 towards the sun, 0.77 away</div>
+
+<h3>Sun shafts (row)</h3>
+<p>The stock march never asks where the sun is blocked, so there are no shafts between trees. The row splices a helper into
+each step of the march (fog_sun.hlsl) that adds the sun's in-scattered light:</p>
+<div class="eq">L<sub>sun</sub> = 0.12 &middot; C<sub>sun</sub> &middot; S(P) &middot; cloud(P) &middot; p<sub>HG</sub>(&theta;; g = 0.45) / (1/4&pi;)</div>
+<p>added into the march's sum with the step's density, the way the stock colour goes in. S(P) is the sun shadow map at the
+step's position, looked up as the game's own materials do: the view depth picks the cascade (the split distances), the
+position is projected with that cascade's matrix into the atlas, and one bilinear comparison sample is taken. cloud(P) is
+the cloud shadow map (1 &minus; its red channel at the position's map coordinates).</p>
+<p>Limit: the fog is drawn without knowing what stands in front of each step, so with a low sun the shafts also show over the
+truck and other things close to the camera. That is why the row is experimental and off.</p>
+
+<h2 id="t-tonemap">Tonemap, bloom and photo grade</h2>
+<p class="lead">Cards: Tonemap, Bloom soft cut, Photo grade. Three steps at the end of the frame, in the game's post-process
+shaders (common_pc_sm50_hdr.sdc) and its colour tables.</p>
+
+<h3>Tonemapping</h3>
+<p>The scene is rendered in linear light, values from 0 to far above 1. A tonemap curve turns them into the 0 to 1 the screen
+shows. The game uses a filmic operator of Hable's form, with parameters per daytime state (TonemapA to F and a white point W
+in the daytime files):</p>
+<div class="eq">f(x) = (x (A x + C B) + D E) / (x (A x + B) + D F) &minus; E / F,&nbsp;&nbsp; out = f(x) / f(W)</div>
+<p>Next Gen's tonemap is a reconstruction of the game's shader with a different curve (CURVE 3): the same operator with its toe
+term off and no white point, three constants fitted to a target response:</p>
+<div class="eq">y = (x&sup2; + 0.20 x) / (x&sup2; + 0.19 x + 0.32),&nbsp;&nbsp; x = 0.18 at mid grey</div>
+<p>The exposure is matched to the game's own curve, so the scene value each daytime sends to mid grey still lands there: each
+state keeps its authored brightness and only contrast, toe and shoulder change. Measured per photographic stop around grey (in
+8-bit sRGB output):</p>
+<table class="rows"><thead><tr><th></th><th>game's curve</th><th>Next Gen</th></tr></thead><tbody>
+<tr><td>contrast (slope) at mid grey</td><td>0.91</td><td>1.22</td></tr>
+<tr><td>output three stops under grey</td><td>43</td><td>34 (deeper shade, still with detail)</td></tr>
+<tr><td>output two stops over grey</td><td>191</td><td>216 (brighter highlights, rolling off without a clip)</td></tr>
+</tbody></table>
+<p>The bloom texture's weight in the final composite is set to 60 % (BLOOM_SCALE 0.6).</p>
+
+<h3>Bloom soft cut</h3>
+<p>Bloom adds a glow around bright things. The game's knee pass (0x52879E18) weighs each sample by how far it exceeds a
+threshold:</p>
+<div class="eq">k = max(L &middot; exposure &minus; threshold, 0),&nbsp;&nbsp; w = 10 &middot; (0.1 k)<sup>&gamma;</sup>,&nbsp;&nbsp; &gamma; = BloomGamma = 0.6</div>
+<p>An exponent below 1 lifts faint values: snow in daylight (k &asymp; 1.4) gets w &asymp; 3.1, which is the grey haze over bright
+surfaces. The patch keeps that code and multiplies each weight by a soft knee:</p>
+<div class="eq">w' = w &middot; k&sup2; / (k&sup2; + 3&sup2;)&nbsp;&nbsp;&nbsp;(snow &times; 0.18, sky &times; 0.4, sun and headlights &asymp; &times; 1)</div>
+<p>Real highlights, whose k is far above the knee, still bloom.</p>
+
+<h3>Photo grade</h3>
+<p>The game finishes the picture with a colour table per daytime state: a 16 &times; 16 &times; 16 LUT (in boot.pak), sampled with
+the display-encoded colour after the tonemap. Four tables carry the 161 day, dusk and dawn states (day_us_01 for 64 of them,
+identity for 44, day_us_12 for 34, day_us_18 for 19). The grade was measured on four pairs of screenshots, the game's own
+against neural-rendered shots of the same scenes: those take 13 to 21 % of the colour out, most from the greens (&times; 0.70)
+and the autumn oranges (&times; 0.75), less from sky blue (&times; 0.86 to 0.9), and set whites a little lower. The grade is
+applied to each table's output texel:</p>
+<p>The grade also takes out the game's lens dirt. The final post pass adds a texture of soft discs (env_camera_bokeh, 1024 &times; 512)
+over the picture, scaled by the light where it falls, so over bright sky and clouds it shows as blurry circles that
+follow the camera. The texture's texels are written as zeros (black, no alpha), so the pass adds nothing; Restore and
+the grade switched off put it back.</p>
+<div class="eq">LUT'(c) = grade(LUT(c))</div>
+<p>so the game's own look stays underneath, and greys stay grey. The row Strength scales the grade (100 % is the measured one).
+The table file is 82 header bytes, then 4096 texels as B, G, R, A with red fastest, then 6 bytes; the entries are stored, so
+boot.pak is rewritten with the same sizes.</p>

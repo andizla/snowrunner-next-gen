@@ -1,0 +1,26 @@
+<h2 id="t-issues">Known issues and fixes</h2>
+<p class="lead">What writing this guide turned up, what was fixed, and the limits that are part of a technique's design rather
+than bugs, so they are not reported as such.</p>
+
+<h3>Fixed</h3>
+<table class="rows"><thead><tr><th>What was wrong</th><th>What changed</th><th>Commit</th></tr></thead><tbody>
+<tr><td>The Map days help said three regions have no days of their own; Washington, the fourth, was missing.</td><td>The help names four regions and Washington's row.</td><td>1c8ad5e, 2026-10-17</td></tr>
+<tr><td>The README described Map days without Washington and without the map-by-map values, the logo card without its Start-up row, and the files it changes without Maine's own sets, the start without the intro and Washington's level files.</td><td>The README lists them.</td><td>1c8ad5e, 2026-10-17</td></tr>
+<tr><td>The window's list of keys in the game (How it works, Comparing in the game) named F4, F5, F6, F8, F10 and F11 but not F9, which switches the reflections on wet ground.</td><td>The list names F9.</td><td>d01a6b5, 2026-10-18</td></tr>
+<tr><td>Tool notes out of date: the weather tool said it has five parts (it has nine); lod_patch.js said the weather default is all seven parts (it is every part but land, eight), and its usage lacked debris-install, days-set and the debris= and days= options of initial-build.</td><td>The notes and the printed usage say what the tools do.</td><td>d174ccd, 2026-10-18</td></tr>
+<tr><td>A player saw an old picture, the menu's, in the shadows after changing a video setting in the game, until F8 or a restart. The scene copy that the bounce light and the reflections read stayed bound when the copies stopped, and kept its last picture.</td><td>The copy is bound only within 250 ms of the last one; otherwise every reader gets nothing and keeps the game's own result. Not yet seen in the game.</td><td>2026-10-21</td></tr>
+</tbody></table>
+<p>Each fix passed the full test chain (454 checks) before it was committed. None of them changes anything in the game.</p>
+
+<h3>Limits by design</h3>
+<table class="rows"><thead><tr><th>Card</th><th>Limit</th></tr></thead><tbody>
+<tr><td>Object reflections, Water reflections, Wet ground reflections, Contact shadows, GTAO, Bounce light</td><td>Screen space: they know only what the camera sees. Things off screen or hidden behind something are not reflected, cast no contact shadow and no occlusion; reflections fade at the screen's edges.</td></tr>
+<tr><td>Object reflections, Wet ground reflections, Bounce light</td><td>They read the previous frame, so they lag one frame and have nothing for pixels just uncovered.</td></tr>
+<tr><td>Bounce light (off by default)</td><td>In places, bright snow next to dark wood for example, it comes out too strong.</td></tr>
+<tr><td>Volumetric fog, Sun shafts (off by default)</td><td>The fog does not know what stands in front of each step, so with a low sun the shafts also show over the truck and other things close to the camera.</td></tr>
+<tr><td>Water reflections, Sun glitter in shade (off by default)</td><td>Where it was tried the game's own shadow test said the water was lit, so nothing changed.</td></tr>
+<tr><td>Sun glow through waves</td><td>8 of the 20 river shaders do not read the sun's shadow map and get no glow.</td></tr>
+<tr><td>Shadow edges, seam dither</td><td>The band where cascades blend relies on the game's TAA; detail smaller than a shadow texel cannot be rebuilt.</td></tr>
+<tr><td>Map days, map by map for Maine</td><td>Maine's own sets live in initial.pak. If a game update replaces it while Maine's level files name the sets, Maine does not load until Apply has run again.</td></tr>
+<tr><td>Next Gen logo, Start-up</td><td>The game still loads behind the splash; the time saved is the part of the intro that outlasted the loading (about 16 s in the test).</td></tr>
+</tbody></table>

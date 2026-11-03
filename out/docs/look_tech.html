@@ -1,0 +1,164 @@
+<!doctype html><html><head><meta charset=utf-8><style>
+@page { size: A4; margin: 18mm 17mm 18mm 17mm; }
+body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.3pt; line-height: 1.45; color: #1b2229; }
+h1 { font-size: 30pt; margin: 0; color: #12324a; letter-spacing: 0.5pt; }
+h2 { font-size: 15pt; color: #12324a; margin: 18pt 0 6pt; border-bottom: 1.2pt solid #d5dde4; padding-bottom: 3pt; }
+h2.part { font-size: 20pt; border: none; margin-top: 0; }
+h2.group { page-break-before: always; font-size: 16pt; color: #8a4b12; border-bottom-color: #ead9c6; }
+h3 { font-size: 12.5pt; color: #12324a; margin: 12pt 0 3pt; }
+h4 { font-size: 10pt; color: #44515c; margin: 7pt 0 1pt; text-transform: uppercase; letter-spacing: 0.4pt; }
+p { margin: 3pt 0 6pt; }
+a { color: #1d5d8c; text-decoration: none; }
+.cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+.cover .sub { font-size: 15pt; color: #44515c; margin-top: 6pt; }
+.cover .ed { font-size: 10pt; color: #6b7883; margin-top: 30pt; }
+.partpage { page-break-before: always; }
+.lead { font-size: 10.8pt; color: #26313a; }
+.meta { color: #6b7883; font-size: 9pt; margin: 0 0 4pt; }
+.card { page-break-inside: avoid; border-left: 3pt solid #d5dde4; padding: 1pt 0 2pt 9pt; margin: 10pt 0 14pt; }
+.card h3 { margin-top: 2pt; }
+table { border-collapse: collapse; width: 100%; margin: 6pt 0 10pt; font-size: 9.3pt; }
+th { text-align: left; background: #eef2f5; color: #12324a; padding: 3pt 5pt; border-bottom: 1pt solid #c9d3db; }
+td { padding: 3pt 5pt; border-bottom: 0.6pt solid #e3e8ec; vertical-align: top; }
+tr.grp td { background: #f7f2ec; color: #8a4b12; font-weight: 600; }
+td.on { color: #1f6b3a; font-weight: 600; } td.off { color: #8a8f94; }
+table.cards tr { page-break-inside: avoid; }
+ol.steps li { margin-bottom: 4pt; }
+ol.toc { padding-left: 16pt; } ol.toc > li { margin: 6pt 0; font-weight: 600; } ol.toc ol { font-weight: 400; margin: 2pt 0; }
+.tech h2 { page-break-before: always; }
+.tech h3 { margin-top: 14pt; }
+.eq { font-family: "Cambria Math", Cambria, "Times New Roman", serif; font-size: 11.5pt; background: #f6f8fa; border-left: 2.5pt solid #9fb0bd; padding: 5pt 10pt; margin: 6pt 0 9pt; page-break-inside: avoid; }
+figure { margin: 10pt 0 12pt; page-break-inside: avoid; } figure svg { width: 100%; height: auto; }
+figcaption { font-size: 9pt; color: #6b7883; margin-top: 3pt; }
+.tech table, .tech ul, .tech ol { page-break-inside: avoid; }</style></head><body><div class=tech><h2 id="t-shadowmap">Sun shadows: resolution, edges, softness, seams</h2>
+<p class="lead">Cards: SnowRunner Shadows (Resolution, Self-shadow fix), Shadow edges, Blocker search. Four changes to how the
+game's sun shadow is drawn and filtered.</p>
+
+<h3>Shadow mapping in one paragraph</h3>
+<p>Before the frame, the game draws the scene from the sun into a depth texture: each texel holds the distance from the sun
+to the nearest surface along that line. When a pixel of the frame is shaded, its position is projected into that texture;
+if the stored distance d<sub>map</sub> is smaller than the pixel's own distance d<sub>recv</sub>, something lies between it
+and the sun:</p>
+<div class="eq">lit = [ d<sub>recv</sub> &minus; bias &le; d<sub>map</sub>(u, v) ]</div>
+<p>One such test gives a hard edge with the texture's texels as stairs. Filters average many tests around the pixel
+(percentage-closer filtering, PCF), which softens the edge. SnowRunner keeps three cascades, one texture each for the near,
+middle and far range, side by side in one depth texture of 4608 &times; 1536 at its top setting (1536 &times; 1536 per
+cascade). A pixel uses the first cascade whose split distance lies beyond it: 15.5 m, 40.5 m, 100.5 m from the camera.</p>
+
+<figure>
+<svg viewBox="0 0 760 120" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="11.5">
+<rect x="20" y="40" width="110" height="34" fill="#dfe8ef" stroke="#9fb0bd"/><rect x="130" y="40" width="180" height="34" fill="#e9eff4" stroke="#9fb0bd"/><rect x="310" y="40" width="430" height="34" fill="#f2f5f8" stroke="#9fb0bd"/>
+<g fill="#d4b48f"><rect x="122" y="40" width="8" height="34"/><rect x="288" y="40" width="22" height="34"/></g>
+<g fill="#12324a"><text x="40" y="62">cascade 1</text><text x="185" y="62">cascade 2</text><text x="480" y="62">cascade 3</text></g>
+<g fill="#6b7883"><text x="20" y="30">camera</text><text x="110" y="95">15.5 m</text><text x="285" y="95">40.5 m</text><text x="705" y="95">100.5 m</text></g>
+<text x="330" y="112" fill="#8a4b12">seam bands (seam dither): the last 7.4 % of each range blends into the next</text>
+</svg>
+<figcaption>The three cascades along the view depth. Each next cascade's texels cover 2 to 2.5 times more ground.</figcaption>
+</figure>
+
+<h3>Resolution: a bigger shadow texture (SnowRunner Shadows, row Resolution)</h3>
+<p>No game file sets the shadow texture's size: it comes from the game's executable. The DLL recognises the texture when
+the game creates it (a depth texture three times as wide as high), creates it Factor times larger, and while it is the bound
+depth target scales every viewport and scissor rectangle the game sets by the same factor. The shaders read it with
+normalised coordinates (cascade offsets 0, 1/3, 2/3), so they need no change. Factor 3.5 is the largest that fits:
+4608 &times; 3.5 = 16128, just under Direct3D 11's limit of 16384. A texel then covers 1/Factor&sup2; of the ground it did.
+Cost: at Factor 3.5 about 7 ms more per frame at 3840 &times; 2160. The card's default is 1x, because the rebuilt edges below
+give straight shadows at the game's own size.</p>
+
+<h3>Self-shadow fix (row Self-shadow fix)</h3>
+<p>To keep a surface from shadowing itself (shadow acne), the game draws the shadow texture with a slope-scaled depth bias:
+each primitive's depth is pushed back in proportion to its depth slope across <i>one texel</i>. A texture Factor times finer
+has texels Factor times smaller, so the same setting gives Factor times less bias, while the filters still reach as far as
+before. Surfaces at a grazing angle to the sun then start to shadow themselves, differently in each cascade (the dark side of
+a boulder flips at the 15 m border at dusk). With the fix on, the DLL swaps the game's rasterizer states, while the scaled
+texture is drawn, for copies with the slope-scaled bias multiplied by Factor. Every primitive gets exactly the bias it gets
+at the original size.</p>
+
+<h3>The game's filter, and why it shows stairs</h3>
+<p>The game's high quality shadow path (1269 material shaders: trucks, objects, terrain) runs three steps: pick the cascade,
+search for blockers to estimate how soft the edge should be (a penumbra size), then filter with 16 comparison taps at fixed
+Poisson-disc positions, stretched by the penumbra. Two things show:</p>
+<ul>
+<li>At Factor 1 to 2 one texel covers 2 to 16 screen pixels near the camera, and the game's contact penumbra is about half a
+texel. Any filter narrow enough to keep contact shadows crisp shows the texel staircase.</li>
+<li>When the penumbra spans more texels than 16 taps cover, every tap adds its own stair-stepped copy of the edge.</li>
+</ul>
+
+<h3>Shadow edges, the crisp choice: a tent over a grid</h3>
+<p>The first replacement filter (hq_grid) keeps the game's cascade choice, blocker search and penumbra, and replaces only
+the 16 taps. It takes a tent (a linear falloff, half width H = 1.6 kernel units, matching the spread of the stock taps) over
+a grid of bilinear comparison taps whose spacing is measured in real texels, with as many taps per axis as the width needs (2
+to 8). A bilinear comparison tap already returns the lit fraction of four texels, weighted by position, so the grid
+integrates the tent over the texels:</p>
+<div class="eq">lit = &Sigma;<sub>i,j</sub> w<sub>i</sub> w<sub>j</sub> &middot; cmp(u<sub>i</sub>, v<sub>j</sub>),&nbsp;&nbsp; w<sub>i</sub> = max(0, 1 &minus; |x<sub>i</sub>| / H) / &Sigma;<sub>k</sub> max(0, 1 &minus; |x<sub>k</sub>| / H)</div>
+<p>No noise is used, so it needs no TAA to look clean.</p>
+
+<h3>Shadow edges, the default: revectorization</h3>
+<p>The default filter (hq_revec, written from Macedo and Apolin&aacute;rio, "Revectorization-Based Shadow Mapping", GI 2016,
+and Bondarev, "Shadow Map Silhouette Revectorization", I3D 2014) rebuilds the straight edge that the texels only sample.</p>
+
+<figure>
+<svg viewBox="0 0 760 170" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="11.5">
+<g stroke="#d5dde4" fill="none"><path d="M20,20 h300 M20,50 h300 M20,80 h300 M20,110 h300 M20,140 h300"/><path d="M20,20 v120 M50,20 v120 M80,20 v120 M110,20 v120 M140,20 v120 M170,20 v120 M200,20 v120 M230,20 v120 M260,20 v120 M290,20 v120 M320,20 v120"/></g>
+<path d="M20,140 V110 H80 V80 H170 V50 H260 V20 H320 V140 Z" fill="#c9d3db"/>
+<g fill="#8a4b12"><circle cx="80" cy="95" r="3.5"/><circle cx="170" cy="65" r="3.5"/><circle cx="260" cy="35" r="3.5"/></g>
+<line x1="20" y1="115" x2="320" y2="16" stroke="#8a4b12" stroke-width="2"/>
+<text x="20" y="163" fill="#6b7883">texel tests (grey: shadow) and the line fitted through the steps' middles</text>
+<g transform="translate(400,0)"><path d="M20,140 L320,40 L320,140 Z" fill="#c9d3db"/><line x1="20" y1="140" x2="320" y2="40" stroke="#8a4b12" stroke-width="2"/>
+<text x="20" y="163" fill="#6b7883">the edge drawn as the line, softened by the tent across it</text></g>
+</svg>
+<figcaption>Revectorization: from stairs of texel tests to the straight edge they sample.</figcaption>
+</figure>
+
+<ol>
+<li>Four GatherCmp instructions read the depth tests of the 4 &times; 4 texels around the pixel. All equal: the pixel is
+plainly lit or shadowed, done (most pixels).</li>
+<li>The edge's main direction: more changes between rows than between columns means a mostly horizontal edge; the rest
+works in that frame. Then the change nearest the pixel in its own column, between rows R and R + 1.</li>
+<li>The edge is followed both ways, two columns per GatherCmp, up to 8 texels each way and inside this cascade. Where rows R
+and R + 1 stop differing, the texel beyond tells whether the edge stepped one row up or down (a step: the edge crosses the
+step's middle, so the step joins the fit and the follow goes on) or stopped (a corner, or a pattern that is neither). At
+most 4 steps each way join the fit.</li>
+<li>The edge as a line: the least-squares line through the steps' middles (x<sub>k</sub>, y<sub>k</sub>), each weighted by
+its distance from the pixel, w<sub>k</sub> = exp(&minus;x<sub>k</sub>&sup2; / 2&sigma;&sup2;) with &sigma; = 4 texels:
+<div class="eq">minimise &Sigma;<sub>k</sub> w<sub>k</sub> (y<sub>k</sub> &minus; a &minus; b x<sub>k</sub>)&sup2;&nbsp;&nbsp; &rArr;&nbsp;&nbsp; b = (&Sigma;w &Sigma;wxy &minus; &Sigma;wx &Sigma;wy) / (&Sigma;w &Sigma;wx&sup2; &minus; (&Sigma;wx)&sup2;),&nbsp;&nbsp; a = (&Sigma;wy &minus; b &Sigma;wx) / &Sigma;w</div>
+The line is used only if the middles lie within 0.3 texels RMS of it. A single step fades back to the run within the follow's
+reach (an L shape, placed as morphological antialiasing places it). When the first steps both ways go the same way (a U shape:
+a bump, the top of a round shape) the line bends in the middle of the pixel's run. With no step in reach, the edge lies flat,
+halfway between the rows.</li>
+<li>The lit fraction is the tent's profile across that line: a straight edge as soft as the game asked for, without the
+texel steps. For a signed distance s from the line, in texels, and tent half width H:
+<div class="eq">lit(s) = &frac12; + s/H &minus; s|s| / (2H&sup2;)&nbsp;&nbsp; for |s| &le; H, 0 or 1 beyond</div>
+This is the integral of the normalised tent (1 &minus; |x|/H)/H up to s.</li>
+</ol>
+<p>Wide penumbrae, from a tent half width of 1.25 texels, take the tent over the texels: their steps are blurred already, and
+a 4 &times; 4 look cannot see an edge that far. From half that width the two are blended. Texture-like patterns (leaves,
+grass: many changes within the 4 &times; 4) take the tent as well.</p>
+
+<h3>Blocker search: how soft each edge is</h3>
+<p>Shadows are sharp where an object touches the ground and soften with distance. The game estimates this like PCSS: it
+averages the depths of the blockers found around the pixel, d<sub>avg</sub>, and turns the ratio</p>
+<div class="eq">p = (d<sub>recv</sub> &minus; d<sub>avg</sub>) / d<sub>avg</sub></div>
+<p>into the penumbra size. The game's search reads 16 texels at fixed offsets; as they cross a blocker's edge one by one,
+the size jumps in visible steps. Next Gen's search (hq_blocker) reads 64 texels on a 4 &times; 4 grid of Gather fetches over
+the same area (the outer cells centred at 0.63 of the search radius, where the stock offsets reach), with the stock rule that
+every texel counts as min(depth, d<sub>recv</sub> &minus; 0.001), and hands the same ratio back. The game turns it into the
+penumbra exactly as before; it only changes smoothly now.</p>
+
+<h3>The seam dither</h3>
+<p>At each split distance a shadow jumps from one cascade's texels and kernel to the next one's (texels 2 to 2.5 times
+larger, a kernel narrower by a factor e): a line across the ground 15.5 m from the camera. The seam patch replaces the
+cascade choice's compare. The pixel's depth z is raised by up to 8 % of itself with noise n per pixel and frame before the
+compare:</p>
+<div class="eq">z' = z (1 + 0.08 n),&nbsp;&nbsp; n &isin; [0, 1) (interleaved gradient noise, shifted by the game's time)</div>
+<p>So over the last 0.08 / 1.08 = 7.4 % of each cascade's range (14.4 to 15.5 m, 37.5 to 40.5 m, 93.1 to 100.5 m) a growing
+share of pixels takes the next cascade, and the game's TAA averages the two. Pixels never take a nearer cascade.</p>
+
+<h3>Limits</h3>
+<ul>
+<li>Revectorization assumes straight edges. Detail smaller than a texel (thin branches, wires) cannot be rebuilt from texels
+that never saw it; there the filter keeps the tent.</li>
+<li>The seam dither relies on TAA; with TAA off the band shows as a dotted transition.</li>
+<li>Resolution costs time on the shadow pass and memory: Factor 2 is four times the texels.</li>
+</ul>
+</div></body></html>

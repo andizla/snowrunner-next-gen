@@ -1,0 +1,1555 @@
+{
+    "exe":  "C:\\Games\\snowrunner-next-gen\\out\\package\\SnowRunnerNextGen\\SnowRunnerNextGen.exe",
+    "built":  "2026-10-27 22:29",
+    "modules":  [
+                    {
+                        "id":  "shadows",
+                        "title":  "SnowRunner Shadows",
+                        "category":  "SHADOWS",
+                        "group":  "Light and shadow",
+                        "description":  "Hands the reflections and the bounce light the image they need, and can draw the sun\u0027s shadow texture at a higher resolution for finer shadow detail: 1x keeps the game\u0027s own size.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Resolution",
+                                            "labels":  [
+                                                           "1x",
+                                                           "2x",
+                                                           "3x",
+                                                           "3.5x"
+                                                       ],
+                                            "keys":  [
+                                                         "1",
+                                                         "2",
+                                                         "3",
+                                                         "3.5"
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Self-shadow fix",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "1",
+                                                         "0"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The sun\u0027s shadows are drawn into one shadow texture before every frame. This add-on hands the scene\u0027s picture to the bounce light and the reflections, which is why they need it, and can make the shadow texture larger, up to 3.5 times in each direction, so every shadow is drawn with more pixels. It is one small file next to the game (hid.dll) and changes none of the game\u0027s own files."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "At 2x and above: finer shadow detail on trees, fences, cranes and trucks, also some way off."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "At 1x the shadow texture costs nothing extra. A larger one costs graphics time while the shadows are drawn, and video memory (a few hundred MB at 3.5x). Measured at 4K on an RTX 4080 with every other module on: 2x 43 fps, 3x 37 fps, 3.5x 33 fps, against 49 fps at the game\u0027s own size."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Resolution: 1x keeps the game\u0027s own shadow texture, and Shadow edges keeps its edges straight; 2x, 3x and 3.5x draw it larger for finer detail, at the frame rates above.\nSelf-shadow fix: keeps the game\u0027s shadow bias in step with the larger texture, so steep rock faces do not shadow themselves in patches. Leave it on."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "In the game, F8 switches every shader effect of this installer off and on again, for a quick comparison. The larger shadow texture stays."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "edges",
+                        "title":  "Shadow edges",
+                        "category":  "SHADOWS",
+                        "group":  "Light and shadow",
+                        "description":  "Rebuilt straight shadow edges, with no texel stairs, at any resolution.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Method",
+                                            "labels":  [
+                                                           "rebuilt edges",
+                                                           "16-tap filter"
+                                                       ],
+                                            "keys":  [
+                                                         "revec",
+                                                         "crisp"
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Cascade seams",
+                                            "labels":  [
+                                                           "blended",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "seam",
+                                                         "off"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The sun\u0027s shadow texture has a limited number of texels, so the game draws the edge of a shadow as a staircase of them. Rebuilt edges follows each edge across the texels and draws the straight line they make, so edges come out straight and clean at any resolution, even at the game\u0027s own. The 16-tap filter, the earlier method, smooths the edges with 16 samples on an even grid instead."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Straight, clean edges on the shadows of buildings, trucks, fences and cranes, without the stair pattern."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Less than the 16-tap filter: about 0.7 ms per frame faster like for like, measured at 4K on an RTX 4080. Rebuilt edges at 1x ran at 64.8 fps where the 16-tap filter at 2x ran at 59.7."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Method: rebuilt edges (the default) or the 16-tap filter, one or the other.\nCascade seams: the game draws sun shadows in steps of detail (cascades) that change at set distances, which can show as a line where the shadows turn coarser. Blended dithers the last few percent of each step into the next, so the line no longer shows. It comes with rebuilt edges only."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Round shadows can come out slightly angular, and very soft shadow ends keep a little of the stair pattern."
+                                     },
+                                     {
+                                         "heading":  "Credits",
+                                         "text":  "The rebuilt edges follow revectorization-based shadow mapping by Macedo and Apolinário (2016) and shadow map silhouette revectorization by Bondarev (2014)."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "blocker",
+                        "title":  "Blocker search",
+                        "category":  "SHADOWS",
+                        "group":  "Light and shadow",
+                        "description":  "Shadows sharp at the contact and softer the farther they fall from what casts them.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Real sun shadows are sharp where an object meets the ground and get softer the farther they fall from it. This looks up how far each shadowed point is from what blocks the sun, and softens the edge to match."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Crisp contact shadows under tyres and posts, long tree shadows with soft ends."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Small: one search of 16 samples where shadows fall."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Works together with Shadow edges, with either method."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "contact",
+                        "title":  "Contact shadows",
+                        "category":  "SHADOWS",
+                        "group":  "Light and shadow",
+                        "description":  "Fine sun shadows traced on screen where things touch or overlap, in detail the shadow texture is too coarse to hold.",
+                        "on":  true,
+                        "requires":  [
+                                         "shadows"
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The sun\u0027s shadow texture is too coarse for small things: a door handle, a mirror or a stone casts no shadow of its own, and a wheel seems to float just above the ground. For every pixel this follows a short ray towards the sun through what is on screen and adds the shadow of whatever blocks it."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Wheels and trucks sit on the ground, and small parts such as handles, mirrors and bolts cast their own shadows."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Some graphics time: one more pass over the screen."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Needs SnowRunner Shadows, which runs the pass. Only what is on screen can cast these shadows. In the game, F4 switches it off and on."
+                                     },
+                                     {
+                                         "heading":  "Credits",
+                                         "text":  "A modified copy of Bend Studio\u0027s screen-space shadows (Copyright 2023 Sony Interactive Entertainment, Apache License 2.0)."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "headshadow",
+                        "title":  "Headlight shadows",
+                        "category":  "SHADOWS",
+                        "group":  "Light and shadow",
+                        "description":  "Your headlights cast shadows: posts, trees and rocks block the beam instead of letting it light what stands behind them.",
+                        "on":  true,
+                        "requires":  [
+                                         "shadows"
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The game lights everything in your headlights\u0027 cone, even what stands behind a post or a tree. For every lit pixel this walks from it towards each of the two lamps through what is on screen, and dims the headlight\u0027s light where something stands in the way."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "At night, posts, trees, rocks and other trucks throw long shadows away from your lamps, their edges half lit where only one lamp reaches."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Some graphics time where the headlights fall: up to 48 depth reads for each lit pixel."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Needs SnowRunner Shadows, which supplies the depth. Only what is on screen can cast these shadows, and nothing closer than 2.5 m to the lamps. Tested in the game and still being tuned."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "gtao",
+                        "title":  "GTAO",
+                        "category":  "LIGHT",
+                        "group":  "Light and shadow",
+                        "description":  "Ground-truth ambient occlusion instead of the game\u0027s SSAO: soft contact shadows in corners, under trucks and in wheel arches.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Quality",
+                                            "labels":  [
+                                                           "half size",
+                                                           "full size"
+                                                       ],
+                                            "keys":  [
+                                                         "half",
+                                                         "full"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Ambient occlusion is the soft shadow where things meet: under a truck, between tyres, in corners. The game\u0027s own version is an old depth-only SSAO with a radius that covers the same share of the screen at any distance, which draws a dark outline along every edge and a grey film on flat ground. GTAO (ground truth ambient occlusion) looks along several directions around every pixel, finds how much of the sky the geometry nearby leaves open, and darkens by exactly that, within 1.5 metres in the world."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "No dark outlines along grilles, treads and railings, clean open ground, and soft shadow where things really close in: between twin tyres, inside the frame, where a wheel meets the ground. Thin things such as poles, cables and railings no longer carry a halo."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "More graphics time than the game\u0027s own pass at full size. At half size, the default, SnowRunner Shadows draws the pass at half the resolution, then blurs and scales it up: at 4K on an RTX 4080 that took the frame rate from 63.7 to 75.0 fps."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Quality: half size (the default, much faster) or full size (the sharpest). Half size needs SnowRunner Shadows, which draws the pass; without it the pass runs at full size."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Ambient occlusion has to be on in the game\u0027s video settings. Bounce light is built on it. In the game, F11 switches between GTAO and the game\u0027s SSAO, and F5 between half and full size."
+                                     },
+                                     {
+                                         "heading":  "Credits",
+                                         "text":  "Ground truth ambient occlusion by Jorge Jimenez, Xian-Chun Wu, Angelo Pesce and Adrian Jarabo (2016). The horizon integration follows Intel\u0027s XeGTAO by Filip Strugar and Steve Mccalla (MIT)."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "aofar",
+                        "title":  "Wide occlusion",
+                        "category":  "LIGHT",
+                        "group":  "Light and shadow",
+                        "description":  "GTAO\u0027s search reaches on to 6 metres, gently: soft shade under trucks, roofs and tree crowns, with the contact shadows unchanged.",
+                        "on":  true,
+                        "requires":  [
+                                         "gtao"
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "GTAO looks, in several directions around every point, for what hides the sky within 1.5 metres. This lets the same search go on to 6 metres, and what it finds out there darkens only gently: half as much at 1.5 metres, nothing at 6. So the ground under a truck, the walls under a roof and the inside of a tree crown get a soft shade, while the contact shadows stay exactly as GTAO draws them."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "A soft pool of shade under trucks and trailers, shade under roofs and overhangs, a little more depth inside trees."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Little: about 1 ms per frame at 4K (measured on an RTX 4080). Each pixel looks far out in one direction and shares what it finds with its neighbours."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Needs GTAO. In the game, F11 switches between GTAO (with this) and the game\u0027s own SSAO."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "ambient",
+                        "title":  "Sky ambient",
+                        "category":  "LIGHT",
+                        "group":  "Light and shadow",
+                        "description":  "The fill light takes the sky\u0027s colour instead of a flat grey.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Shaded places are lit by one fill colour per map and time of day. This makes the fill light take the colour of the sky above: bluer under a clear sky, warmer toward a low sun. How bright it is stays the game\u0027s choice."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Shade that matches the sky instead of a flat grey."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Tiny: a few reads of the sky picture."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "fill",
+                        "title":  "Fill light",
+                        "category":  "LIGHT",
+                        "group":  "Light and shadow",
+                        "description":  "Less of the flat light that fills in shade: shaded sides, the insides of trees and trucks in shadow get darker, while sunlit parts and the sky stay as they are.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Strength",
+                                            "labels":  [
+                                                           "70 %",
+                                                           "55 %",
+                                                           "85 %"
+                                                       ],
+                                            "keys":  [
+                                                         "0.7",
+                                                         "0.55",
+                                                         "0.85"
+                                                     ],
+                                            "default":  1
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Shade in the game is lit by a strong, even fill light: on many maps it is nearly as bright as the sun, so shaded sides, the insides of trees and trucks in shadow look flat and washed out. This turns that fill light down in the day, dusk and dawn light of every map, so shade gets the depth it has in a photo. Night, the garage and the menus keep theirs. Because less fill light darkens the whole picture, the game\u0027s eye adaptation would lift it all back up and sunlit parts would end up brighter than before; so the exposure of the same light is lowered with it, which keeps sunlit parts about where they were."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Deeper shade under trees and on the shaded sides of trucks and rocks, more depth inside foliage, and sunlit parts that stand out more."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "None: it changes how much of the game\u0027s own fill light is used."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Strength: how much of the fill light stays. 55 %, the default, gives deep shade, 70 % a little less, 85 % a light touch."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes initial.pak, together with Grass reach, which it keeps. Other mods that change initial.pak change the same file. Sky ambient still colours what fill light is left."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "gi",
+                        "title":  "Bounce light",
+                        "category":  "LIGHT",
+                        "group":  "Light and shadow",
+                        "description":  "Sunlit ground and paint light up what stands next to them, in their colour: under trucks, in wheel arches, at the feet of walls. Experimental: in places it comes out too strong.",
+                        "on":  false,
+                        "requires":  [
+                                         "gtao",
+                                         "shadows"
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Light bounces. Sunlit snow brightens the underside of a truck, and red paint tints the ground beside it. This adds that bounce at short range, up to about 1.5 metres, gathered from the scene\u0027s picture every frame."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Less black under trucks and in wheel arches on bright days, and a faint spill of colour from paint and mud."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Under 1 ms per frame at 4K (measured on an RTX 4080): it gathers light in the ambient occlusion pass and adds it to every lit material."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Off by default and experimental: in places the bounce comes out too strong. On snow and ice it takes its colour from the reflection cube, so keep Reflection cubes on with it. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene\u0027s picture. In the game, F10 switches it off and on."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "objrefl",
+                        "title":  "Object reflections",
+                        "category":  "REFLECTIONS",
+                        "group":  "Reflections and water",
+                        "description":  "Paint, glass and chrome mirror the scene around them instead of a painted sky.",
+                        "on":  true,
+                        "requires":  [
+                                         "shadows"
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Method",
+                                            "labels":  [
+                                                           "reflection pass",
+                                                           "march only"
+                                                       ],
+                                            "keys":  [
+                                                         "sssr",
+                                                         "reflections"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The game\u0027s paint, glass and chrome reflect a ready-made picture of the sky, so trucks never mirror what is around them. This makes them reflect what is on screen: the road, the trees and other trucks."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Paint and windows mirroring their surroundings, most at shallow angles, and chrome showing the ground."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "About 0.3 to 0.4 milliseconds per frame at 4K with the reflection pass."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Method: the reflection pass traces the reflections of the whole screen in one go (in SnowRunner Shadows), blurs them by how rough each surface is and steadies them over frames; windows, and whatever the pass misses, fall back to the march. March only lets every material search the last frame on its own: the older method, kept as a choice."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Only what is on screen can be reflected, so what is behind the camera shows the sky picture as before. In the game, F6 switches the reflection pass off and on."
+                                     },
+                                     {
+                                         "heading":  "Credits",
+                                         "text":  "The reflection pass follows AMD FidelityFX SSSR (MIT), with Morgan McGuire and Michael Mara\u0027s screen-space ray tracing, Eric Heitz\u0027s visible-normal sampling and Marco Salvi\u0027s variance clipping."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "headglow",
+                        "title":  "Headlights in reflections",
+                        "category":  "REFLECTIONS",
+                        "group":  "Reflections and water",
+                        "description":  "At night, paint that finds nothing on screen to reflect shows the warm light of the headlights.",
+                        "on":  true,
+                        "requires":  [
+                                         "objrefl"
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "With Object reflections, a hood or roof whose reflection finds nothing on screen shows a picture of the sky. At night this adds the headlights\u0027 warm light to those reflections, where the mirrored ray crosses the headlight beam."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "At night, hoods and roofs pick up the glow of the truck\u0027s own lamps."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "None while the lamps are off. With two lamps on, at most 0.15 ms per frame at 4K if glossy paint filled the whole screen (measured on an RTX 4080), so far less in a real frame."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Needs Object reflections with the reflection pass."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "water",
+                        "title":  "Water reflections",
+                        "category":  "WATER",
+                        "group":  "Reflections and water",
+                        "description":  "Banks, trees and trucks mirrored in rivers, mud, lakes, seas and puddles, not just the sky; the water\u0027s colour gives way to the reflection at shallow angles.",
+                        "on":  true,
+                        "requires":  [
+                                         "shadows"
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Sun glitter in shade",
+                                            "labels":  [
+                                                           "the game\u0027s",
+                                                           "off in shadow"
+                                                       ],
+                                            "keys":  [
+                                                         "",
+                                                         "watersun"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Rivers, mud, lakes, seas and the puddles on the roads reflect what is on screen: banks, trees and trucks, not just the sky. The water\u0027s own colour gives way to the reflection at shallow angles, as with real water."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Mirrored banks and trees in calm water, trucks in the road puddles."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Small, and only where water is on screen."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Sun glitter in shade: the game leaves a share of the sun\u0027s glitter on water that lies in the sun\u0027s shadow, so a glitter path can run on under a cliff or a bridge. Off in shadow puts it out where the water\u0027s own shadow test says the sun is hidden, in the 64 lake and 8 river shaders drawn with the sun\u0027s shadow map. Off by default and experimental: where it was tried, the game\u0027s test said the water was lit and nothing changed."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Needs SnowRunner Shadows for the scene\u0027s picture. What is off screen falls back to the game\u0027s own reflection."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "puddles",
+                        "title":  "Wet ground reflections",
+                        "category":  "REFLECTIONS",
+                        "group":  "Reflections and water",
+                        "description":  "Wet mud and glossy ground mirror the scene around them: sharp in shiny patches, soft on rough mud.",
+                        "on":  true,
+                        "requires":  [
+                                         "shadows"
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Wet ground in the game reflects only a ready-made picture of the sky. This lets it reflect what is really around it, trucks, trees and banks, from the scene SnowRunner Shadows hands over: sharp where the ground is glossy, blurred where it is rough, the way wet mud mirrors. Rough dry ground is left alone."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Trucks and trees mirrored softly in wet mud and in shiny wet patches, most at shallow angles."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Some frame rate where a lot of wet ground is on screen: each glossy pixel searches the scene."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Needs SnowRunner Shadows. The road puddles are water, which Water reflections covers. What is off screen falls back to the sky picture. In the game, F9 switches it off and on."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "rivertint",
+                        "title":  "River depth colour",
+                        "category":  "WATER",
+                        "group":  "Reflections and water",
+                        "description":  "Deeper water tints teal or brown from its own colour instead of fading grey.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Deep river water fades to a flat grey in the game. This tints it by its own colour as it gets deeper: teal in clear rivers, brown in muddy ones."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Tiny."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "crestglow",
+                        "title":  "Sun glow through waves",
+                        "category":  "WATER",
+                        "group":  "Reflections and water",
+                        "description":  "River waves between you and a low sun light up in the water\u0027s own colour, wherever the sun really reaches them.",
+                        "on":  true,
+                        "requires":  [
+                                         "water"
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Looking across water towards a low sun, light comes through the thin tops of the waves and glows in the water\u0027s colour: teal in clear water, brown in muddy. This adds that light to the rivers, strongest looking straight into the light, and only where the sun really reaches the water: it reads the game\u0027s own sun shadows, so water under trees stays dark."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Glowing wave tops on rivers against a low sun."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Small: one more look at the sun\u0027s shadow on river water."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "The rivers whose shader knows where the sun\u0027s shadow falls (12 of the game\u0027s 20 river shaders); lakes and seas not yet. Needs Water reflections."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "glare",
+                        "title":  "Headlight glare cap",
+                        "category":  "WATER",
+                        "group":  "Reflections and water",
+                        "description":  "Tamer headlight shine on wet ground and puddles, with no long bright band across them.",
+                        "on":  false,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "At night, headlights draw a long, very bright band across wet ground and puddles. This caps that highlight, so wet ground still shines, without the band."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "None."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Off by default for now: it was tuned before the reflections changed. Tick it if the band bothers you."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "cubes",
+                        "title":  "Reflection cubes",
+                        "category":  "WATER",
+                        "group":  "Reflections and water",
+                        "description":  "The painted skies that paint, glass and chrome mirror, and that Sky ambient and Bounce light read the sky\u0027s and the ground\u0027s colour from, made anew from photographs: 25 cubes from 21 panoramas, for every region\u0027s clear days, weather days, dusk, dawn and night. Each keeps the brightness of the game\u0027s own cube, and the snow regions get snow.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Each state names a reflection cube, a small painted sky with its ground, which paint, glass and chrome mirror where the scene has nothing nearer, and which Sky ambient and Bounce light read the sky\u0027s and the ground\u0027s colour from. The game\u0027s states name 26 of them, in five families whose files are named after Michigan, Taymyr, Mexico, Alaska and Scandinavia. This replaces 25 with cubes made from photographs: clear days, weather days, dusk, dawn and night. The sky, the sky straight overhead and the ground land at the brightness of the game\u0027s own cube, and at dusk, at dawn and at night at its colours too, so every hour keeps its light. In the two snow families the ground is snow at its own brightness by day, at dusk and at dawn. Their night cubes are winter day pictures graded to night. The garage keeps the game\u0027s cube, which shows the garage itself. While the cubes are in, Kola\u0027s and Yukon\u0027s clear days all name the snow cube, and the few states of Wisconsin and North Carolina that named a snow cube name one of their own region\u0027s."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Chrome and glass mirroring a photographed sky and ground instead of a hazy painting, on every map and at every hour, and the shade and the bounce light taking their colour from it."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Nothing in the game: the cubes have the size of the game\u0027s own. 12 MB more in the download."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes boot.pak, together with Photo grade, Sharper smoke and particles and Night sky, which it keeps. The cubes are made with engine\\tools\\make_cube.js from 21 CC0 panoramas by Poly Haven. THIRD_PARTY_NOTICES.md names them and their authors."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "fog",
+                        "title":  "Volumetric fog",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "No banding and a glow toward the sun. Sun shafts through trees and dust can be switched on: they are experimental and also show over your truck and other things close to the camera.",
+                        "on":  false,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Sun shafts",
+                                            "labels":  [
+                                                           "off",
+                                                           "on"
+                                                       ],
+                                            "keys":  [
+                                                         "",
+                                                         "fogsun"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The game draws its fog in steps that show as bands. This breaks the bands up and adds a glow toward the sun. Sun shafts: the fog also sees the sun\u0027s shadows, so shafts of light show through trees and dust."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Smooth fog and a bright haze toward the sun. With the sun shafts on, fog and a low sun behind trees: rays of light."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Small."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Off by default. The sun shafts on the card are off too unless you switch them on. They are experimental: the fog is drawn without knowing what stands in front of it, so with a low sun the rays also show over your truck and other things close to the camera.\nThe rays need fog and a low sun. On a clear day there is little to see."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "weather",
+                        "title":  "Weather",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "More of the game\u0027s own weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out, fireflies at night and pollen by day.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Cloud shadows",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "shadows",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Showers",
+                                            "labels":  [
+                                                           "swell and ease",
+                                                           "as they are"
+                                                       ],
+                                            "keys":  [
+                                                         "showers",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Evening drizzle",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "evening",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Horizon clouds",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "horizon",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Far rain and snow",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "far",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Fireflies",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "fireflies",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Pollen",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "pollen",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Drifting clouds",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "drift",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        },
+                                        {
+                                            "name":  "Far land",
+                                            "labels":  [
+                                                           "on",
+                                                           "off"
+                                                       ],
+                                            "keys":  [
+                                                         "land",
+                                                         ""
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The game cycles each region through day states that can carry rain or snow, and on two maps moving cloud shadows. This adds more of that, from the game\u0027s own weather system. Cloud shadows: every map gets them, drawn from the game\u0027s own shadow textures. Showers: rain and snow swell and ease over time instead of holding one strength. Evening drizzle: the rain regions get light rain at dusk, at night and at dawn, as the snow regions already have flurries then. Horizon clouds: the cloud layer on the horizon that 17 sky files hold switched off, switched on. Far rain and snow: drawn out to 1.5 times the distance, 48 metres instead of 32. Fireflies: fireflies at night in the rain regions, drawn with the game\u0027s own firefly sprite. Pollen: pollen drifting through the clear days of the same regions. These two are weather types from the game\u0027s later engine, written in as two new files. Drifting clouds: a sky is made of layers that turn, each at a speed the day state sets, and in most states the nearest band of clouds and some of the sky pictures stand still while the bands behind them move. Where a cloud picture stands still it now turns slowly, about 150 settings in 17 sky files. The stars, the sun and moon, the aurora, the Milky Way and a painted sunset stay where they are. Far land: 46 states, most of them on Kola, Yukon, Quebec and Scandinavia, stop drawing the ground at 800 metres although their distant fog reaches farther, so in clear air the land ends short. There the ground is drawn as far as the fog reaches, 3000 metres at most."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Cloud shadows drifting over every map, and rain and snow that come and go."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Little. The cloud shadows are drawn the way the game draws them on the maps that have them; the other parts change numbers the game reads anyway."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Each part on its own, all on by default. Far land draws more ground; its cost has not been measured yet. With Fireflies and Evening drizzle both on, the nights of the rain regions take the fireflies and the drizzle keeps to dusk and dawn."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes initial.pak, together with Grass reach, Fill light and Brighter stars, which it keeps. Other mods that change initial.pak change the same file: Apply asks before it builds on it."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "maps",
+                        "title":  "Map days",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "Four regions have no days of their own and show another region\u0027s. Maine shows two snow regions\u0027: snow in the air and winter light on a map without snow. This gives each of their maps days that fit it, chosen map by map, with a row for each region.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Maine",
+                                            "labels":  [
+                                                           "Michigan\u0027s days",
+                                                           "the game\u0027s",
+                                                           "map by map"
+                                                       ],
+                                            "keys":  [
+                                                         "maine",
+                                                         "",
+                                                         "maineown"
+                                                     ],
+                                            "default":  2
+                                        },
+                                        {
+                                            "name":  "British Columbia",
+                                            "labels":  [
+                                                           "North Carolina\u0027s days",
+                                                           "the game\u0027s",
+                                                           "map by map"
+                                                       ],
+                                            "keys":  [
+                                                         "bc",
+                                                         "",
+                                                         "bcown"
+                                                     ],
+                                            "default":  2
+                                        },
+                                        {
+                                            "name":  "Austria",
+                                            "labels":  [
+                                                           "both maps alike",
+                                                           "the game\u0027s",
+                                                           "map by map"
+                                                       ],
+                                            "keys":  [
+                                                         "austria",
+                                                         "",
+                                                         "austriaown"
+                                                     ],
+                                            "default":  2
+                                        },
+                                        {
+                                            "name":  "Washington",
+                                            "labels":  [
+                                                           "Michigan\u0027s autumn",
+                                                           "the game\u0027s",
+                                                           "map by map"
+                                                       ],
+                                            "keys":  [
+                                                         "washington",
+                                                         "",
+                                                         "washingtonown"
+                                                     ],
+                                            "default":  2
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Each map\u0027s level file names the day states it cycles through and its sky file. Four regions have none of their own and name another region\u0027s. Maine: its first map names Yukon\u0027s and its second Alaska\u0027s, two snow regions, so Maine gets their snowfall at dusk and at night and their light. This gives both maps Michigan\u0027s days, weather and sky. British Columbia: its maps name Michigan\u0027s, and the row gives them North Carolina\u0027s, which the game itself gives Washington, the region next to it. Austria: its first map names another region\u0027s days than its second, and the row gives the first the second\u0027s. Washington, an autumn region: its three maps name North Carolina\u0027s summer, and the row gives them Michigan\u0027s autumn."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "On Maine: no snow in the air, and the light, weather and sky of an autumn forest map."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Nothing."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "A row for each region, each map by map by default: days chosen for each map on its own. The other values give a region\u0027s maps one other region\u0027s days, or leave the game\u0027s. Maine: The Lowland has no snow on the ground and gets Michigan\u0027s wet days; Yellowrock National Forest has snow and ice and gets Yukon\u0027s spring with flurries instead of blizzards. Both are sets of Maine\u0027s own, so each map can be tuned on its own later. British Columbia: Duncan Bay, flooded, gets Wisconsin\u0027s summer with its heavy rain; North Peak National Park gets North Carolina\u0027s. Austria: Unterfeld, the farmland, gets Tennessee\u0027s summer; Foothills keeps the game\u0027s North Carolina. Washington is an autumn region whose three maps show North Carolina\u0027s summer: its row gives them Michigan\u0027s autumn, and map by map Selten River Mountains gets Zurdania\u0027s mountain autumn."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes a few names in your own level files (level_us_06_01.pak and the like), in place, and Restore writes the game\u0027s names back, after which the files are as they were, byte for byte. A level file that another mod changed is left as it is. A game update or the store\u0027s file check brings the game\u0027s names back: Apply again. Most values only name days the game ships. Maine map by map also adds twenty small files to initial.pak and names them in its load list. When a game update or the store\u0027s file check replaces initial.pak while Maine\u0027s level files still name them, Maine stops loading until Apply has run again."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "smoke",
+                        "title":  "Smoke glow",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "Exhaust and other smoke glows when the sun is behind it.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "More kinds of smoke",
+                                            "labels":  [
+                                                           "off",
+                                                           "on"
+                                                       ],
+                                            "keys":  [
+                                                         "",
+                                                         "smokemore"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Exhaust, smoke, dust and steam glow when the sun is behind them, the way real smoke lights up against the sun."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Exhaust and dust clouds lighting up when you look toward a low sun."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Tiny."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "The glow reaches 162 of the game\u0027s 205 particle shaders. More kinds of smoke adds eight that light their puffs the same way; it is off by default because it has not been looked at in the game yet."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "smokeshade",
+                        "title":  "Smoke shape and softer edges",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "Smoke and dust puffs get a lit side and a shaded side, and sprites fade more softly where they meet the ground.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The game lights each smoke or dust puff as one flat colour. This gives the 80 lit puff sprites shape pixel by pixel: a lit side towards the sun, a shaded far side, lighter tops and slightly darker dense cores. The 110 sprites that fade where they cut into the ground or a truck now fade over twice the distance, so the hard line where a puff meets a surface is gone."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Rounder, more solid exhaust and dust clouds, and no sharp edge where smoke meets the ground."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Small: a few more instructions in the particle shaders."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Works with or without Smoke glow."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "particles",
+                        "title":  "Sharper smoke and particles",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "The game\u0027s smoke, dust, spray and spark textures at twice their size, so particles stay crisp up close.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Smoke, dust, spray, sparks, leaves and the other particles are drawn from small textures that the game stretches, so up close they look soft and blocky. This puts in the same textures at twice their size, upscaled from the game\u0027s own with NVIDIA\u0027s DLSS 5 Visual Enhancer, inside boot.pak next to the photo grade."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Crisper exhaust, dust clouds and spray near the camera, with the same colours and shapes."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Video memory for the larger textures. The installer is 114 MB larger for the set."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes boot.pak, together with Photo grade and Night sky, which it keeps. Other mods that change boot.pak, such as a texture pack, are kept too: Apply asks before it builds on them."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "debris",
+                        "title":  "Debris and splashes",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "Leaves, grass, twigs and dirt thrown up by the wheels stay on the ground for half a minute and get pushed by the tyres, instead of vanishing after four seconds. Mud, water and snow splashes throw more drops that lie longer and leave more marks on the truck. Snow spray hangs in the air. Exhaust and dust hang longer too.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Splash drops",
+                                            "labels":  [
+                                                           "4x",
+                                                           "8x"
+                                                       ],
+                                            "keys":  [
+                                                         "4",
+                                                         "8"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "What the wheels throw up is gone in a few seconds: leaves, grass and twigs after four, the drops of a mud or water splash after two. This keeps it around. Leaves, grass, twigs, dirt and stones live 30 to 40 seconds and come to rest on the ground, where the tyres push them. Mud, water and snow splashes throw four times the drops, the drops lie twice as long, the splash lasts twice as long and leaves twice the mud and water marks on the truck. Exhaust, dust and steam hang in the air half as long again. Snow spray hangs in the air as it does in life: the snow drops fall at half the gravity with less air resistance and live 15 seconds, and the snow splashes last three times as long. The spray a wheel throws spinning in water flies about 2.5 times as far and is half as big again: it and its drops have less air to slow them, and they live longer. Everywhere else, air resistance, gravity, wind and the sizes stay the game\u0027s."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "A trail of leaves and torn grass behind the truck that stays, mud splashes with more and longer-lived drops, big water spray off a spinning wheel, exhaust that lingers."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Frame rate where much is thrown up: about ten times as many pieces are alive at once, and a splash has four times the drops. At 8x drops, twice that."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Splash drops: 4x or 8x the game\u0027s drops per splash."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes initial.pak, together with Grass reach, Fill light, Brighter stars and Weather, which it keeps. Other mods that change initial.pak change the same file: Apply asks before it builds on it."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "sky",
+                        "title":  "Night sky",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "NASA\u0027s star map in place of the game\u0027s star texture: the real sky\u0027s stars as fine points, with the glow of the Milky Way.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The game\u0027s night sky is a small texture whose stars are one texel each. This puts NASA\u0027s star map in its place, with four times the pixels: the real sky\u0027s stars as fine points, and the glow of the Milky Way. Scandinavia, Kola and Quebec have a photo for a night sky, with the northern lights in it. There the same stars are painted into the photo."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "A night sky full of fine stars, with the Milky Way across it."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Video memory for the larger sky textures. The installer is 65 MB larger for the set."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes boot.pak, together with Photo grade and Sharper smoke and particles, which it keeps, and it sets the levels its photo skies need in initial.pak. The new stars are finer than the game\u0027s and come out dim at the game\u0027s own level. Brighter stars is set for them."
+                                     },
+                                     {
+                                         "heading":  "Credits",
+                                         "text":  "The star map is made from Deep Star Maps 2020. Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "skies",
+                        "title":  "Skies",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "The painted skies of every region made anew from photographs of real skies: 49 of the game\u0027s sky domes, cloud bands and night layers, each at its own size and brightness, the photograph\u0027s sun taken out so the game\u0027s sun is the only one. The aurora is green, as a real one is. The clouds still drift.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "A region\u0027s sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 49 of the game\u0027s sky domes and cloud bands, across every region, with ones made from photographs of real skies, the Milky Way on two night layers with the real one from NASA\u0027s star map, and the aurora\u0027s blue and violet with a real aurora\u0027s green. Each keeps the size of the texture it replaces and the game\u0027s own brightness for it. The photographs\u0027 own sun is taken out, so the game\u0027s sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Real clouds and skies by day, still drifting; at dusk, dawn and night the game\u0027s tint over them."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Nothing in the game. The textures come as a download of their own, the sky pack (SnowRunnerNextGen_Skies.zip, about 100 MB, 300 MB unzipped), unzipped into this program\u0027s folder; without it Apply leaves the skies out and says so."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "The rainbow, the comet, the sun\u0027s and the moon\u0027s discs and glows stay the game\u0027s. It changes boot.pak, together with Photo grade, Sharper smoke and particles, Night sky and Reflection cubes, which it keeps. The skies are made with engine\\tools\\make_cube.js and make_clouds.js from 23 CC0 panoramas by Poly Haven, the Milky Way from NASA\u0027s Deep Star Maps 2020."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "stars",
+                        "title":  "Brighter stars",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "The stars of the night sky drawn brighter, so they stand out against the dark.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Brightness",
+                                            "labels":  [
+                                                           "3x",
+                                                           "2x"
+                                                       ],
+                                            "keys":  [
+                                                         "3",
+                                                         "2"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The night sky draws its stars as one layer, at a low level set per region. This raises that level at night in every region where the stars are their own layer, so they stand out against the dark sky. Dusk and dawn keep the game\u0027s level."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "A night sky with clearly visible stars."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "None: it changes how bright the game draws a layer it draws anyway."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Brightness: three or two times the game\u0027s level."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes initial.pak, together with Grass reach and Fill light, which it keeps. Three times is the level set for Night sky\u0027s star map, whose fine stars come out dim at the game\u0027s own level. With the game\u0027s own star texture the stars simply come out that much brighter. The regions whose night sky is a photo are not changed by this: with Night sky their photos carry the stars at a fixed level."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "tonemap",
+                        "title":  "Tonemap",
+                        "category":  "IMAGE",
+                        "group":  "Atmosphere and image",
+                        "description":  "Stronger contrast and a lighter bloom.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Tonemapping turns the scene\u0027s light into the colours of your screen. This uses a curve with more contrast than the game\u0027s own. Mid-grey stays where it was, shade gets deeper and keeps its detail, and bright parts get brighter and roll off without a hard clip. The bloom is turned down to 60 %."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Deeper shadows and richer colour, less of a washed-out look."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "None to speak of."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "bloom",
+                        "title":  "Bloom soft cut",
+                        "category":  "IMAGE",
+                        "group":  "Atmosphere and image",
+                        "description":  "No haze from bright snow and sky.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Bloom makes bright things glow. The game\u0027s bloom starts early, so bright snow and sky spread a haze over the picture. This gives it a soft threshold: only really bright things glow."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Clear snowy views without the milky haze; lamps and the sun still glow."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "None to speak of."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "grade",
+                        "title":  "Photo grade",
+                        "category":  "IMAGE",
+                        "group":  "Atmosphere and image",
+                        "description":  "Colour closer to a photo: greens, autumn leaves and the violet haze less loud, whites a little lower, no lens dirt over the sky. Built into the game\u0027s own colour grading.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Strength",
+                                            "labels":  [
+                                                           "100 %",
+                                                           "50 %"
+                                                       ],
+                                            "keys":  [
+                                                         "1",
+                                                         "0.5"
+                                                     ],
+                                            "default":  0
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The game finishes every picture with a colour grade for the time of day. This builds a photographic grade into it: greens, autumn leaves and the violet haze lose some of their loudness, and whites land a little lower instead of glaring. How much of each colour goes was measured against DLSS 5 shots of the same scenes. Greys stay grey, and the game\u0027s own grade stays underneath. It also takes out the game\u0027s lens dirt: soft discs the camera adds over bright sky and clouds."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Foliage and hills in the calmer colours of a photo, a haze that reads grey-blue rather than lavender, less glare on white paint and snow, and no blurry discs over the clouds."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "None: the game grades the picture anyway."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Strength: 100 % is the measured grade, 50 % half of it."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes the four colour tables that the day, dusk and dawn light use (a few night scenes share them), inside boot.pak, where Sharper smoke and particles and Night sky go too; the garage, the map and the darkest night table keep theirs. Best together with Fill light, which does the shade: this one does the colour. When another mod has added its files to boot.pak (a texture pack, say), Apply asks before it builds on them, and they stay in (see How it works, Other mods)."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "scenery",
+                        "title":  "Scenery detail",
+                        "category":  "SCENERY",
+                        "group":  "Scenery",
+                        "description":  "Scenery keeps its full detail farther out, so less pops in while you drive. All meshes makes shared.pak larger than 2 GB. Shown far away: plants (trees, bushes, rocks, twigs), or everything, no longer vanish at a set distance. Small shadows: what casts none, or loses it a few metres away, gets one.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Set",
+                                            "labels":  [
+                                                           "nature",
+                                                           "all meshes"
+                                                       ],
+                                            "keys":  [
+                                                         "nature",
+                                                         "all"
+                                                     ],
+                                            "default":  1
+                                        },
+                                        {
+                                            "name":  "Shown far away",
+                                            "labels":  [
+                                                           "as the game",
+                                                           "plants",
+                                                           "everything"
+                                                       ],
+                                            "keys":  [
+                                                         "",
+                                                         "plants",
+                                                         "all"
+                                                     ],
+                                            "default":  2
+                                        },
+                                        {
+                                            "name":  "Small shadows",
+                                            "labels":  [
+                                                           "off",
+                                                           "plants",
+                                                           "everything"
+                                                       ],
+                                            "keys":  [
+                                                         "",
+                                                         "plants",
+                                                         "all"
+                                                     ],
+                                            "default":  2
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Rocks, trees and bushes switch to simpler models close to you (some rocks at 10 metres), and the switch shows as shapes and shadows that flip while you drive. This moves the first switch out to at least 40 metres and the later ones to 70, 110 and 160."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Far less popping on rocks and trees."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "More detailed models drawn farther out: some frame rate in dense forest. Each of the two extras adds to that: more plants drawn far away, more shadows drawn."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Set: nature changes rocks, trees and bushes (351 models). All meshes changes every model that has detail steps (1626), which makes shared.pak larger than 2 GB; the game loads it fine. Shown far away: the game stops drawing most things beyond a distance of their own (small rocks and twigs at 55 to 80 metres, trees and buildings farther), which shows as things appearing ahead of you. Plants takes that distance out of every plant (314 models: trees, bushes, rocks, twigs, roots), everything out of every model that has one (3468: signs, fences, pipes, houses and the rest as well). Small shadows: some models cast no shadow at all or lose it 25 to 50 metres away. Plants gives each of those plants its shadow at any distance (163 models), everything does the same for all 395."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "A game update or a Steam file check puts the original shared.pak back. Apply again afterwards."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "grass",
+                        "title":  "Grass reach",
+                        "category":  "SCENERY",
+                        "group":  "Scenery",
+                        "description":  "Grass drawn farther out. Costs frame rate in grassy areas.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Reach",
+                                            "labels":  [
+                                                           "3x",
+                                                           "2x"
+                                                       ],
+                                            "keys":  [
+                                                         "3",
+                                                         "2"
+                                                     ],
+                                            "default":  1
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Most grass fades out about 30 metres from the camera. This draws it out to 60 metres, and it still grows in as it comes nearer."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Frame rate in grassy areas: grass covers up to four times the ground, and at 3x it stays thick farther out than at 2x."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Reach: 3x or 2x the game\u0027s fade distances, each step at most 50, 55 and 60 metres."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "The game draws grass only to about 64 metres from the camera. Set farther, the grass at the edge appears whole at once instead of growing in, so no step goes past 60 metres; a step the game itself sets farther stays. It changes initial.pak, a file that other mods change too."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "logos",
+                        "title":  "Next Gen logo",
+                        "category":  "INTERFACE",
+                        "group":  "Interface",
+                        "description":  "NEXT GEN under the game\u0027s logo on the title screen, the first loading screen, the main menu, the pause menu and the map.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Start-up",
+                                            "labels":  [
+                                                           "the game\u0027s intro",
+                                                           "Next Gen splash only"
+                                                       ],
+                                            "keys":  [
+                                                         "",
+                                                         "intro"
+                                                     ],
+                                            "default":  1
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Adds NEXT GEN under the game\u0027s logo wherever the interface shows it: on the title screen, the first loading screen, the main menu, the pause menu and the map."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "The mod\u0027s name under the SnowRunner logo, so you can tell at a glance that it is installed."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Nothing in the game. The first Apply keeps a copy of gfx.pak, several hundred MB, so that Restore can put it back."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Start-up: the game\u0027s intro (its warning and the publisher logos, about 18 s), or the Next Gen splash only: the game goes straight to its first loading screen. Measured on 2026-10-17 with a warm disk cache: the title screen came 41 s after start with the intro and 24 to 25 s without. The splash only is the default."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "It changes gfx.pak, the file of the interface. The start-up row changes the game\u0027s start-up movie in the same file: two small edits to its script, and a game version whose movie differs keeps its intro (Apply says so). The title screen, the first loading screen and the main menu have a picture of their own for the logo, and those are replaced whole. On the pause menu and the map the logo shares a sheet with other pictures: there only the logo changes, so an interface mod\u0027s sheet keeps everything else, and a sheet with another layout is left as it is."
+                                     }
+                                 ]
+                    }
+                ],
+    "installer":  {
+                      "title":  "How it works",
+                      "summary":  "Next Gen Graphics installs, changes and removes the graphics modules of this project, all from one window.",
+                      "sections":  [
+                                       {
+                                           "heading":  "Pick",
+                                           "text":  "Each card is one module. Ticking a module that needs another ticks that one too, and unticking one unticks what needs it. The (?) on a card tells you what it does. Defaults picks the recommended set."
+                                       },
+                                       {
+                                           "heading":  "Apply",
+                                           "text":  "Builds the game\u0027s files for exactly what is ticked, from the game\u0027s original files, and installs them. To take a module out, untick it and apply again."
+                                       },
+                                       {
+                                           "heading":  "Restore originals",
+                                           "text":  "Puts the files back as they were before Next Gen Graphics changed them and takes SnowRunner Shadows out."
+                                       },
+                                       {
+                                           "heading":  "Backups",
+                                           "text":  "Before the first change, shader.pak, shared.pak, initial.pak, boot.pak and gfx.pak are kept as they are in %LOCALAPPDATA%\\SnowRunnerNextGen, and every build starts from those copies. Next to the game\u0027s files the program leaves a small note, SnowRunnerNextGen.json, naming the ones that hold its changes. Should the kept copies ever be lost (a new Windows install, say), the note lets it see that those files are not the game\u0027s own: it then changes nothing and asks you to have the store check the game\u0027s files first."
+                                       },
+                                       {
+                                           "heading":  "Other mods",
+                                           "text":  "When another mod (a texture pack, say) or a game update has changed one of those files since, Apply and Restore ask first. Take it as it is now as the original, and Next Gen Graphics writes its changes over it; Restore then puts it back in that modded state, the other mod\u0027s changes included, not the game\u0027s own file. Or leave it out: the file and its modules stay as they are."
+                                       },
+                                       {
+                                           "heading":  "Before you start",
+                                           "text":  "Close the game: its files cannot be changed while it runs."
+                                       },
+                                       {
+                                           "heading":  "When something goes wrong",
+                                           "text":  "Every Apply and Restore is written to install.log in %LOCALAPPDATA%\\SnowRunnerNextGen: what the program found and each step it took. After a stop or a note, Show the log in the result window opens that folder. Send the file along when you report a problem."
+                                       },
+                                       {
+                                           "heading":  "Comparing in the game",
+                                           "text":  "With SnowRunner Shadows installed: F8 switches every shader effect off and on, F4 the contact shadows, F5 the ambient occlusion pass between half and full size, F6 the reflection pass, F9 the reflections on wet ground, F10 the bounce light, and F11 GTAO against the game\u0027s SSAO. The first press of F8 or F11 takes a moment: the game\u0027s own shaders are made then. The keys do nothing while Alt, Ctrl or Shift is held. With Next Gen Gameplay or Next Gen Tire Inflation installed, the same switches are on a Graphics tab next to theirs in their NEXT GEN menu (F2), and these keys stay silent, as other mods use some of them; KeysWithMenu=1 in SnowRunnerShadows.ini keeps them. Next Gen Graphics alone has no menu, and its keys work as before."
+                                       }
+                                   ]
+                  }
+}
