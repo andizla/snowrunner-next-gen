@@ -463,6 +463,18 @@ Check 'mesh mod added since, restore: asks first, naming shared.pak' ('{0} {1} {
 $r = Engine @('restore', '--adopt')
 $want[$pick.set[1]] = $more.($pick.set[1])
 Check 'mesh mod added since, restore: shared.pak is the game''s plus the mod''s three meshes, none of Next Gen''s' ('{0} {1} {2}' -f (Last $r), (Status).scenery, (EntriesDiff (Entries $shared) $want)) 'done vanilla same'
+'a mesh mod taken as the original, the build after it stopped (review 18, F1): the next adopt takes the same meshes out again'
+$r = Apply $meshSel
+$more = (& $node $modMeshesJs put $shared $stockShared $pick.set[2]) | ConvertFrom-Json
+$block = Join-Path $paks 'shared.pak.tmp'; New-Item -ItemType Directory -Path $block | Out-Null   # the build's temp file cannot be made
+$r = Apply $meshSel @('--adopt')
+Check 'adopt stopped: the build over the new original fails' ('{0} {1}' -f (Last $r), (Test-Path -LiteralPath (Join-Path $stateDir 'shared.pak.orig'))) 'error True'
+[System.IO.Directory]::Delete($block, $true)
+$r = Apply $meshSel @('--adopt')
+$want[$pick.set[2]] = $more.($pick.set[2])
+Check 'adopt stopped, run again: done, the original the game''s plus the mod''s four meshes, none of Next Gen''s' ('{0} {1} {2}' -f (Last $r), (Status).scenery, (EntriesDiff (Entries (Join-Path $stateDir 'shared.pak.orig')) $want)) 'done nature same'
+$r = Engine @('restore')
+Check 'adopt stopped, run again, restore: shared.pak is that original' ('{0} {1}' -f (Last $r), (EntriesDiff (Entries $shared) $want)) 'done same'
 
 }
 

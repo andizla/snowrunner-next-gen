@@ -245,8 +245,9 @@ function readRaw(fd, ent, head)
 }
 // an entry's local header, compressed data and data, checked against the CRC
 // flags a reader can pass over: 0x800 (the name is UTF-8, as WinRAR marks names outside ASCII) and 0x2/0x4 (the deflate
-// level used); encryption, a data descriptor and the rest are not read. Only the reading takes these: the builds change
-// entries with no flags at all
+// level used); encryption, a data descriptor and the rest are not read. initial.pak's builds and every adopt change
+// entries with no flags at all; shared.pak's mesh builds (plan) also raise a mesh with these bits, kept in its header
+// and record as they are (they do not change the data). verify() for shared.pak goes by index: its builds drop nothing
 const readableFlags = (ent) => (ent.flags & ~0x0806) === 0;
 function readEntry(fd, ent)
 {
@@ -711,7 +712,11 @@ function sharedAdopt()
     const kept = keptName(ORIG);
     renameOver(ORIG, kept);
     renameOver(tmp, ORIG);
-    writeJson(NOTE, { origSha256: fileHash(ORIG), origCdSha256: cdHash(ORIG), origDate: stamp(), adopted: path.basename(kept), reverted: jobs.size });
+    // the last build's set, extras and floors stay in the note until the build over the new original is in: an adopt
+    // stopped before that (the installer closed, a full disk) runs again from here and takes the same meshes back, the
+    // shared.pak in the game still holding them, instead of finding no build and keeping the whole file (review 18, F1).
+    // Without a cdSha256 the status still reads changed, not this tool's build
+    writeJson(NOTE, { origSha256: fileHash(ORIG), origCdSha256: cdHash(ORIG), origDate: stamp(), adopted: path.basename(kept), reverted: jobs.size, set: note.set, hide: note.hide, shadows: note.shadows, floors: note.floors });
     console.log('shared.pak taken as the original with ' + jobs.size + ' of this tool\'s meshes taken out of it; the old original is kept as ' + path.basename(kept));
     installSet(note.set, { hide: note.hide || 'off', shadows: note.shadows || 'off' }, true);
 }
