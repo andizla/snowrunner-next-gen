@@ -773,8 +773,8 @@ const SKY_NEEDS_INITIAL = 'initial.pak was changed by another mod or a game upda
 // in boot.pak, a tweak in initial.pak) or a game update changed since is taken as it is now as the new original
 // only with the player's yes, asked once before anything is written and naming every such file: Next Gen then writes
 // its changes over that state, and Restore puts it back, the other mods' changes included, not the game's own file.
-// Next Gen's own changes still in boot.pak or initial.pak are left out of the new original by the tools (lut_grade.js
-// adopt, lod_patch.js initial-adopt), so they are never made twice. With --leave the files stay as they are and their
+// Next Gen's own changes still in boot.pak, initial.pak or shared.pak are left out of the new original by the tools
+// (lut_grade.js adopt, lod_patch.js initial-adopt and adopt), so they are never made twice. With --leave the files stay as they are and their
 // parts are left out.
 function adoptQuestion(files, restoring)
 {
@@ -791,6 +791,16 @@ function adoptQuestion(files, restoring)
 async function adoptPaks(g, env, now, files)
 {
     const kept = (file) => new EngineError('failed', file + ' could not be taken as the original: it still reads as changed (are the tools older than this engine?)');
+    if (files.includes('shared.pak'))
+    {
+        // the meshes still holding Next Gen's last build go back to the old original's first, then that build goes over
+        // the new original (lod_patch.js adopt): the status then reads that set, or vanilla when none of it was left
+        step('Keeping shared.pak as it is now as the original, Next Gen\'s own meshes taken out of it (2 GB, a few minutes)');
+        await must('lod_patch.js', ['adopt'], env);
+        const lod = JSON.parse(await answer('lod_patch.js', ['status-json'], env));
+        Object.assign(now, { scenery: lod.state, sceneryHide: lod.hide, sceneryShadows: lod.shadows });
+        if (now.scenery === 'changed') throw kept('shared.pak');
+    }
     if (files.includes('initial.pak'))
     {
         step('Keeping initial.pak as it is now as the original');
@@ -938,7 +948,7 @@ async function apply(g, state, sel, adopt, leave)
     let goneNow = shaderSame ? notes.gone || [] : [];
     const changed = [];
     if (shader.length && !shaderSame && shaderNeedsAdopt(g, state, now)) changed.push('shader.pak');
-    if (sel.scenery && now.scenery === 'changed') changed.push('shared.pak');
+    if (now.scenery === 'changed' && (sel.scenery || last.scenery)) changed.push('shared.pak');
     if (now.grass.state === 'changed' && (grass || fill || stars || weather || debris || sky || last.grass || last.fill || last.stars || last.weather || last.debris || last.sky)) changed.push('initial.pak');
     if (now.grade.state === 'changed' && (grade || last.grade || particles || last.particles || sky || last.sky || cubes || last.cubes || skies || last.skies)) changed.push('boot.pak');
     if (now.logos.state === 'changed' && (logos || last.logos)) changed.push('gfx.pak');
@@ -983,14 +993,9 @@ async function apply(g, state, sel, adopt, leave)
     }
     else if (now.scenery === sel.scenery && now.sceneryHide === extra(sel.sceneryHide) && now.sceneryShadows === extra(sel.sceneryShadows) && sameCode(notes, 'scenery'))
         emit({ type: 'log', text: 'shared.pak already has the ' + sel.scenery + ' set' });
-    else if (now.scenery === 'changed' && leave) warn('shared.pak is not the original Next Gen knows (another mod or a game update): left as it is, so scenery detail was left out.');
+    else if (now.scenery === 'changed') warn('shared.pak is not the original Next Gen knows (another mod or a game update): left as it is, so scenery detail was left out.');
     else
     {
-        if (now.scenery === 'changed')   // the player said yes above
-        {
-            step('Keeping shared.pak as it is now as the original (2 GB)');
-            await must('lod_patch.js', ['backup'], env);
-        }
         const hide = extra(sel.sceneryHide), shadows = extra(sel.sceneryShadows), which = (v) => (v === 'all' ? 'nothing' : 'no plant');
         step('Writing shared.pak: ' + (sel.scenery === 'all' ? 'every mesh' : 'rocks, trees and bushes') + ' in full detail farther out' +
             (hide !== 'off' ? ', ' + which(hide) + ' hidden by distance' : '') + (shadows !== 'off' ? ', ' + (shadows === 'all' ? 'everything' : 'every plant') + ' with its shadow' : '') +
@@ -1175,6 +1180,7 @@ async function restore(g, state, adopt, leave)
     if (now.grass.state === 'changed' && (last.grass || last.fill || last.stars || last.weather || last.debris || last.sky)) changed.push('initial.pak');
     if (now.grade.state === 'changed' && (last.grade || last.particles || last.sky || last.cubes || last.skies)) changed.push('boot.pak');
     if (now.logos.state === 'changed' && last.logos) changed.push('gfx.pak');
+    if (now.scenery === 'changed' && last.scenery) changed.push('shared.pak');
     if (changed.length && !adopt && !leave) throw new EngineError('adopt-files', adoptQuestion(changed, true), { files: changed });
     g.touched = true;   // files are written from here on: see apply
     if (adopt) await adoptPaks(g, env, now, changed);
