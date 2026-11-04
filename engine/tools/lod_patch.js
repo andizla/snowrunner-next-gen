@@ -26,7 +26,11 @@
 // Unchanged entries are copied raw; in changed ones only the deflate blocks holding the XML header are encoded anew
 // (see redeflate), stored ones stay stored. The result is read back and checked before it replaces shared.pak. A Steam
 // verify or a game update puts the stock file back; after an update, `backup` takes the new file as the original.
-// usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup
+// `adopt` does the same for a shared.pak another mod changed over this tool's build: the meshes still holding that
+// build go back to the old original's bytes first (see sharedAdopt), then the build goes over the new original.
+// usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup | adopt
+//        node lod_patch.js adopt     another mod's (or a game update's) shared.pak becomes the original, this tool's
+//        last build taken out of it and put back over it
 //        node lod_patch.js build <file> [nature|all]     a patched copy anywhere, for tests
 //        list, install and build also take hide=plants|all and shadows=plants|all (the extras; left out = off)
 //        node lod_patch.js status-json    the status with the extras of this tool's build: {"state","hide","shadows"}
@@ -240,17 +244,21 @@ function readRaw(fd, ent, head)
     return raw;
 }
 // an entry's local header, compressed data and data, checked against the CRC
+// flags a reader can pass over: 0x800 (the name is UTF-8, as WinRAR marks names outside ASCII) and 0x2/0x4 (the deflate
+// level used); encryption, a data descriptor and the rest are not read. Only the reading takes these: the builds change
+// entries with no flags at all
+const readableFlags = (ent) => (ent.flags & ~0x0806) === 0;
 function readEntry(fd, ent)
 {
     const head = localHeader(fd, ent), raw = readRaw(fd, ent, head);
-    const data = ent.flags !== 0 ? null : ent.method === 8 ? zlib.inflateRawSync(raw) : ent.method === 0 ? raw : null;
+    const data = !readableFlags(ent) ? null : ent.method === 8 ? zlib.inflateRawSync(raw) : ent.method === 0 ? raw : null;
     if (!data || data.length !== ent.usize || zlib.crc32(data) !== ent.crc) throw new Error('entry does not read back: ' + ent.name);
     return { head, raw, data };
 }
 // the start of an entry's data, enough for the XML header (inflates the first 64 KB of compressed data as far as it goes)
 function readStart(fd, ent)
 {
-    if (ent.flags !== 0 || (ent.method !== 0 && ent.method !== 8)) return Buffer.alloc(0);
+    if (!readableFlags(ent) || (ent.method !== 0 && ent.method !== 8)) return Buffer.alloc(0);
     const head = localHeader(fd, ent);
     const part = Buffer.alloc(Math.min(ent.csize, 65536));
     fs.readSync(fd, part, 0, part.length, ent.lho + head.length);
@@ -425,13 +433,14 @@ function plan(file, set = 'nature', extras = {})
 // writes the patched pak: raw copies of unchanged entries, the planned data for changed ones, the central directory
 // with new offsets and sizes, the end record, and zero padding to a 4096 byte multiple when the original has it.
 // p.adds (optional): new entries [{ name, data, comp, method, crc }], written after the last entry with a local header
-// and a central directory record of their own (version, time and date as the first record has them)
+// and a central directory record of their own (version, time and date as the first record has them). p.drops (optional):
+// a Set of the source's entries left out, their bytes and records (an adopt takes this tool's added files back out)
 // the directory of a planned pak: [{ ent, at } | { add }], each with its name. The source's entries keep their order.
 // An added entry stands behind them, but one marked sorted (a class file the load list names) where its name belongs:
 // initial.pak's directory is in the byte order of its names from the fifth record on
 function directoryOrder(p)
 {
-    const out = p.z.entries.map((ent, at) => ({ ent, at, name: ent.name })), adds = p.adds || [];
+    const out = p.z.entries.map((ent, at) => ({ ent, at, name: ent.name })).filter((it) => !(p.drops && p.drops.has(it.ent))), adds = p.adds || [];
     for (const add of adds.filter((a) => a.sorted))
     {
         let q = Math.min(4, out.length);
@@ -453,12 +462,13 @@ function writePak(src, dst, p)
         // every byte asked for: a write may take less than it was given, and a read that comes back short would leave
         // the buffer's earlier bytes in the copy
         const put = (b) => { for (let at = 0; at < b.length;) at += fs.writeSync(fout, b, at, b.length - at, pos + at); pos += b.length; };
-        const copy = (from, to) =>
+        // fd: the source, or another pak a job takes its bytes from (job.copy: an adopt's old original)
+        const copy = (from, to, fd = fin) =>
         {
             for (let q = from; q < to;)
             {
-                const k = Math.min(buf.length, to - q), got = fs.readSync(fin, buf, 0, k, q);
-                if (got !== k) throw new Error('read ' + got + ' of ' + k + ' bytes at ' + q + ' of ' + path.basename(src));
+                const k = Math.min(buf.length, to - q), got = fs.readSync(fd, buf, 0, k, q);
+                if (got !== k) throw new Error('read ' + got + ' of ' + k + ' bytes at ' + q + ' of ' + (fd === fin ? path.basename(src) : 'the old original'));
                 put(buf.subarray(0, k));
                 q += k;
             }
@@ -467,6 +477,7 @@ function writePak(src, dst, p)
         order.forEach((ent, i) =>
         {
             const end = i + 1 < order.length ? order[i + 1].lho : p.z.cdOff;
+            if (p.drops && p.drops.has(ent)) return;
             newLho.set(ent, pos);
             const job = p.jobs.get(ent);
             if (!job) { copy(ent.lho, end); return; }
@@ -480,6 +491,7 @@ function writePak(src, dst, p)
             put(head);
             const from = pos;
             if (job.comp) put(job.comp);
+            else if (job.copy) copy(job.copy.at, job.copy.at + job.length, job.copy.fd);
             else
             {
                 const raw = readRaw(fin, ent, job.head);
@@ -504,6 +516,7 @@ function writePak(src, dst, p)
         const cd = Buffer.from(p.z.cd), cdOff = pos, ents = p.z.entries;
         for (const ent of ents)
         {
+            if (!newLho.has(ent)) continue;
             cd.writeUInt32LE(newLho.get(ent), ent.rec + 42);
             const job = p.jobs.get(ent);
             if (job) { cd.writeUInt32LE(job.crc, ent.rec + 16); cd.writeUInt32LE(job.length, ent.rec + 20); cd.writeUInt32LE(job.usize, ent.rec + 24); }
@@ -511,8 +524,8 @@ function writePak(src, dst, p)
         }
         // the directory: the source's records in their order, each added entry's where directoryOrder puts it
         put(Buffer.concat(directoryOrder(p).map((it) => (it.add ? recs.get(it.add) : cd.subarray(it.ent.rec, it.at + 1 < ents.length ? ents[it.at + 1].rec : cd.length)))));
-        const eocd = Buffer.from(p.z.eocd), added = (p.adds || []).length;
-        if (added)
+        const eocd = Buffer.from(p.z.eocd), added = (p.adds || []).length - (p.drops ? p.drops.size : 0);
+        if (added || (p.drops && p.drops.size))
         {
             eocd.writeUInt16LE(eocd.readUInt16LE(8) + added, 8); eocd.writeUInt16LE(eocd.readUInt16LE(10) + added, 10);
             eocd.writeUInt32LE(pos - cdOff, 12);
@@ -540,6 +553,13 @@ function verify(file, p)
             const was = p.z.entries[i];
             if (ent.name !== was.name) throw new Error('entry order changed at ' + i);
             const job = p.jobs.get(was);
+            if (job && job.revert)
+            {
+                // an adopt's entry back at the old original's bytes: its record says so and its data reads back (CRC)
+                readEntry(fd, ent);
+                if (ent.crc !== job.crc || ent.usize !== job.usize || ent.csize !== job.length || ent.method !== job.method) throw new Error('entry taken back reads back wrong: ' + ent.name);
+                return;
+            }
             if (job)
             {
                 const { data } = readEntry(fd, ent);
@@ -639,6 +659,90 @@ function backup()
     finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
     writeJson(NOTE, { origSha256: sum, origCdSha256: cdHash(ORIG), origDate: stamp() });
 }
+// adopt: the current shared.pak becomes the original when something else changed it (another mod's meshes put in with
+// WinRAR, a game update), so builds go over that and restore puts it back. backup() alone would take this tool's last
+// build in with it wherever that is still in the file: the raised switches and the extras would stay after a Restore
+// and could no longer be turned off. So the meshes that still hold exactly what the last build wrote go back to the old
+// original's bytes in the new original, and whatever the other mod changed stays as it is. The old original is kept
+// (keptName) until the installer's Apply ends. When some of ours was in, shared.pak is then the last build's set over
+// the new original again, so the status reads that set; else it is the new original and reads vanilla. Without an old
+// original or a build noted (or with no mesh of ours left) it is backup().
+function sharedAdopt()
+{
+    finishAdopt(ORIG);
+    const st = status();
+    if (st === 'missing') { console.log('shared.pak: missing, nothing to adopt'); return; }
+    if (SETS[st]) { console.log('shared.pak is this tool\'s own build: nothing to adopt'); return; }
+    if (st === 'vanilla' && fs.existsSync(ORIG)) { console.log('shared.pak is already the original'); return; }
+    const note = readNote(), last = SETS[note.set] && fs.existsSync(ORIG) ? plan(ORIG, note.set, { hide: note.hide, shadows: note.shadows }) : null;
+    if (!last || !last.jobs.size) { backup(); console.log('shared.pak taken as the original (none of this tool\'s build in it)'); return; }
+    const byName = new Map();
+    for (const [ent, job] of last.jobs) byName.set(ent.name, { ent, job });
+    const fdo = fs.openSync(ORIG, 'r'), fd = fs.openSync(PAK, 'r'), tmp = ORIG + '.new', jobs = new Map();
+    let z, grow = 0;
+    try
+    {
+        z = readZip(fd);
+        for (const ent of z.entries)
+        {
+            const o = byName.get(ent.name);
+            if (!o || ent.flags !== 0 || ent.crc !== o.job.crc || ent.usize !== o.job.usize) continue;
+            const cur = readEntry(fd, ent), orig = readEntry(fdo, o.ent), next = patchMesh(orig.data, [], o.job.what);
+            if (!next || !cur.data.equals(next)) continue;
+            // still ours: the old original's compressed bytes and method under the current header
+            jobs.set(ent, { head: cur.head, crc: o.ent.crc, usize: o.ent.usize, length: o.ent.csize, method: o.ent.method, copy: { fd: fdo, at: o.ent.lho + orig.head.length }, revert: true });
+            grow += o.ent.csize - ent.csize;
+        }
+        if (!jobs.size) { fs.closeSync(fdo); fs.closeSync(fd); }
+    }
+    catch (err) { fs.closeSync(fdo); fs.closeSync(fd); throw err; }
+    if (!jobs.size) { backup(); console.log('shared.pak taken as the original (none of this tool\'s last build left in it)'); return; }
+    try
+    {
+        const end = z.cdOff + grow + z.cd.length + z.eocd.length, p = { z, jobs, size: z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end };
+        room(ORIG, p.size, 'the new original shared.pak');
+        console.log('writing the new original shared.pak (2 GB): ' + jobs.size + ' meshes back to the old original\'s, the rest as shared.pak is now');
+        writePak(PAK, tmp, p);
+        verify(tmp, p);
+        flush(tmp);
+    }
+    catch (err) { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); throw err; }
+    finally { fs.closeSync(fdo); fs.closeSync(fd); }
+    const kept = keptName(ORIG);
+    renameOver(ORIG, kept);
+    renameOver(tmp, ORIG);
+    writeJson(NOTE, { origSha256: fileHash(ORIG), origCdSha256: cdHash(ORIG), origDate: stamp(), adopted: path.basename(kept), reverted: jobs.size });
+    console.log('shared.pak taken as the original with ' + jobs.size + ' of this tool\'s meshes taken out of it; the old original is kept as ' + path.basename(kept));
+    installSet(note.set, { hide: note.hide || 'off', shadows: note.shadows || 'off' }, true);
+}
+// the set and its extras built from the original into shared.pak, read back before it goes in (the original made
+// first when there is none). over: shared.pak may be anything (an adopt's last step: it still holds the other mod's
+// state with some of this tool's build in it, which the new original now stands for)
+function installSet(set, extras, over = false)
+{
+    const st = status();
+    if (st === 'changed' && !over) throw new Error('shared.pak is neither the backup nor our build (a game update or Steam verify?). If it is the game\'s own file, run: node lod_patch.js backup');
+    if (!fs.existsSync(ORIG)) backup();
+    console.log('planning ' + SETS[set] + ' from the original shared.pak');
+    const p = plan(ORIG, set, extras), tmp = PAK + '.tmp';
+    console.log('writing ' + p.jobs.size + ' changed meshes into a new shared.pak (' + p.size + ' bytes' + extrasSay(p) + ')');
+    if (!p.jobs.size) console.log('warning: scenery detail changed no mesh: this game version\'s meshes do not have the switch distances it raises');
+    let next;
+    try
+    {
+        writePak(ORIG, tmp, p);
+        const sampled = verify(tmp, p);
+        const note = readNote();
+        next = { origSha256: note.origSha256, origCdSha256: note.origCdSha256, origDate: note.origDate, set, hide: p.hide, shadows: p.shadows, cdSha256: cdHash(tmp), size: p.size, date: stamp(),
+            floors: FLOORS, changed: p.changed, extra: p.extra };
+        writeJson(NOTE, withPending(note, next));
+        swapIn(tmp, PAK);
+        console.log('read back ok (' + sampled + ' untouched entries sampled)');
+    }
+    finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+    writeJson(NOTE, next);
+}
+const extrasSay = (p) => (p.hide === 'off' && p.shadows === 'off' ? '' : ', hiding distance out of ' + p.extra.hide + ' (' + p.hide + '), shadow tag out of ' + p.extra.shadows + ' (' + p.shadows + ')');
 // room on the drive of file's folder for bytes more, with 256 MB to spare: a clear stop before an original is copied
 // instead of a full disk half way (review 3, N7). Without a way to ask (an older Node) it goes ahead
 function room(file, bytes, what)
@@ -1015,21 +1119,32 @@ function initialAdopt()
     const note = readGrassNote(), had = { grass: note.factor || null, fill: note.fill || null, stars: note.stars || null, weather: note.weather || null, debris: note.debris || null, days: note.days || null };
     const hadPhoto = new Set(note.starsPhoto || []), hadWinter = !!note.winterCubes;   // the photo skies the last build's sky alpha was made for
     // what the last build wrote, by entry name, with the old original's bytes of each entry
-    const ours = new Map();
+    const ours = new Map(), ourAdds = new Map();
     if (fs.existsSync(INITIAL_ORIG) && (had.grass || had.fill || had.stars || had.weather || had.debris || had.days || hadPhoto.size || hadWinter))
     {
         const last = planInitial(INITIAL_ORIG, had, hadPhoto, hadWinter), fdo = fs.openSync(INITIAL_ORIG, 'r');
         try { for (const [ent, job] of last.jobs) ours.set(ent.name, { job, orig: readEntry(fdo, ent) }); } finally { fs.closeSync(fdo); }
+        for (const a of last.adds || []) ourAdds.set(a.name, a);   // the files the build added (the weather's own types, days' class files)
     }
-    const fd = fs.openSync(INITIAL, 'r'), jobs = new Map(), still = { grass: 0, fill: 0, stars: 0, weather: 0, debris: 0, days: 0, winter: 0 };
+    const fd = fs.openSync(INITIAL, 'r'), jobs = new Map(), drops = new Set(), still = { grass: 0, fill: 0, stars: 0, weather: 0, debris: 0, days: 0, winter: 0 };
     let z, grow = 0;
     try
     {
         z = readZip(fd);
+        const byLho = z.entries.slice().sort((a, b) => a.lho - b.lho);
+        z.entries.forEach((ent, i) =>
+        {
+            // a file the last build added, still holding exactly its bytes: left out of the new original (its data and
+            // its directory record)
+            const a = ourAdds.get(ent.name);
+            if (!a || ent.flags !== 0 || ent.crc !== a.crc || ent.usize !== a.data.length || !readEntry(fd, ent).data.equals(a.data)) return;
+            const k = byLho.indexOf(ent), end = k + 1 < byLho.length ? byLho[k + 1].lho : z.cdOff, recEnd = i + 1 < z.entries.length ? z.entries[i + 1].rec : z.cd.length;
+            drops.add(ent); still[a.sorted ? 'days' : 'weather']++; grow -= (end - ent.lho) + (recEnd - ent.rec);
+        });
         for (const ent of z.entries)
         {
             const o = ours.get(ent.name);
-            if (!o || ent.flags !== 0 || ent.crc !== o.job.crc || ent.usize !== o.job.usize) continue;
+            if (drops.has(ent) || !o || ent.flags !== 0 || ent.crc !== o.job.crc || ent.usize !== o.job.usize) continue;
             const cur = readEntry(fd, ent);
             if (!cur.data.equals(o.job.next) || cur.head.readUInt16LE(8) !== o.orig.head.readUInt16LE(8)) continue;
             // still ours: the old original's compressed bytes under the current header (same method)
@@ -1043,10 +1158,10 @@ function initialAdopt()
     const tmp = INITIAL_ORIG + '.new';
     try
     {
-        if (jobs.size)
+        if (jobs.size || drops.size)
         {
             const end = z.cdOff + grow + z.cd.length + z.eocd.length;
-            const p = { z, jobs, size: z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end };
+            const p = { z, jobs, drops, size: z.size % 4096 === 0 ? Math.ceil(end / 4096) * 4096 : end };
             writePak(INITIAL, tmp, p);
             verifyInitial(tmp, p);
         }
@@ -1117,11 +1232,11 @@ if (require.main === module)
     // the two extras: hide=plants|all, shadows=plants|all (left out = off)
     const extraArg = (name) => { const a = args.find((v) => v.startsWith(name + '=')); return a ? a.slice(name.length + 1) : 'off'; };
     const extras = { hide: extraArg('hide'), shadows: extraArg('shadows') };
-    const extrasSay = (p) => (p.hide === 'off' && p.shadows === 'off' ? '' : ', hiding distance out of ' + p.extra.hide + ' (' + p.hide + '), shadow tag out of ' + p.extra.shadows + ' (' + p.shadows + ')');
     const source = () => (fs.existsSync(ORIG) ? ORIG : PAK);
     try
     {
         finishAdopt(INITIAL_ORIG);
+        finishAdopt(ORIG);
         if (cmd === 'list') { const from = source(); console.log('from ' + from); report(plan(from, set, extras), args.includes('names')); }
         else if (cmd === 'status') console.log(status());
         else if (cmd === 'status-json')
@@ -1142,29 +1257,10 @@ if (require.main === module)
             backup();
             console.log('backup made');
         }
+        else if (cmd === 'adopt') sharedAdopt();
         else if (cmd === 'install')
         {
-            const st = status();
-            if (st === 'changed') throw new Error('shared.pak is neither the backup nor our build (a game update or Steam verify?). If it is the game\'s own file, run: node lod_patch.js backup');
-            if (!fs.existsSync(ORIG)) backup();
-            console.log('planning ' + SETS[set] + ' from the original shared.pak');
-            const p = plan(ORIG, set, extras), tmp = PAK + '.tmp';
-            console.log('writing ' + p.jobs.size + ' changed meshes into a new shared.pak (' + p.size + ' bytes' + extrasSay(p) + ')');
-            if (!p.jobs.size) console.log('warning: scenery detail changed no mesh: this game version\'s meshes do not have the switch distances it raises');
-            let next;
-            try
-            {
-                writePak(ORIG, tmp, p);
-                const sampled = verify(tmp, p);
-                const note = readNote();
-                next = { origSha256: note.origSha256, origCdSha256: note.origCdSha256, origDate: note.origDate, set, hide: p.hide, shadows: p.shadows, cdSha256: cdHash(tmp), size: p.size, date: stamp(),
-                    floors: FLOORS, changed: p.changed, extra: p.extra };
-                writeJson(NOTE, withPending(note, next));
-                swapIn(tmp, PAK);
-                console.log('read back ok (' + sampled + ' untouched entries sampled)');
-            }
-            finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
-            writeJson(NOTE, next);
+            installSet(set, extras);
             // the grass goes with the all set only (unless the caller handles it: LOD_GRASS=leave)
             if (GRASS_WITH_SETS) { if (set === 'all') installGrass(); else restoreGrass(); }
             console.log('scenery detail: ' + SETS[set]);
@@ -1235,7 +1331,7 @@ if (require.main === module)
             if (cdHash(PAK) !== (kept || cdHash(ORIG))) throw new Error('shared.pak does not match the backup after the copy');
             console.log('scenery detail: vanilla');
         }
-        else console.log('usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup | build <file> [nature|all] | grass-status | grass-build <file> [factor] | grass-install [factor] | grass-restore | fill-status | fill-install [factor] | fill-restore | stars-status | stars-install [factor] | stars-restore | weather-status | weather-install [parts] | weather-restore | debris-status | debris-install [drops] | debris-restore | days-set <codes|none> | initial-status | initial-restore | initial-refresh | initial-adopt | initial-build <file> [grass=<f>] [fill=<f>] [stars=<f>] [weather=<parts>] [debris=<drops>] [days=<codes>]');
+        else console.log('usage: node lod_patch.js list [nature|all] [names] | status | install [nature|all] | restore | backup | adopt | build <file> [nature|all] | grass-status | grass-build <file> [factor] | grass-install [factor] | grass-restore | fill-status | fill-install [factor] | fill-restore | stars-status | stars-install [factor] | stars-restore | weather-status | weather-install [parts] | weather-restore | debris-status | debris-install [drops] | debris-restore | days-set <codes|none> | initial-status | initial-restore | initial-refresh | initial-adopt | initial-build <file> [grass=<f>] [fill=<f>] [stars=<f>] [weather=<parts>] [debris=<drops>] [days=<codes>]');
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }

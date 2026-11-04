@@ -69,7 +69,7 @@ function Note {
 }
 # a zip's end record: { at, count, cdSize, cdOffset } and the file's open stream
 function EndRecord($fs) {
-  $n = [int][Math]::Min(65557, $fs.Length); $tail = New-Object byte[] $n
+  $n = [int][Math]::Min([long]65557, $fs.Length); $tail = New-Object byte[] $n
   $fs.Position = $fs.Length - $n; [void]$fs.Read($tail, 0, $n)
   for ($i = $n - 22; $i -ge 0; $i--) {
     if ([BitConverter]::ToUInt32($tail, $i) -eq 0x06054b50) {
@@ -417,6 +417,52 @@ foreach ($p in 'initial', 'boot', 'gfx') {
 Check 'restore: the other mod''s hid.dll is back' (Hash (Join-Path $bin 'hid.dll')) $foreignHash
 Check 'restore: no hid_chain.dll, ini or stock twins left' ((Test-Path (Join-Path $bin 'hid_chain.dll')) -or (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -or (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'False'
 Check 'restore: the note in the game folder is gone' (Note) 'none'
+
+'files Next Gen added to initial.pak (the fireflies'' and the pollen''s own types), another mod''s put in after: Restore takes them out too'
+$want = Entries $initial
+$modFile4 = 'ngen_test/another_mod_4.txt'; $modText4 = "another mod's file 4"; $modCrc4 = [uint32](& $node -e "console.log(require('zlib').crc32(Buffer.from(process.argv[1],'latin1')))" $modText4)
+$r = Apply ([ordered]@{ shader = @(); shadows = $null; scenery = $null; grass = $null; fill = $null; grade = $null; weather = 'fireflies,pollen' })
+Check 'added files: the fireflies and the pollen in' ('{0} {1}' -f (Last $r), @((Entries $initial).Keys | Where-Object { $_ -match 'nextgen_(fireflies|pollen)\.xml$' }).Count) 'done 2'
+AddEntry $initial $modFile4 $modText4 $modCrc4
+$r = Engine @('restore', '--adopt')
+$want[$modFile4] = '{0:x8}/20' -f $modCrc4
+Check 'added files: restore leaves the original plus the other mod''s file, Next Gen''s added files out' ('{0} {1}' -f (Last $r), (EntriesDiff (Entries $initial) $want)) 'done same'
+
+'a mesh mod in shared.pak over Next Gen''s build (as RLM puts its meshes in with WinRAR): taken as the original, Next Gen''s meshes taken out of it'
+$shared = Join-Path $paks 'shared.pak'; $sharedOrig = Join-Path $originals 'shared.pak.orig'
+# the helper runs from the work folder over the engine's own tools and the state's copy of the original (package_test
+# traces every node process: nothing may come from the working tree or the real state folder)
+$modMeshesJs = Join-Path $work 'mod_meshes.js'; Copy-Item -LiteralPath (Join-Path $root 'test\mod_meshes.js') -Destination $modMeshesJs
+$env:NGEN_TOOLS = if ($Engine) { Join-Path $Engine 'tools' } else { Join-Path $root 'engine\tools' }; $stockShared = Join-Path $stateDir 'shared.pak.orig'
+$pick = (& $node $modMeshesJs pick $stockShared) | ConvertFrom-Json
+$meshSel = [ordered]@{ shader = @(); shadows = $null; scenery = 'nature'; sceneryHide = 'plants'; grass = $null; fill = $null; grade = $null }
+$r = Apply $meshSel
+Check 'mesh mod: the nature set with hide=plants in first' ('{0} {1} {2}' -f (Last $r), (Status).scenery, (Status).sceneryHide) 'done nature plants'
+$modMeshes = (& $node $modMeshesJs put $shared $stockShared $pick.set[0] $pick.other) | ConvertFrom-Json
+$r = Apply $meshSel
+$e = $r[$r.Count - 1]
+Check 'mesh mod: asks first, naming shared.pak' ('{0} {1} {2}' -f $e.type, $e.code, (@($e.files) -join ',')) 'error adopt-files shared.pak'
+$r = Apply $meshSel @('--leave')
+Check 'mesh mod, left out: shared.pak untouched' ('{0} {1} {2}' -f (Last $r), (Warned $r '^shared\.pak .*scenery detail was left out'), (Entries $shared)[$pick.other]) ('done True ' + $modMeshes.($pick.other))
+$r = Apply $meshSel @('--adopt')
+Check 'mesh mod, taken as the original: done, the set and its extra in' ('{0} {1} {2}' -f (Last $r), (Status).scenery, (Status).sceneryHide) 'done nature plants'
+Check 'mesh mod, taken as the original: every mesh of Next Gen''s but the replaced one taken out' ([bool]@($r | Where-Object { $_.text -match ('with ' + ($pick.nature - 1) + ' of this tool''s meshes taken out') }).Count) 'True'
+$want = Entries $sharedOrig
+foreach ($n in $modMeshes.PSObject.Properties) { $want[$n.Name] = $n.Value }
+Check 'mesh mod, taken as the original: the new original is the game''s plus the mod''s two meshes' (EntriesDiff (Entries (Join-Path $stateDir 'shared.pak.orig')) $want) 'same'
+Check 'mesh mod, taken as the original: the mod''s other mesh as the mod has it, its rock or tree built over again' ('{0} {1}' -f ((Entries $shared)[$pick.other] -eq $modMeshes.($pick.other)), ((Entries $shared)[$pick.set[0]] -ne $modMeshes.($pick.set[0]))) 'True True'
+Check 'mesh mod, taken as the original: the earlier original removed after' (@(Get-ChildItem -LiteralPath $stateDir | Where-Object { $_.Name -match '^shared\.pak\.orig\.\d' }).Count) '0'
+$r = Engine @('restore')
+Check 'mesh mod, restore: shared.pak is the game''s plus the mod''s two meshes' ('{0} {1}' -f (Last $r), (EntriesDiff (Entries $shared) $want)) 'done same'
+$r = Apply $meshSel
+Check 'mesh mod, in again' ('{0} {1}' -f (Last $r), (Status).scenery) 'done nature'
+$more = (& $node $modMeshesJs put $shared $stockShared $pick.set[1]) | ConvertFrom-Json
+$r = Engine @('restore')
+$e = $r[$r.Count - 1]
+Check 'mesh mod added since, restore: asks first, naming shared.pak' ('{0} {1} {2}' -f $e.type, $e.code, (@($e.files) -join ',')) 'error adopt-files shared.pak'
+$r = Engine @('restore', '--adopt')
+$want[$pick.set[1]] = $more.($pick.set[1])
+Check 'mesh mod added since, restore: shared.pak is the game''s plus the mod''s three meshes, none of Next Gen''s' ('{0} {1} {2}' -f (Last $r), (Status).scenery, (EntriesDiff (Entries $shared) $want)) 'done vanilla same'
 
 }
 

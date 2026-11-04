@@ -56,9 +56,12 @@ take is remembered as left out, so the next Apply does not build shader.pak agai
 <p>When a pak is "changed", Apply asks. "Take it as the original" adopts the file: the engine walks its entries, and every entry that
 still holds exactly what the engine's last build wrote (same CRC, same size, same bytes) goes back to the old original's bytes. What
 the other mod changed stays. The result becomes the new original, and the build runs over
-it. The old original is kept under a dated name until that Apply finishes, then removed: nothing reads it, and
+it. shared.pak is walked the same way since 1.1.2 (a mesh mod such as RLM, put in with WinRAR, changes it): before, its
+adopt took the file whole, and the raised switches and the extras of the last build stayed in the new original, so
+Restore left them in the game and unticking Scenery detail no longer took them out. Restore asks the same question
+when shared.pak changed since the last Apply, and takes Next Gen's meshes out of it before putting it back. The old original is kept under a dated name until that Apply finishes, then removed: nothing reads it, and
 shared.pak's is 2.1 GB. Restore then puts that modded state back, the other mod's changes included. "Leave it out" keeps the file and its cards as they
-are.</p>
+are. Files a build added to initial.pak (the weather's own types, the days' class files) that still hold exactly its bytes are left out of the new original. A tested WinRAR re-pack of RLM over every part came out as the game's files plus RLM's after both the adopt and Restore.</p>
 <p>A game update replaces the paks, so after one the game shows its own look until Apply has run again, and Apply asks the same
 question. The game update of 20 October 2026 (exe build 6ab52f5d, a new region) was tried that way on copies of the new files: every
 card applied with no warning. The engine also knows the game's own shader.pak by its hash, for July's version and that update's, so
