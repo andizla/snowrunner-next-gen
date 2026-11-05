@@ -1,6 +1,6 @@
 {
     "exe":  "SnowRunnerNextGen.exe",
-    "built":  "2026-10-27 22:29",
+    "built":  "2026-11-04 09:55",
     "modules":  [
                     {
                         "id":  "shadows",
@@ -249,7 +249,7 @@
                                                          "half",
                                                          "full"
                                                      ],
-                                            "default":  0
+                                            "default":  1
                                         }
                                     ],
                         "help":  [
@@ -263,11 +263,11 @@
                                      },
                                      {
                                          "heading":  "What it costs",
-                                         "text":  "More graphics time than the game\u0027s own pass at full size. At half size, the default, SnowRunner Shadows draws the pass at half the resolution, then blurs and scales it up: at 4K on an RTX 4080 that took the frame rate from 63.7 to 75.0 fps."
+                                         "text":  "More graphics time than the game\u0027s own pass at full size. At half size SnowRunner Shadows draws the pass at half the resolution, then blurs and scales it up: at 4K on an RTX 4080 that took the frame rate from 63.7 to 75.0 fps."
                                      },
                                      {
                                          "heading":  "Options",
-                                         "text":  "Quality: half size (the default, much faster) or full size (the sharpest). Half size needs SnowRunner Shadows, which draws the pass; without it the pass runs at full size."
+                                         "text":  "Quality: full size (the default, the sharpest) or half size (much faster). Half size needs SnowRunner Shadows, which draws the pass; without it the pass runs at full size."
                                      },
                                      {
                                          "heading":  "Good to know",
@@ -747,7 +747,7 @@
                         "title":  "Weather",
                         "category":  "ATMOSPHERE",
                         "group":  "Atmosphere and image",
-                        "description":  "More of the game\u0027s own weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out, fireflies at night and pollen by day.",
+                        "description":  "More of the game\u0027s own weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out (off by default), fireflies at night and pollen by day.",
                         "on":  true,
                         "requires":  [
 
@@ -802,7 +802,7 @@
                                             "default":  0
                                         },
                                         {
-                                            "name":  "Far rain and snow",
+                                            "name":  "Far rain",
                                             "labels":  [
                                                            "on",
                                                            "off"
@@ -811,7 +811,7 @@
                                                          "far",
                                                          ""
                                                      ],
-                                            "default":  0
+                                            "default":  1
                                         },
                                         {
                                             "name":  "Fireflies",
@@ -865,7 +865,7 @@
                         "help":  [
                                      {
                                          "heading":  "What it does",
-                                         "text":  "The game cycles each region through day states that can carry rain or snow, and on two maps moving cloud shadows. This adds more of that, from the game\u0027s own weather system. Cloud shadows: every map gets them, drawn from the game\u0027s own shadow textures. Showers: rain and snow swell and ease over time instead of holding one strength. Evening drizzle: the rain regions get light rain at dusk, at night and at dawn, as the snow regions already have flurries then. Horizon clouds: the cloud layer on the horizon that 17 sky files hold switched off, switched on. Far rain and snow: drawn out to 1.5 times the distance, 48 metres instead of 32. Fireflies: fireflies at night in the rain regions, drawn with the game\u0027s own firefly sprite. Pollen: pollen drifting through the clear days of the same regions. These two are weather types from the game\u0027s later engine, written in as two new files. Drifting clouds: a sky is made of layers that turn, each at a speed the day state sets, and in most states the nearest band of clouds and some of the sky pictures stand still while the bands behind them move. Where a cloud picture stands still it now turns slowly, about 150 settings in 17 sky files. The stars, the sun and moon, the aurora, the Milky Way and a painted sunset stay where they are. Far land: 46 states, most of them on Kola, Yukon, Quebec and Scandinavia, stop drawing the ground at 800 metres although their distant fog reaches farther, so in clear air the land ends short. There the ground is drawn as far as the fog reaches, 3000 metres at most."
+                                         "text":  "The game cycles each region through day states that can carry rain or snow, and on two maps moving cloud shadows. This adds more of that, from the game\u0027s own weather system. Cloud shadows: every map gets them, drawn from the game\u0027s own shadow textures. Showers: rain and snow swell and ease over time instead of holding one strength, never heavier than the game\u0027s own. Evening drizzle: the rain regions get light rain at dusk, at night and at dawn, as the snow regions already have flurries then. Horizon clouds: the cloud layer on the horizon that 17 sky files hold switched off, switched on. Far rain, off by default: rain drawn out to 1.5 times the distance, 48 metres instead of 32. Snow keeps the game\u0027s distance: drawn that far, heavy snow cost too much frame rate. Fireflies: fireflies at night in the rain regions, drawn with the game\u0027s own firefly sprite. Pollen: pollen drifting through the clear days of the same regions. These two are weather types from the game\u0027s later engine, written in as two new files. Drifting clouds: a sky is made of layers that turn, each at a speed the day state sets, and in most states the nearest band of clouds and some of the sky pictures stand still while the bands behind them move. Where a cloud picture stands still it now turns slowly, about 150 settings in 17 sky files. The stars, the sun and moon, the aurora, the Milky Way and a painted sunset stay where they are. Far land: 46 states, most of them on Kola, Yukon, Quebec and Scandinavia, stop drawing the ground at 800 metres although their distant fog reaches farther, so in clear air the land ends short. There the ground is drawn as far as the fog reaches, 3000 metres at most."
                                      },
                                      {
                                          "heading":  "What you will notice",
@@ -873,11 +873,11 @@
                                      },
                                      {
                                          "heading":  "What it costs",
-                                         "text":  "Little. The cloud shadows are drawn the way the game draws them on the maps that have them; the other parts change numbers the game reads anyway."
+                                         "text":  "Little. The cloud shadows are drawn the way the game draws them on the maps that have them; the other parts change numbers the game reads anyway. Far rain draws more raindrops around the camera, so it costs some frame rate in heavy rain."
                                      },
                                      {
                                          "heading":  "Options",
-                                         "text":  "Each part on its own, all on by default. Far land draws more ground; its cost has not been measured yet. With Fireflies and Evening drizzle both on, the nights of the rain regions take the fireflies and the drizzle keeps to dusk and dawn."
+                                         "text":  "Each part on its own, all on by default except Far rain. Far land draws more ground; its cost has not been measured yet. With Fireflies and Evening drizzle both on, the nights of the rain regions take the fireflies and the drizzle keeps to dusk and dawn."
                                      },
                                      {
                                          "heading":  "Good to know",
