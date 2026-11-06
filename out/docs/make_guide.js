@@ -10,9 +10,11 @@
 // The card names, their rows and values stay in English, as the window shows them. The Russian build stops when an
 // English text changed since its translation (or has none), naming each, so a change brings its Russian text along.
 // --pack: writes ru\ for a translator instead: strings.json with every English text (ru left empty where none is
-// current), and each part or chapter without a current Russian file as <name>.en to translate.
-// --stamp <name>...: a part or chapter whose Russian file was brought in line with its English by hand (a small change
-// made in both): its English as it is now counts as the one translated.
+// current), and each part or chapter without a current Russian file as <name>.en to translate. It leaves sources.json
+// alone: a Russian file counts as current only once it is handed in (review 20, F1).
+// --stamp <name>...: hands in the Russian file of a part or chapter: the English as it is now counts as the one it was
+// translated from. Refused when the <name>.en the pack handed out differs from that English (it changed meanwhile);
+// without a .en (a small change made in both languages by hand) it takes the English as it is.
 'use strict';
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), { execFileSync } = require('child_process');
 const here = __dirname, cat = JSON.parse(fs.readFileSync(path.join(here, 'catalog.json'), 'utf8').replace(/^\uFEFF/, ''));
@@ -254,7 +256,10 @@ if (process.argv.includes('--stamp'))
     {
         if (!(name in usedFiles)) throw new Error('no part or chapter named ' + name);
         if (!fs.existsSync(path.join(ruDir, name))) throw new Error('no Russian file for ' + name);
+        const handed = path.join(ruDir, name + '.en');
+        if (fs.existsSync(handed) && sha(fs.readFileSync(handed, 'utf8')) !== sha(usedFiles[name])) throw new Error(name + ': the English changed since the pack handed it out; make the pack again');
         sources[name] = sha(usedFiles[name]);
+        if (fs.existsSync(handed)) fs.unlinkSync(handed);
     }
     fs.writeFileSync(path.join(ruDir, 'sources.json'), JSON.stringify(sources, null, 1) + '\n');
     console.log('stamped: ' + names.join(', '));
@@ -270,13 +275,10 @@ if (PACK)
     const todo = [];
     for (const [name, en] of Object.entries(usedFiles))
         if (!fs.existsSync(path.join(ruDir, name)) || sources[name] !== sha(en))         {
-            // a Russian file of an older English goes aside as .old, so the build sees none until the new one is in
-            const ru = path.join(ruDir, name);
-            if (fs.existsSync(ru)) fs.renameSync(ru, ru + '.old');
-            fs.writeFileSync(ru + '.en', en); todo.push(name); sources[name] = sha(en);
+            // the English to translate; sources.json is left alone, so the Russian counts as current only once it is
+            // handed in with --stamp (review 20, F1)
+            fs.writeFileSync(path.join(ruDir, name + '.en'), en); todo.push(name);
         }
-    // the hashes of the English handed out: a Russian file made from it counts as current until that English changes
-    fs.writeFileSync(path.join(ruDir, 'sources.json'), JSON.stringify(sources, null, 1) + '\n');
     console.log('ru\\strings.json: ' + Object.keys(out).length + ' texts, ' + Object.values(out).filter((v) => !v.ru).length + ' to translate; files to translate (the English beside each as .en): ' + (todo.join(', ') || 'none'));
     process.exit(0);
 }
