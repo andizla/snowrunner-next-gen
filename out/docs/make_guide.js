@@ -53,7 +53,8 @@ loader, and the program keeps a copy of every file it changes, so you can always
 <li>SnowRunner from Steam, Epic Games or the Microsoft Store, on Windows.</li>
 <li>Room on the system drive for the copies of the original files: up to about 4 GB, depending on what you switch on.
 shared.pak alone is 2 GB, and only the Scenery detail card changes it.</li>
-<li>The game closed while you install, change or remove anything. The program will not write while it runs.</li>
+<li>The game closed while you install, change or remove anything. The program will not write while it runs. A game started
+during an Apply stops it: close the game and click Apply again, the parts already done stay in.</li>
 </ul>
 
 <h2 id="p1-install">Put it in, step by step</h2>

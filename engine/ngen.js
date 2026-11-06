@@ -1257,6 +1257,14 @@ async function main()
         // window hears that files were changed (apply has no rollback: a stop at shared.pak leaves shader.pak built)
         if (g && g.touched) { try { await leaveNote(g, state); } catch (e2) { /* the stop itself is what is reported */ } }
         if (!(e instanceof EngineError) && e.stack) logLine(e.stack);   // a stop the engine did not foresee: where it happened
+        // the game started while this ran: Windows then refuses to replace a pak it holds (EPERM on the swap, 2026-11-03).
+        // The window says so in plain words; the tool's own message stays in the log
+        if (g && e.code === 'failed' && /\b(EPERM|EBUSY|EACCES)\b/.test(e.message) && gameRunning(g))
+        {
+            logLine('log   ' + e.message);
+            e = new EngineError('running', 'SnowRunner was started while this ran, so Windows kept its files from being replaced. Close the game and run it again' +
+                (g.touched ? ': the parts already done stay in, the rest is built then.' : '.'));
+        }
         emit(Object.assign({ type: 'error', code: e.code || 'failed', text: e.message, touched: !!(g && g.touched) }, e.extra || {}));
         process.exitCode = 1;
     }
