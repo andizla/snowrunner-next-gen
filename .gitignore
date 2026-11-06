@@ -8,9 +8,8 @@ out/docs/guide.html
 out/docs/SnowRunner_Next_Gen_Guide.pdf
 out/docs/guide_ru.html
 out/docs/SnowRunner_Next_Gen_Guide_RU.pdf
-# the translator's working copies (make_guide.js --pack)
+# the translator's working copies (make_guide.js --pack; --stamp removes each)
 out/docs/ru/**/*.en
-out/docs/ru/**/*.old
 *.exe
 *.dll
 # the compiled shaders: engine\tools\build_shaders.js makes them from the .hlsl sources
