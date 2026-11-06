@@ -6,6 +6,11 @@ dll/out/
 # the guide's sources are tracked in out/docs; make_guide.js builds these two from them (the released PDF is docs/SnowRunner_Next_Gen_Guide.pdf)
 out/docs/guide.html
 out/docs/SnowRunner_Next_Gen_Guide.pdf
+out/docs/guide_ru.html
+out/docs/SnowRunner_Next_Gen_Guide_RU.pdf
+# the translator's working copies (make_guide.js --pack)
+out/docs/ru/**/*.en
+out/docs/ru/**/*.old
 *.exe
 *.dll
 # the compiled shaders: engine\tools\build_shaders.js makes them from the .hlsl sources

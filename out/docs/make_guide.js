@@ -1,9 +1,44 @@
 // The Next Gen guide as a PDF: a part for beginners written here, and the cards in depth from catalog.json (the window's
-// own cards, rows and help texts, dumped by dump_catalog.ps1), printed by Edge. usage: node make_guide.js
-// Writes guide.html and SnowRunner_Next_Gen_Guide.pdf next to this file.
+// own cards, rows and help texts, dumped by dump_catalog.ps1), printed by Edge. usage: node make_guide.js [--lang ru] [--pack]
+// Writes guide.html and SnowRunner_Next_Gen_Guide.pdf next to this file; with --lang ru, guide_ru.html and
+// SnowRunner_Next_Gen_Guide_RU.pdf from the Russian texts in ru\:
+//   ru\strings.json  { key: { en, ru } }: every short text (the cards' descriptions and help, the window's How it works,
+//                    headings and labels), with the English it was translated from
+//   ru\part1.html, ru\intro.html, ru\files.html, ru\credits.html: the hand-written parts ({{on}}, {{off}}, {{table}} filled in)
+//   ru\tech\*.html  the chapters of part 4, the same names and h2 ids as tech\
+//   ru\sources.json  { file: sha256 of the English it was translated from } for the files above
+// The card names, their rows and values stay in English, as the window shows them. The Russian build stops when an
+// English text changed since its translation (or has none), naming each, so a change brings its Russian text along.
+// --pack: writes ru\ for a translator instead: strings.json with every English text (ru left empty where none is
+// current), and each part or chapter without a current Russian file as <name>.en to translate.
 'use strict';
-const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
+const fs = require('fs'), path = require('path'), crypto = require('crypto'), { execFileSync } = require('child_process');
 const here = __dirname, cat = JSON.parse(fs.readFileSync(path.join(here, 'catalog.json'), 'utf8').replace(/^\uFEFF/, ''));
+const RU = process.argv.includes('--lang') && process.argv[process.argv.indexOf('--lang') + 1] === 'ru', PACK = process.argv.includes('--pack');
+const ruDir = path.join(here, 'ru'), sha = (t) => crypto.createHash('sha256').update(t.replace(/\r\n/g, '\n')).digest('hex');
+const readJson = (f, d) => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')) : d);
+const strings = readJson(path.join(ruDir, 'strings.json'), {}), sources = readJson(path.join(ruDir, 'sources.json'), {});
+const used = {}, usedFiles = {}, stale = [];
+// T(key, en): the English, or in the Russian build its translation
+const T = (key, en) =>
+{
+    used[key] = en;
+    if (!RU || PACK) return en;
+    const s = strings[key];
+    if (!s || !s.ru) { stale.push(key + ': no Russian text'); return en; }
+    if (s.en !== en) stale.push(key + ': the English changed since it was translated');
+    return s.ru;
+};
+// F(name, en): a hand-written part or a chapter, the English text or in the Russian build the file ru\<name>
+const F = (name, en) =>
+{
+    usedFiles[name] = en;
+    if (!RU || PACK) return en;
+    const file = path.join(ruDir, name);
+    if (!fs.existsSync(file)) { stale.push(name + ': no Russian file'); return en; }
+    if (sources[name] !== sha(en)) stale.push(name + ': the English changed since it was translated');
+    return fs.readFileSync(file, 'utf8');
+};
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const slug = (s) => 'c-' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -13,7 +48,7 @@ const groups = [...new Set(cat.modules.map((m) => m.group))];
 const on = cat.modules.filter((m) => m.on), off = cat.modules.filter((m) => !m.on);
 // part 4, how it works in depth: the hand-written chapters in tech\, in name order, each opening with <h2 id="...">
 const techDir = path.join(here, 'tech');
-const techHtml = fs.existsSync(techDir) ? fs.readdirSync(techDir).filter((f) => /\.html$/.test(f)).sort().map((f) => fs.readFileSync(path.join(techDir, f), 'utf8')).join('\n') : '';
+const techHtml = fs.existsSync(techDir) ? fs.readdirSync(techDir).filter((f) => /\.html$/.test(f)).sort().map((f) => F('tech/' + f, fs.readFileSync(path.join(techDir, f), 'utf8'))).join('\n') : '';
 const techToc = [...techHtml.matchAll(/<h2 id="([^"]+)">([^<]+)<\/h2>/g)].map((m) => [m[1], m[2]]);
 // each card's chapters in part 4 (by their h2 id; a chapter not written yet is left out)
 const DEEP = {
@@ -26,18 +61,19 @@ const DEEP = {
 
 function table()
 {
-    let h = '<table class="cards"><thead><tr><th>Card</th><th>Default</th><th>What it does</th></tr></thead><tbody>';
+    let h = '<table class="cards"><thead><tr><th>' + T('ui.card', 'Card') + '</th><th>' + T('ui.default', 'Default') + '</th><th>' + T('ui.whatitdoes', 'What it does') + '</th></tr></thead><tbody>';
     for (const g of groups)
     {
         h += '<tr class="grp"><td colspan="3">' + esc(g) + '</td></tr>';
         for (const m of cat.modules.filter((x) => x.group === g))
-            h += '<tr><td><a href="#' + slug(m.id) + '">' + esc(m.title) + '</a></td><td class="' + (m.on ? 'on' : 'off') + '">' + (m.on ? 'on' : 'off') + '</td><td>' + esc(m.description) + '</td></tr>';
+            h += '<tr><td><a href="#' + slug(m.id) + '">' + esc(m.title) + '</a></td><td class="' + (m.on ? 'on' : 'off') + '">' + (m.on ? T('ui.on', 'on') : T('ui.off', 'off')) + '</td><td>' + esc(T('card.' + m.id + '.description', m.description)) + '</td></tr>';
     }
     return h + '</tbody></table>';
 }
 
 // ---- part 1, by hand: what it is, how to put it in, what to switch on
-const dummies = `
+const fill = (t) => t.replace(/\{\{on\}\}/g, on.length).replace(/\{\{off\}\}/g, off.length).replace(/\{\{table\}\}/g, table());
+const dummies = fill(F('part1.html', `
 <p class="lead">This part is for everyone: what Next Gen does, how to put it in and what to switch on. Part 3 has a page for
 every card in the same plain words; Part 4 explains how each one works, with the math.</p>
 <h2 id="p1-what">What Next Gen is</h2>
@@ -75,15 +111,15 @@ an older version is updated in place. The window shows what is installed, so a c
 unticked; <b>Defaults</b> ticks every card as it comes.</p>
 
 <h2 id="p1-switch">What to switch on</h2>
-<p><b>Defaults</b> gives you the recommended set: the ${on.length} cards marked "on" in the table below. Start with it
+<p><b>Defaults</b> gives you the recommended set: the {{on}} cards marked "on" in the table below. Start with it
 and play for a while.</p>
-<p>The ${off.length} cards that are off by default are off for a reason: they are experimental, a matter of taste, or they
+<p>The {{off}} cards that are off by default are off for a reason: they are experimental, a matter of taste, or they
 cost more frame rate. Each has its own page in Part 3 that says what it does, what you will notice and what it costs.
 Switch one on, click Apply, and look in the game. With SnowRunner Shadows in, <b>F8</b> switches every shader effect off
 and on, so you can compare from the same spot.</p>
 <p>Some cards have rows of buttons: a resolution, a strength, or which maps a change applies to. The values a card starts
 with are the recommended ones. Part 3 lists every row with its values.</p>
-${table()}
+{{table}}
 
 <h2 id="p1-change">Change your mind, or take it all out</h2>
 <p>Tick or untick cards and click <b>Apply</b> again: the program builds the files for exactly what is ticked, every time
@@ -107,35 +143,35 @@ modded state back. <b>Leave it out</b>: that file and its cards stay as they are
 found and each step it took. In the result window, <b>Show the log</b> opens that folder. Send the file along when you
 report a problem.</p>
 <p>Support, questions and talk about the mod: the channel on <a href="https://discord.com/invite/MssDb2Pvcj">EnthusiastRunner's
-Discord</a>, with thanks to EnthusiastRunner for it.</p>`;
+Discord</a>, with thanks to EnthusiastRunner for it.</p>`));
 
 // ---- part 2: the window, from the program's own "How it works"
-const installer = '<p class="lead">' + esc(cat.installer.summary) + '</p>' + cat.installer.sections.map((s) => '<h3>' + esc(s.heading) + '</h3><p>' + esc(s.text) + '</p>').join('');
+const installer = '<p class="lead">' + esc(T('installer.summary', cat.installer.summary)) + '</p>' + cat.installer.sections.map((s, i) => '<h3>' + esc(T('installer.' + i + '.heading', s.heading)) + '</h3><p>' + esc(T('installer.' + i + '.text', s.text)) + '</p>').join('');
 
 // ---- part 3: every card, from the program's own texts
 function card(m)
 {
     let h = '<section class="card" id="' + slug(m.id) + '"><h3>' + esc(m.title) + '</h3>';
     const deep = (DEEP[m.id] || []).filter((id) => techHtml.includes('id="' + id + '"'));
-    h += '<p class="meta">' + esc(cap(m.category)) + ' &middot; ' + (m.on ? 'on by default' : 'off by default') + (m.requires.length ? ' &middot; needs ' + m.requires.map((r) => '<a href="#' + slug(r) + '">' + esc(titleOf(r)) + '</a>').join(', ') : '') +
-        (deep.length ? ' &middot; in depth: ' + deep.map((id) => '<a href="#' + id + '">' + esc((techHtml.match(new RegExp('<h2 id="' + id + '">([^<]+)<')) || [])[1] || id) + '</a>').join(', ') : '') + '</p>';
-    h += '<p class="lead">' + esc(m.description) + '</p>';
+    h += '<p class="meta">' + esc(cap(m.category)) + ' &middot; ' + (m.on ? T('ui.onbydefault', 'on by default') : T('ui.offbydefault', 'off by default')) + (m.requires.length ? ' &middot; ' + T('ui.needs', 'needs') + ' ' + m.requires.map((r) => '<a href="#' + slug(r) + '">' + esc(titleOf(r)) + '</a>').join(', ') : '') +
+        (deep.length ? ' &middot; ' + T('ui.indepth', 'in depth:') + ' ' + deep.map((id) => '<a href="#' + id + '">' + esc((techHtml.match(new RegExp('<h2 id="' + id + '">([^<]+)<')) || [])[1] || id) + '</a>').join(', ') : '') + '</p>';
+    h += '<p class="lead">' + esc(T('card.' + m.id + '.description', m.description)) + '</p>';
     if (m.options.length)
     {
-        h += '<table class="rows"><thead><tr><th>Row</th><th>Values (the default in bold)</th></tr></thead><tbody>';
+        h += '<table class="rows"><thead><tr><th>' + T('ui.row', 'Row') + '</th><th>' + T('ui.values', 'Values (the default in bold)') + '</th></tr></thead><tbody>';
         for (const o of m.options) h += '<tr><td>' + esc(o.name) + '</td><td>' + o.labels.map((l, i) => (i === o.default ? '<b>' + esc(l) + '</b>' : esc(l))).join(' &middot; ') + '</td></tr>';
         h += '</tbody></table>';
     }
-    for (const s of m.help) h += '<h4>' + esc(s.heading) + '</h4><p>' + esc(s.text) + '</p>';
+    m.help.forEach((s, i) => { h += '<h4>' + esc(T('heading.' + s.heading, s.heading)) + '</h4><p>' + esc(T('card.' + m.id + '.help.' + i, s.text)) + '</p>'; });
     return h + '</section>';
 }
 const cards = groups.map((g) => '<h2 class="group" id="' + slug('g ' + g) + '">' + esc(g) + '</h2>' + cat.modules.filter((m) => m.group === g).map(card).join('')).join('');
-const techIntro = '<p class="lead">This part explains how each card works: the technique from first principles, the formulas and numbers it uses, ' +
+const techIntro = F('intro.html', '<p class="lead">This part explains how each card works: the technique from first principles, the formulas and numbers it uses, ' +
     'the passes and buffers it reads and writes, what the patch changes in the game and why, what it costs and where it falls short. ' +
-    'The numbers are the ones in the code; where a knob of SnowRunnerShadows.ini sets one, its name is given.</p>';
+    'The numbers are the ones in the code; where a knob of SnowRunnerShadows.ini sets one, its name is given.</p>');
 
 // ---- part 4: the files
-const files = `
+const files = F('files.html', `
 <p>All under the game's <b>preload\\paks\\client</b> folder, and only those that a ticked card needs:</p>
 <table class="rows"><thead><tr><th>File</th><th>What Next Gen puts in it</th></tr></thead><tbody>
 <tr><td>shader.pak</td><td>the shader modules: shadows, occlusion, light, reflections, water, fog, smoke, the tonemap</td></tr>
@@ -149,21 +185,21 @@ const files = `
 <b>SnowRunnerShadows.ini</b>. Another mod's hid.dll stays loaded as hid_chain.dll.</p>
 <p>The copies of the original files live in <b>%LOCALAPPDATA%\\SnowRunnerNextGen</b>. Every new file is written next to the
 old one, read back and checked before it takes the old one's place. Next to the paks the program leaves a small note,
-<b>SnowRunnerNextGen.json</b>, naming the files that hold its changes; Restore originals takes it away.</p>`;
+<b>SnowRunnerNextGen.json</b>, naming the files that hold its changes; Restore originals takes it away.</p>`);
 
-const credits = `
+const credits = F('credits.html', `
 <p>Next Gen is free software under the GNU General Public License, version 3 (the file LICENSE in the download). The
 methods and code it builds on are named in <b>THIRD_PARTY_NOTICES.md</b>, with their authors and licences, and each card's
 page above credits the work it uses. The game's files remain Saber Interactive's: Next Gen changes them on your PC and
-ships none of them, apart from the few textures the notices name.</p>`;
+ships none of them, apart from the few textures the notices name.</p>`);
 
 const parts = [
-    ['p1', 'Part 1. Next Gen for dummies', dummies, [['p1-what', 'What Next Gen is'], ['p1-need', 'What you need'], ['p1-install', 'Put it in, step by step'], ['p1-switch', 'What to switch on'], ['p1-change', 'Change your mind, or take it all out'], ['p1-update', 'After a game update'], ['p1-mods', 'Other mods'], ['p1-wrong', 'When something goes wrong']]],
-    ['p2', 'Part 2. The window', installer, []],
-    ['p3', 'Part 3. Every card at a glance', cards, groups.map((g) => [slug('g ' + g), g])],
-    ['p4', 'Part 4. How it works, in depth', techIntro + '<div class="tech">' + techHtml + '</div>', techToc],
-    ['p5', 'Part 5. What it changes on your PC', files, []],
-    ['p6', 'Part 6. Licence and credits', credits, []],
+    ['p1', T('part.p1', 'Part 1. Next Gen for dummies'), dummies, [['p1-what', 'What Next Gen is'], ['p1-need', 'What you need'], ['p1-install', 'Put it in, step by step'], ['p1-switch', 'What to switch on'], ['p1-change', 'Change your mind, or take it all out'], ['p1-update', 'After a game update'], ['p1-mods', 'Other mods'], ['p1-wrong', 'When something goes wrong']].map(([id, t]) => [id, T('toc.' + id, t)])],
+    ['p2', T('part.p2', 'Part 2. The window'), installer, []],
+    ['p3', T('part.p3', 'Part 3. Every card at a glance'), cards, groups.map((g) => [slug('g ' + g), g])],
+    ['p4', T('part.p4', 'Part 4. How it works, in depth'), techIntro + '<div class="tech">' + techHtml + '</div>', techToc],
+    ['p5', T('part.p5', 'Part 5. What it changes on your PC'), files, []],
+    ['p6', T('part.p6', 'Part 6. Licence and credits'), credits, []],
 ];
 const toc = '<ol class="toc">' + parts.map(([id, t, , subs]) => '<li><a href="#' + id + '">' + esc(t) + '</a>' + (subs.length ? '<ol>' + subs.map(([sid, st]) => '<li><a href="#' + sid + '">' + esc(st) + '</a></li>').join('') + '</ol>' : '') + '</li>').join('') + '</ol>';
 
@@ -201,14 +237,37 @@ figure { margin: 10pt 0 12pt; page-break-inside: avoid; } figure svg { width: 10
 figcaption { font-size: 9pt; color: #6b7883; margin-top: 3pt; }
 .tech table, .tech ul, .tech ol { page-break-inside: avoid; }`;
 
-const html = '<!doctype html><html><head><meta charset="utf-8"><title>Next Gen Graphics: the guide</title><style>' + css + '</style></head><body>' +
-    '<div class="cover"><h1>Next Gen Graphics</h1><div class="sub">for SnowRunner (SnowRunner Next Gen before October 2026). The guide: for beginners, and every card in depth</div>' +
-    '<div class="ed">For Next Gen 1.0.2 and the changes since. The card texts are the program\'s own, from the build of ' + esc(cat.built) + '.<br>' + cat.modules.length + ' cards, ' + cat.modules.reduce((a, m) => a + m.options.length, 0) + ' rows of options.</div></div>' +
-    '<div class="partpage"><h2 class="part">Contents</h2>' + toc + '</div>' +
+const nRows = cat.modules.reduce((a, m) => a + m.options.length, 0);
+const html = '<!doctype html><html' + (RU ? ' lang="ru"' : '') + '><head><meta charset="utf-8"><title>' + esc(T('ui.title', 'Next Gen Graphics: the guide')) + '</title><style>' + css + '</style></head><body>' +
+    '<div class="cover"><h1>Next Gen Graphics</h1><div class="sub">' + esc(T('ui.sub', 'for SnowRunner (SnowRunner Next Gen before October 2026). The guide: for beginners, and every card in depth')) + '</div>' +
+    '<div class="ed">' + esc(T('ui.edition', 'For Next Gen 1.0.2 and the changes since. The card texts are the program\'s own, from the build of {built}.').replace('{built}', cat.built)) + '<br>' +
+    esc(T('ui.count', '{cards} cards, {rows} rows of options.').replace('{cards}', cat.modules.length).replace('{rows}', nRows)) + '</div></div>' +
+    '<div class="partpage"><h2 class="part">' + T('ui.contents', 'Contents') + '</h2>' + toc + '</div>' +
     parts.map(([id, t, body]) => '<div class="partpage"><h2 class="part" id="' + id + '">' + esc(t) + '</h2>' + body + '</div>').join('') + '</body></html>';
 
+if (PACK)
+{
+    // the translator's pack: every English text, the Russian kept where it is still current
+    fs.mkdirSync(path.join(ruDir, 'tech'), { recursive: true });
+    const out = {};
+    for (const [k, en] of Object.entries(used)) out[k] = { en, ru: strings[k] && strings[k].en === en ? strings[k].ru : '' };
+    fs.writeFileSync(path.join(ruDir, 'strings.json'), JSON.stringify(out, null, 1) + '\n');
+    const todo = [];
+    for (const [name, en] of Object.entries(usedFiles))
+        if (!fs.existsSync(path.join(ruDir, name)) || sources[name] !== sha(en))         {
+            // a Russian file of an older English goes aside as .old, so the build sees none until the new one is in
+            const ru = path.join(ruDir, name);
+            if (fs.existsSync(ru)) fs.renameSync(ru, ru + '.old');
+            fs.writeFileSync(ru + '.en', en); todo.push(name); sources[name] = sha(en);
+        }
+    // the hashes of the English handed out: a Russian file made from it counts as current until that English changes
+    fs.writeFileSync(path.join(ruDir, 'sources.json'), JSON.stringify(sources, null, 1) + '\n');
+    console.log('ru\\strings.json: ' + Object.keys(out).length + ' texts, ' + Object.values(out).filter((v) => !v.ru).length + ' to translate; files to translate (the English beside each as .en): ' + (todo.join(', ') || 'none'));
+    process.exit(0);
+}
+if (RU && stale.length) throw new Error('the Russian guide is not up to date:\n  ' + stale.join('\n  '));
 if (/\u2014/.test(html)) throw new Error('an em dash is in the text');
-const htmlFile = path.join(here, 'guide.html'), pdf = path.join(here, 'SnowRunner_Next_Gen_Guide.pdf');
+const htmlFile = path.join(here, RU ? 'guide_ru.html' : 'guide.html'), pdf = path.join(here, RU ? 'SnowRunner_Next_Gen_Guide_RU.pdf' : 'SnowRunner_Next_Gen_Guide.pdf');
 fs.writeFileSync(htmlFile, html);
 execFileSync(EDGE, ['--headless=new', '--disable-gpu', '--no-pdf-header-footer', '--print-to-pdf-no-header', '--print-to-pdf=' + pdf, 'file:///' + htmlFile.replace(/\\/g, '/')], { stdio: 'ignore', timeout: 120000 });
 console.log(pdf + ': ' + fs.statSync(pdf).size + ' bytes; ' + cat.modules.length + ' cards');
