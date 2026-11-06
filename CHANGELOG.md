@@ -10,6 +10,7 @@
 - Scenery detail works with mesh mods. When another mod changed shared.pak over Next Gen's build (RLM's trucks and rocks, put in with WinRAR), "Take it as the original" kept the whole file, Next Gen's raised switches included: Restore then left them in the game, and unticking Scenery detail no longer took them out. Next Gen's own meshes now go back to the game's bytes first, and the other mod's meshes stay. Restore asks about a shared.pak changed since the last Apply too, and puts it back without Next Gen's meshes, the other mod's kept.
 - initial.pak taken as the original leaves out the files Next Gen added to it too (the fireflies' and the pollen's own types, the days' class files): before, they stayed in the new original and outlived a Restore. Entries WinRAR marks with a UTF-8 name (RLM's gameplay-mode folders) no longer stop the read-back after a build.
 - A game started during an Apply or a Restore is named as the reason it stopped. Windows refuses to replace a pak the game holds, and the window showed the tool's own line ("fidelity_bundle.js install failed: EPERM: operation not permitted, rename ..."). It now says SnowRunner was started while it ran, to close the game and run it again, and that the parts already done stay in; the tool's line stays in the log.
+- The guide in Russian too, docs/SnowRunner_Next_Gen_Guide_RU.pdf: every part, the card texts and the chapters in depth; the names of the cards, rows, values and buttons stay as the window shows them. The English guide names the Skies card by its name (it said Winter skies).
 
 ## [1.1.1]
 

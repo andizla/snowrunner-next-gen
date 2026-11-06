@@ -1,942 +1,942 @@
 {
  "ui.card": {
   "en": "Card",
-  "ru": ""
+  "ru": "Карточка"
  },
  "ui.default": {
   "en": "Default",
-  "ru": ""
+  "ru": "По умолчанию"
  },
  "ui.whatitdoes": {
   "en": "What it does",
-  "ru": ""
+  "ru": "Что делает"
  },
  "ui.on": {
   "en": "on",
-  "ru": ""
+  "ru": "вкл."
  },
  "card.shadows.description": {
   "en": "Hands the reflections and the bounce light the image they need, and can draw the sun's shadow texture at a higher resolution for finer shadow detail: 1x keeps the game's own size.",
-  "ru": ""
+  "ru": "Передаёт отражениям и переотражённому свету нужное им изображение сцены и может рисовать солнечную текстуру теней в большем разрешении, чтобы тени были детальнее: 1x оставляет игровой размер."
  },
  "card.edges.description": {
   "en": "Rebuilt straight shadow edges, with no texel stairs, at any resolution.",
-  "ru": ""
+  "ru": "Заново построенные прямые края теней, без лесенки из текселей, при любом разрешении."
  },
  "card.blocker.description": {
   "en": "Shadows sharp at the contact and softer the farther they fall from what casts them.",
-  "ru": ""
+  "ru": "Тени резкие в месте контакта и тем мягче, чем дальше они падают от предмета, который их отбрасывает."
  },
  "card.contact.description": {
   "en": "Fine sun shadows traced on screen where things touch or overlap, in detail the shadow texture is too coarse to hold.",
-  "ru": ""
+  "ru": "Мелкие солнечные тени, которые трассируются по экрану там, где предметы соприкасаются или перекрываются: для таких деталей текстура теней слишком грубая."
  },
  "card.headshadow.description": {
   "en": "Your headlights cast shadows: posts, trees and rocks block the beam instead of letting it light what stands behind them.",
-  "ru": ""
+  "ru": "Ваши фары отбрасывают тени: столбы, деревья и камни перекрывают луч, а не дают ему осветить то, что стоит за ними."
  },
  "card.gtao.description": {
   "en": "Ground-truth ambient occlusion instead of the game's SSAO: soft contact shadows in corners, under trucks and in wheel arches.",
-  "ru": ""
+  "ru": "Фоновое затенение GTAO (ground-truth ambient occlusion) вместо игрового SSAO: мягкие контактные тени в углах, под грузовиками и в колёсных арках."
  },
  "card.aofar.description": {
   "en": "GTAO's search reaches on to 6 metres, gently: soft shade under trucks, roofs and tree crowns, with the contact shadows unchanged.",
-  "ru": ""
+  "ru": "Поиск GTAO продолжается до 6 м, но затеняет мягко: лёгкая тень под грузовиками, крышами и кронами деревьев, а контактные тени не меняются."
  },
  "card.ambient.description": {
   "en": "The fill light takes the sky's colour instead of a flat grey.",
-  "ru": ""
+  "ru": "Заполняющий свет берёт цвет неба вместо ровного серого."
  },
  "card.fill.description": {
   "en": "Less of the flat light that fills in shade: shaded sides, the insides of trees and trucks in shadow get darker, while sunlit parts and the sky stay as they are.",
-  "ru": ""
+  "ru": "Меньше ровного света, заполняющего тень: затенённые стороны, кроны деревьев изнутри и грузовики в тени становятся темнее, а освещённые солнцем места и небо остаются как есть."
  },
  "ui.off": {
   "en": "off",
-  "ru": ""
+  "ru": "выкл."
  },
  "card.gi.description": {
   "en": "Sunlit ground and paint light up what stands next to them, in their colour: under trucks, in wheel arches, at the feet of walls. Experimental: in places it comes out too strong.",
-  "ru": ""
+  "ru": "Освещённые солнцем земля и краска подсвечивают своим цветом то, что стоит рядом: под грузовиками, в колёсных арках, у подножия стен. Экспериментальная карточка: местами свет получается слишком сильным."
  },
  "card.objrefl.description": {
   "en": "Paint, glass and chrome mirror the scene around them instead of a painted sky.",
-  "ru": ""
+  "ru": "Краска, стёкла и хром отражают окружающую сцену, а не нарисованное небо."
  },
  "card.headglow.description": {
   "en": "At night, paint that finds nothing on screen to reflect shows the warm light of the headlights.",
-  "ru": ""
+  "ru": "Ночью краска, которой на экране нечего отразить, показывает тёплый свет фар."
  },
  "card.water.description": {
   "en": "Banks, trees and trucks mirrored in rivers, mud, lakes, seas and puddles, not just the sky; the water's colour gives way to the reflection at shallow angles.",
-  "ru": ""
+  "ru": "В реках, грязи, озёрах, морях и лужах отражаются берега, деревья и грузовики, а не только небо; под пологим углом цвет воды уступает место отражению."
  },
  "card.puddles.description": {
   "en": "Wet mud and glossy ground mirror the scene around them: sharp in shiny patches, soft on rough mud.",
-  "ru": ""
+  "ru": "Мокрая грязь и глянцевая земля отражают окружающую сцену: чётко на блестящих участках, мягко на шероховатой грязи."
  },
  "card.rivertint.description": {
   "en": "Deeper water tints teal or brown from its own colour instead of fading grey.",
-  "ru": ""
+  "ru": "Глубокая вода окрашивается своим цветом в бирюзовый или бурый, а не выцветает в серый."
  },
  "card.crestglow.description": {
   "en": "River waves between you and a low sun light up in the water's own colour, wherever the sun really reaches them.",
-  "ru": ""
+  "ru": "Речные волны между вами и низким солнцем светятся цветом самой воды там, где солнце действительно до них достаёт."
  },
  "card.glare.description": {
   "en": "Tamer headlight shine on wet ground and puddles, with no long bright band across them.",
-  "ru": ""
+  "ru": "Блеск фар на мокрой земле и в лужах спокойнее, без длинной яркой полосы поперёк."
  },
  "card.cubes.description": {
   "en": "The painted skies that paint, glass and chrome mirror, and that Sky ambient and Bounce light read the sky's and the ground's colour from, made anew from photographs: 25 cubes from 21 panoramas, for every region's clear days, weather days, dusk, dawn and night. Each keeps the brightness of the game's own cube, and the snow regions get snow.",
-  "ru": ""
+  "ru": "Нарисованные небеса, которые отражают краска, стёкла и хром и из которых Sky ambient и Bounce light берут цвет неба и земли, сделаны заново по фотографиям: 25 кубмап из 21 панорамы, для ясных и непогожих дней, сумерек, рассвета и ночи каждого региона. Каждая сохраняет яркость игровой кубмапы, а в снежных регионах на земле снег."
  },
  "card.fog.description": {
   "en": "No banding and a glow toward the sun. Sun shafts through trees and dust can be switched on: they are experimental and also show over your truck and other things close to the camera.",
-  "ru": ""
+  "ru": "Без полос и со свечением в сторону солнца. Можно включить Sun shafts, солнечные лучи сквозь деревья и пыль: они экспериментальные и видны также поверх вашего грузовика и других предметов рядом с камерой."
  },
  "card.weather.description": {
   "en": "More of the game's own weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out (off by default), fireflies at night and pollen by day.",
-  "ru": ""
+  "ru": "Больше собственной погоды игры: движущиеся тени облаков на всех картах, дожди, которые то усиливаются, то стихают, морось вечером и ночью, облака на горизонте, дождь, видимый дальше (по умолчанию выключен), светлячки ночью и пыльца днём."
  },
  "card.maps.description": {
   "en": "Four regions have no days of their own and show another region's. Maine shows two snow regions': snow in the air and winter light on a map without snow. This gives each of their maps days that fit it, chosen map by map, with a row for each region.",
-  "ru": ""
+  "ru": "В четырёх регионах нет своих дней, и они показывают дни другого региона. Мэн показывает дни двух снежных регионов: снег в воздухе и зимний свет на карте без снега. Карточка даёт каждой их карте подходящие дни, подобранные для каждой карты отдельно (map by map), со строкой для каждого региона."
  },
  "card.smoke.description": {
   "en": "Exhaust and other smoke glows when the sun is behind it.",
-  "ru": ""
+  "ru": "Выхлоп и другой дым светятся, когда солнце позади них."
  },
  "card.smokeshade.description": {
   "en": "Smoke and dust puffs get a lit side and a shaded side, and sprites fade more softly where they meet the ground.",
-  "ru": ""
+  "ru": "У клубов дыма и пыли появляются освещённая и затенённая стороны, а спрайты мягче растворяются там, где касаются земли."
  },
  "card.particles.description": {
   "en": "The game's smoke, dust, spray and spark textures at twice their size, so particles stay crisp up close.",
-  "ru": ""
+  "ru": "Игровые текстуры дыма, пыли, брызг и искр в удвоенном размере, чтобы частицы оставались чёткими вблизи."
  },
  "card.debris.description": {
   "en": "Leaves, grass, twigs and dirt thrown up by the wheels stay on the ground for half a minute and get pushed by the tyres, instead of vanishing after four seconds. Mud, water and snow splashes throw more drops that lie longer and leave more marks on the truck. Snow spray hangs in the air. Exhaust and dust hang longer too.",
-  "ru": ""
+  "ru": "Листья, трава, ветки и грязь из-под колёс полминуты лежат на земле, и шины их толкают, а не исчезают через четыре секунды. Брызги грязи, воды и снега дают больше капель, которые дольше лежат и оставляют больше следов на грузовике. Снежная пыль висит в воздухе. Выхлоп и пыль тоже держатся дольше."
  },
  "card.sky.description": {
   "en": "NASA's star map in place of the game's star texture: the real sky's stars as fine points, with the glow of the Milky Way.",
-  "ru": ""
+  "ru": "Звёздная карта NASA вместо игровой текстуры звёзд: звёзды настоящего неба тонкими точками и свечение Млечного Пути."
  },
  "card.skies.description": {
   "en": "The painted skies of every region made anew from photographs of real skies: 49 of the game's sky domes, cloud bands and night layers, each at its own size and brightness, the photograph's sun taken out so the game's sun is the only one. The aurora is green, as a real one is. The clouds still drift.",
-  "ru": ""
+  "ru": "Нарисованные небеса всех регионов сделаны заново по фотографиям настоящего неба: 49 игровых небесных куполов, полос облаков и ночных слоёв, каждый со своим размером и яркостью; солнце с фотографий убрано, так что единственное солнце здесь игровое. Северное сияние зелёное, как настоящее. Облака по-прежнему плывут."
  },
  "card.stars.description": {
   "en": "The stars of the night sky drawn brighter, so they stand out against the dark.",
-  "ru": ""
+  "ru": "Звёзды ночного неба ярче и лучше видны на тёмном фоне."
  },
  "card.tonemap.description": {
   "en": "Stronger contrast and a lighter bloom.",
-  "ru": ""
+  "ru": "Сильнее контраст и слабее блум."
  },
  "card.bloom.description": {
   "en": "No haze from bright snow and sky.",
-  "ru": ""
+  "ru": "Никакой дымки от яркого снега и неба."
  },
  "card.grade.description": {
   "en": "Colour closer to a photo: greens, autumn leaves and the violet haze less loud, whites a little lower, no lens dirt over the sky. Built into the game's own colour grading.",
-  "ru": ""
+  "ru": "Цвет ближе к фотографии: зелень, осенняя листва и фиолетовая дымка спокойнее, белое чуть темнее, нет грязи на объективе поверх неба. Встроено в собственную цветокоррекцию игры."
  },
  "card.scenery.description": {
   "en": "Scenery keeps its full detail farther out, so less pops in while you drive. All meshes makes shared.pak larger than 2 GB. Shown far away: plants (trees, bushes, rocks, twigs), or everything, no longer vanish at a set distance. Small shadows: what casts none, or loses it a few metres away, gets one.",
-  "ru": ""
+  "ru": "Объекты окружения дольше сохраняют полную детализацию, так что на ходу меньше что-то меняется на глазах. All meshes делает shared.pak больше 2 ГБ. Shown far away: при plants растения (деревья, кусты, камни, ветки), при everything вообще всё больше не исчезает на заданном расстоянии. Small shadows: то, что не отбрасывает тень или теряет её в нескольких метрах, получает тень."
  },
  "card.grass.description": {
   "en": "Grass drawn farther out. Costs frame rate in grassy areas.",
-  "ru": ""
+  "ru": "Трава видна дальше. Снижает частоту кадров там, где много травы."
  },
  "card.logos.description": {
   "en": "NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map.",
-  "ru": ""
+  "ru": "NEXT GEN под логотипом игры на титульном экране, первом экране загрузки, в главном меню, меню паузы и на карте."
  },
  "installer.summary": {
   "en": "Next Gen Graphics installs, changes and removes the graphics modules of this project, all from one window.",
-  "ru": ""
+  "ru": "Next Gen Graphics устанавливает, меняет и удаляет графические модули этого проекта, всё из одного окна."
  },
  "installer.0.heading": {
   "en": "Pick",
-  "ru": ""
+  "ru": "Выбор"
  },
  "installer.0.text": {
   "en": "Each card is one module. Ticking a module that needs another ticks that one too, and unticking one unticks what needs it. The (?) on a card tells you what it does. Defaults picks the recommended set.",
-  "ru": ""
+  "ru": "Каждая карточка это один модуль. Если отметить модуль, которому нужен другой, отметится и тот, а если снять отметку с модуля, она снимется и с тех, кому он нужен. Кнопка (?) на карточке рассказывает, что она делает. Defaults выбирает рекомендуемый набор."
  },
  "installer.1.heading": {
   "en": "Apply",
-  "ru": ""
+  "ru": "Apply"
  },
  "installer.1.text": {
   "en": "Builds the game's files for exactly what is ticked, from the game's original files, and installs them. To take a module out, untick it and apply again.",
-  "ru": ""
+  "ru": "Собирает файлы игры ровно под то, что отмечено, из оригинальных файлов игры и устанавливает их. Чтобы убрать модуль, снимите с него отметку и снова нажмите Apply."
  },
  "installer.2.heading": {
   "en": "Restore originals",
-  "ru": ""
+  "ru": "Restore originals"
  },
  "installer.2.text": {
   "en": "Puts the files back as they were before Next Gen Graphics changed them and takes SnowRunner Shadows out.",
-  "ru": ""
+  "ru": "Возвращает файлы в то состояние, в каком они были до изменений Next Gen Graphics, и удаляет SnowRunner Shadows."
  },
  "installer.3.heading": {
   "en": "Backups",
-  "ru": ""
+  "ru": "Резервные копии"
  },
  "installer.3.text": {
   "en": "Before the first change, shader.pak, shared.pak, initial.pak, boot.pak and gfx.pak are kept as they are in %LOCALAPPDATA%\\SnowRunnerNextGen, and every build starts from those copies. Next to the game's files the program leaves a small note, SnowRunnerNextGen.json, naming the ones that hold its changes. Should the kept copies ever be lost (a new Windows install, say), the note lets it see that those files are not the game's own: it then changes nothing and asks you to have the store check the game's files first.",
-  "ru": ""
+  "ru": "Перед первым изменением shader.pak, shared.pak, initial.pak, boot.pak и gfx.pak сохраняются как есть в %LOCALAPPDATA%\\SnowRunnerNextGen, и каждая сборка начинается с этих копий. Рядом с файлами игры программа оставляет небольшую заметку, SnowRunnerNextGen.json, где названы файлы с её изменениями. Если сохранённые копии когда-нибудь пропадут (например, после переустановки Windows), по заметке программа поймёт, что эти файлы не оригинальные: тогда она ничего не меняет и просит сначала проверить файлы игры через магазин."
  },
  "installer.4.heading": {
   "en": "Other mods",
-  "ru": ""
+  "ru": "Другие моды"
  },
  "installer.4.text": {
   "en": "When another mod (a texture pack, say) or a game update has changed one of those files since, Apply and Restore ask first. Take it as it is now as the original, and Next Gen Graphics writes its changes over it; Restore then puts it back in that modded state, the other mod's changes included, not the game's own file. Or leave it out: the file and its modules stay as they are.",
-  "ru": ""
+  "ru": "Если другой мод (например, текстурпак) или обновление игры с тех пор изменили один из этих файлов, Apply и Restore сначала спрашивают. Можно принять файл в нынешнем виде за оригинал (Take it as the original), и Next Gen Graphics запишет свои изменения поверх него; тогда Restore вернёт его в это модифицированное состояние, вместе с изменениями другого мода, а не в оригинальный файл игры. Или можно его пропустить (Leave it out): файл и его модули останутся как есть."
  },
  "installer.5.heading": {
   "en": "Before you start",
-  "ru": ""
+  "ru": "Перед началом"
  },
  "installer.5.text": {
   "en": "Close the game: its files cannot be changed while it runs.",
-  "ru": ""
+  "ru": "Закройте игру: пока она запущена, её файлы нельзя изменить."
  },
  "installer.6.heading": {
   "en": "When something goes wrong",
-  "ru": ""
+  "ru": "Если что-то пошло не так"
  },
  "installer.6.text": {
   "en": "Every Apply and Restore is written to install.log in %LOCALAPPDATA%\\SnowRunnerNextGen: what the program found and each step it took. After a stop or a note, Show the log in the result window opens that folder. Send the file along when you report a problem.",
-  "ru": ""
+  "ru": "Каждый запуск Apply и Restore записывается в install.log в %LOCALAPPDATA%\\SnowRunnerNextGen: что программа нашла и какой шаг сделала. После остановки или замечания кнопка Show the log в окне результата открывает эту папку. Приложите этот файл, когда сообщаете о проблеме."
  },
  "installer.7.heading": {
   "en": "Comparing in the game",
-  "ru": ""
+  "ru": "Сравнение в игре"
  },
  "installer.7.text": {
   "en": "With SnowRunner Shadows installed: F8 switches every shader effect off and on, F4 the contact shadows, F5 the ambient occlusion pass between half and full size, F6 the reflection pass, F9 the reflections on wet ground, F10 the bounce light, and F11 GTAO against the game's SSAO. The first press of F8 or F11 takes a moment: the game's own shaders are made then. The keys do nothing while Alt, Ctrl or Shift is held. With Next Gen Gameplay or Next Gen Tire Inflation installed, the same switches are on a Graphics tab next to theirs in their NEXT GEN menu (F2), and these keys stay silent, as other mods use some of them; KeysWithMenu=1 in SnowRunnerShadows.ini keeps them. Next Gen Graphics alone has no menu, and its keys work as before.",
-  "ru": ""
+  "ru": "Когда установлен SnowRunner Shadows: F8 выключает и включает все шейдерные эффекты, F4 контактные тени, F5 переключает проход фонового затенения между половинным и полным размером, F6 включает и выключает проход отражений, F9 отражения на мокрой земле, F10 переотражённый свет, а F11 переключает между GTAO и игровым SSAO. Первое нажатие F8 или F11 занимает какое-то время: в этот момент создаются собственные шейдеры игры. Пока зажаты Alt, Ctrl или Shift, клавиши ничего не делают. Если установлен Next Gen Gameplay или Next Gen Tire Inflation, те же переключатели находятся на вкладке Graphics рядом с их вкладками в меню NEXT GEN (F2), а эти клавиши молчат, потому что часть из них заняты другими модами; KeysWithMenu=1 в SnowRunnerShadows.ini оставляет их рабочими. Если установлен только Next Gen Graphics, меню нет, и клавиши работают как раньше."
  },
  "ui.onbydefault": {
   "en": "on by default",
-  "ru": ""
+  "ru": "включена по умолчанию"
  },
  "ui.indepth": {
   "en": "in depth:",
-  "ru": ""
+  "ru": "подробно:"
  },
  "ui.row": {
   "en": "Row",
-  "ru": ""
+  "ru": "Строка"
  },
  "ui.values": {
   "en": "Values (the default in bold)",
-  "ru": ""
+  "ru": "Значения (по умолчанию выделено жирным)"
  },
  "heading.What it does": {
   "en": "What it does",
-  "ru": ""
+  "ru": "Что делает"
  },
  "card.shadows.help.0": {
   "en": "The sun's shadows are drawn into one shadow texture before every frame. This add-on hands the scene's picture to the bounce light and the reflections, which is why they need it, and can make the shadow texture larger, up to 3.5 times in each direction, so every shadow is drawn with more pixels. It is one small file next to the game (hid.dll) and changes none of the game's own files.",
-  "ru": ""
+  "ru": "Солнечные тени перед каждым кадром рисуются в одну текстуру теней. Это дополнение передаёт изображение сцены переотражённому свету и отражениям, поэтому они без него не работают, и может увеличить текстуру теней, до 3.5 раза по каждой стороне, чтобы каждая тень рисовалась большим числом пикселей. Это один небольшой файл рядом с игрой (hid.dll), и он не меняет ни одного файла самой игры."
  },
  "heading.What you will notice": {
   "en": "What you will notice",
-  "ru": ""
+  "ru": "Что вы заметите"
  },
  "card.shadows.help.1": {
   "en": "At 2x and above: finer shadow detail on trees, fences, cranes and trucks, also some way off.",
-  "ru": ""
+  "ru": "На 2x и выше: детальнее тени деревьев, заборов, кранов и грузовиков, в том числе вдали."
  },
  "heading.What it costs": {
   "en": "What it costs",
-  "ru": ""
+  "ru": "Чего стоит"
  },
  "card.shadows.help.2": {
   "en": "At 1x the shadow texture costs nothing extra. A larger one costs graphics time while the shadows are drawn, and video memory (a few hundred MB at 3.5x). Measured at 4K on an RTX 4080 with every other module on: 2x 43 fps, 3x 37 fps, 3.5x 33 fps, against 49 fps at the game's own size.",
-  "ru": ""
+  "ru": "На 1x текстура теней ничего не стоит. Увеличенная стоит времени GPU, пока рисуются тени, и видеопамяти (несколько сотен МБ на 3.5x). Замеры в 4K на RTX 4080 со всеми остальными модулями: 2x 43 FPS, 3x 37 FPS, 3.5x 33 FPS против 49 FPS в игровом размере."
  },
  "heading.Options": {
   "en": "Options",
-  "ru": ""
+  "ru": "Настройки"
  },
  "card.shadows.help.3": {
   "en": "Resolution: 1x keeps the game's own shadow texture, and Shadow edges keeps its edges straight; 2x, 3x and 3.5x draw it larger for finer detail, at the frame rates above.\nSelf-shadow fix: keeps the game's shadow bias in step with the larger texture, so steep rock faces do not shadow themselves in patches. Leave it on.",
-  "ru": ""
+  "ru": "Resolution: 1x оставляет игровую текстуру теней, а Shadow edges сохраняет её края прямыми; 2x, 3x и 3.5x рисуют её крупнее ради детализации, с частотой кадров, указанной выше.\nSelf-shadow fix: подстраивает игровое смещение теней (bias) под увеличенную текстуру, чтобы крутые скалы не затеняли сами себя пятнами. Оставьте включённым."
  },
  "heading.Good to know": {
   "en": "Good to know",
-  "ru": ""
+  "ru": "Полезно знать"
  },
  "card.shadows.help.4": {
   "en": "In the game, F8 switches every shader effect of this installer off and on again, for a quick comparison. The larger shadow texture stays.",
-  "ru": ""
+  "ru": "В игре F8 выключает и снова включает все шейдерные эффекты этого установщика для быстрого сравнения. Увеличенная текстура теней остаётся."
  },
  "card.edges.help.0": {
   "en": "The sun's shadow texture has a limited number of texels, so the game draws the edge of a shadow as a staircase of them. Rebuilt edges follows each edge across the texels and draws the straight line they make, so edges come out straight and clean at any resolution, even at the game's own. The 16-tap filter, the earlier method, smooths the edges with 16 samples on an even grid instead.",
-  "ru": ""
+  "ru": "В солнечной текстуре теней ограниченное число текселей, поэтому игра рисует край тени лесенкой из них. Rebuilt edges проходит вдоль каждого края по текселям и рисует прямую линию, которую они образуют, так что края получаются прямыми и чистыми при любом разрешении, даже при игровом. 16-tap filter, прежний метод, вместо этого сглаживает края 16 выборками на равномерной сетке."
  },
  "card.edges.help.1": {
   "en": "Straight, clean edges on the shadows of buildings, trucks, fences and cranes, without the stair pattern.",
-  "ru": ""
+  "ru": "Прямые чистые края у теней зданий, грузовиков, заборов и кранов, без лесенки."
  },
  "card.edges.help.2": {
   "en": "Less than the 16-tap filter: about 0.7 ms per frame faster like for like, measured at 4K on an RTX 4080. Rebuilt edges at 1x ran at 64.8 fps where the 16-tap filter at 2x ran at 59.7.",
-  "ru": ""
+  "ru": "Меньше, чем 16-tap filter: примерно на 0.7 мс на кадр быстрее при равных условиях, замер в 4K на RTX 4080. Rebuilt edges на 1x давали 64.8 FPS, тогда как 16-tap filter на 2x давал 59.7."
  },
  "card.edges.help.3": {
   "en": "Method: rebuilt edges (the default) or the 16-tap filter, one or the other.\nCascade seams: the game draws sun shadows in steps of detail (cascades) that change at set distances, which can show as a line where the shadows turn coarser. Blended dithers the last few percent of each step into the next, so the line no longer shows. It comes with rebuilt edges only.",
-  "ru": ""
+  "ru": "Method: rebuilt edges (по умолчанию) или 16-tap filter, одно из двух.\nCascade seams: игра рисует солнечные тени ступенями детализации (каскадами), которые сменяются на заданных расстояниях, и там, где тени становятся грубее, может быть видна линия. Значение blended дизерингом смешивает последние несколько процентов каждой ступени со следующей, и линии больше не видно. Работает только с rebuilt edges."
  },
  "card.edges.help.4": {
   "en": "Round shadows can come out slightly angular, and very soft shadow ends keep a little of the stair pattern.",
-  "ru": ""
+  "ru": "Круглые тени могут выходить слегка угловатыми, а у очень мягких концов теней остаётся немного лесенки."
  },
  "heading.Credits": {
   "en": "Credits",
-  "ru": ""
+  "ru": "Авторы"
  },
  "card.edges.help.5": {
   "en": "The rebuilt edges follow revectorization-based shadow mapping by Macedo and Apolinário (2016) and shadow map silhouette revectorization by Bondarev (2014).",
-  "ru": ""
+  "ru": "Метод rebuilt edges основан на работах revectorization-based shadow mapping (Macedo и Apolinário, 2016) и shadow map silhouette revectorization (Bondarev, 2014)."
  },
  "card.blocker.help.0": {
   "en": "Real sun shadows are sharp where an object meets the ground and get softer the farther they fall from it. This looks up how far each shadowed point is from what blocks the sun, and softens the edge to match.",
-  "ru": ""
+  "ru": "Настоящие солнечные тени резкие там, где предмет касается земли, и тем мягче, чем дальше от него падают. Карточка выясняет, насколько каждая затенённая точка удалена от того, что заслоняет солнце, и смягчает край соответственно."
  },
  "card.blocker.help.1": {
   "en": "Crisp contact shadows under tyres and posts, long tree shadows with soft ends.",
-  "ru": ""
+  "ru": "Чёткие контактные тени под шинами и столбами, длинные тени деревьев с мягкими концами."
  },
  "card.blocker.help.2": {
   "en": "Small: one search of 16 samples where shadows fall.",
-  "ru": ""
+  "ru": "Немного: один поиск из 16 выборок там, где падают тени."
  },
  "card.blocker.help.3": {
   "en": "Works together with Shadow edges, with either method.",
-  "ru": ""
+  "ru": "Работает вместе с Shadow edges при любом методе."
  },
  "ui.needs": {
   "en": "needs",
-  "ru": ""
+  "ru": "требует"
  },
  "card.contact.help.0": {
   "en": "The sun's shadow texture is too coarse for small things: a door handle, a mirror or a stone casts no shadow of its own, and a wheel seems to float just above the ground. For every pixel this follows a short ray towards the sun through what is on screen and adds the shadow of whatever blocks it.",
-  "ru": ""
+  "ru": "Солнечная текстура теней слишком грубая для мелочей: дверная ручка, зеркало или камень не отбрасывают своей тени, а колесо будто парит чуть над землёй. Для каждого пикселя карточка ведёт короткий луч к солнцу через то, что есть на экране, и добавляет тень от всего, что этот луч перекрывает."
  },
  "card.contact.help.1": {
   "en": "Wheels and trucks sit on the ground, and small parts such as handles, mirrors and bolts cast their own shadows.",
-  "ru": ""
+  "ru": "Колёса и грузовики стоят на земле, а мелкие детали вроде ручек, зеркал и болтов отбрасывают свои тени."
  },
  "card.contact.help.2": {
   "en": "Some graphics time: one more pass over the screen.",
-  "ru": ""
+  "ru": "Немного времени GPU: ещё один проход по экрану."
  },
  "card.contact.help.3": {
   "en": "Needs SnowRunner Shadows, which runs the pass. Only what is on screen can cast these shadows. In the game, F4 switches it off and on.",
-  "ru": ""
+  "ru": "Требует SnowRunner Shadows, который выполняет этот проход. Отбрасывать такие тени может только то, что есть на экране. В игре F4 выключает и включает их."
  },
  "card.contact.help.4": {
   "en": "A modified copy of Bend Studio's screen-space shadows (Copyright 2023 Sony Interactive Entertainment, Apache License 2.0).",
-  "ru": ""
+  "ru": "Изменённая копия screen-space shadows от Bend Studio (Copyright 2023 Sony Interactive Entertainment, Apache License 2.0)."
  },
  "card.headshadow.help.0": {
   "en": "The game lights everything in your headlights' cone, even what stands behind a post or a tree. For every lit pixel this walks from it towards each of the two lamps through what is on screen, and dims the headlight's light where something stands in the way.",
-  "ru": ""
+  "ru": "Игра освещает всё в конусе ваших фар, даже то, что стоит за столбом или деревом. Для каждого освещённого пикселя карточка идёт от него к каждой из двух фар через то, что есть на экране, и ослабляет свет фары там, где что-то стоит на пути."
  },
  "card.headshadow.help.1": {
   "en": "At night, posts, trees, rocks and other trucks throw long shadows away from your lamps, their edges half lit where only one lamp reaches.",
-  "ru": ""
+  "ru": "Ночью столбы, деревья, камни и другие грузовики отбрасывают длинные тени от ваших фар, а края теней наполовину освещены там, где светит только одна фара."
  },
  "card.headshadow.help.2": {
   "en": "Some graphics time where the headlights fall: up to 48 depth reads for each lit pixel.",
-  "ru": ""
+  "ru": "Немного времени GPU там, где светят фары: до 48 чтений глубины на каждый освещённый пиксель."
  },
  "card.headshadow.help.3": {
   "en": "Needs SnowRunner Shadows, which supplies the depth. Only what is on screen can cast these shadows, and nothing closer than 2.5 m to the lamps. Tested in the game and still being tuned.",
-  "ru": ""
+  "ru": "Требует SnowRunner Shadows, который даёт глубину. Отбрасывать такие тени может только то, что есть на экране, и ничто ближе 2.5 м к фарам. Проверено в игре, настройка ещё продолжается."
  },
  "card.gtao.help.0": {
   "en": "Ambient occlusion is the soft shadow where things meet: under a truck, between tyres, in corners. The game's own version is an old depth-only SSAO with a radius that covers the same share of the screen at any distance, which draws a dark outline along every edge and a grey film on flat ground. GTAO (ground truth ambient occlusion) looks along several directions around every pixel, finds how much of the sky the geometry nearby leaves open, and darkens by exactly that, within 1.5 metres in the world.",
-  "ru": ""
+  "ru": "Фоновое затенение (ambient occlusion) это мягкая тень там, где предметы сходятся: под грузовиком, между шинами, в углах. Собственная версия игры это старый SSAO только по глубине, радиус которого на любом расстоянии занимает одну и ту же долю экрана: он рисует тёмный контур вдоль каждого края и серую плёнку на ровной земле. GTAO (ground truth ambient occlusion) смотрит в нескольких направлениях вокруг каждого пикселя, находит, какую часть неба оставляет открытой геометрия рядом, и затемняет ровно на эту величину, в пределах 1.5 м в мире игры."
  },
  "card.gtao.help.1": {
   "en": "No dark outlines along grilles, treads and railings, clean open ground, and soft shadow where things really close in: between twin tyres, inside the frame, where a wheel meets the ground. Thin things such as poles, cables and railings no longer carry a halo.",
-  "ru": ""
+  "ru": "Никаких тёмных контуров вдоль решёток, протекторов и перил, чистая открытая земля и мягкая тень там, где предметы действительно сходятся: между сдвоенными шинами, внутри рамы, где колесо касается земли. Вокруг тонких предметов вроде столбов, кабелей и перил больше нет ореола."
  },
  "card.gtao.help.2": {
   "en": "More graphics time than the game's own pass at full size. At half size SnowRunner Shadows draws the pass at half the resolution, then blurs and scales it up: at 4K on an RTX 4080 that took the frame rate from 63.7 to 75.0 fps.",
-  "ru": ""
+  "ru": "В режиме full size больше времени GPU, чем у игрового прохода. При half size SnowRunner Shadows рисует проход в половинном разрешении, затем размывает и масштабирует его: в 4K на RTX 4080 частота кадров выросла с 63.7 до 75.0 FPS."
  },
  "card.gtao.help.3": {
   "en": "Quality: full size (the default, the sharpest) or half size (much faster). Half size needs SnowRunner Shadows, which draws the pass; without it the pass runs at full size.",
-  "ru": ""
+  "ru": "Quality: full size (по умолчанию, самый чёткий) или half size (намного быстрее). Для half size нужен SnowRunner Shadows, который рисует проход; без него проход идёт в режиме full size."
  },
  "card.gtao.help.4": {
   "en": "Ambient occlusion has to be on in the game's video settings. Bounce light is built on it. In the game, F11 switches between GTAO and the game's SSAO, and F5 between half and full size.",
-  "ru": ""
+  "ru": "Фоновое затенение должно быть включено в настройках видео игры. На нём построен Bounce light. В игре F11 переключает между GTAO и игровым SSAO, а F5 между половинным и полным размером."
  },
  "card.gtao.help.5": {
   "en": "Ground truth ambient occlusion by Jorge Jimenez, Xian-Chun Wu, Angelo Pesce and Adrian Jarabo (2016). The horizon integration follows Intel's XeGTAO by Filip Strugar and Steve Mccalla (MIT).",
-  "ru": ""
+  "ru": "Ground truth ambient occlusion: Jorge Jimenez, Xian-Chun Wu, Angelo Pesce и Adrian Jarabo (2016). Интегрирование по горизонту сделано по XeGTAO от Intel, авторы Filip Strugar и Steve Mccalla (MIT)."
  },
  "card.aofar.help.0": {
   "en": "GTAO looks, in several directions around every point, for what hides the sky within 1.5 metres. This lets the same search go on to 6 metres, and what it finds out there darkens only gently: half as much at 1.5 metres, nothing at 6. So the ground under a truck, the walls under a roof and the inside of a tree crown get a soft shade, while the contact shadows stay exactly as GTAO draws them.",
-  "ru": ""
+  "ru": "GTAO ищет в нескольких направлениях вокруг каждой точки то, что закрывает небо в пределах 1.5 м. Карточка продолжает тот же поиск до 6 м, а найденное там затемняет лишь слегка: вдвое слабее на 1.5 м и совсем не затемняет на 6. Так земля под грузовиком, стены под крышей и крона дерева изнутри получают мягкую тень, а контактные тени остаются ровно такими, какими их рисует GTAO."
  },
  "card.aofar.help.1": {
   "en": "A soft pool of shade under trucks and trailers, shade under roofs and overhangs, a little more depth inside trees.",
-  "ru": ""
+  "ru": "Мягкое пятно тени под грузовиками и прицепами, тень под крышами и навесами, чуть больше глубины внутри деревьев."
  },
  "card.aofar.help.2": {
   "en": "Little: about 1 ms per frame at 4K (measured on an RTX 4080). Each pixel looks far out in one direction and shares what it finds with its neighbours.",
-  "ru": ""
+  "ru": "Немного: около 1 мс на кадр в 4K (замер на RTX 4080). Каждый пиксель смотрит далеко в одном направлении и делится найденным с соседями."
  },
  "card.aofar.help.3": {
   "en": "Needs GTAO. In the game, F11 switches between GTAO (with this) and the game's own SSAO.",
-  "ru": ""
+  "ru": "Требует GTAO. В игре F11 переключает между GTAO (вместе с этой карточкой) и игровым SSAO."
  },
  "card.ambient.help.0": {
   "en": "Shaded places are lit by one fill colour per map and time of day. This makes the fill light take the colour of the sky above: bluer under a clear sky, warmer toward a low sun. How bright it is stays the game's choice.",
-  "ru": ""
+  "ru": "Затенённые места освещаются одним заполняющим цветом на карту и время суток. Карточка даёт заполняющему свету цвет неба над головой: голубее под ясным небом, теплее к низкому солнцу. Яркость по-прежнему выбирает игра."
  },
  "card.ambient.help.1": {
   "en": "Shade that matches the sky instead of a flat grey.",
-  "ru": ""
+  "ru": "Тень в тон небу, а не ровно серая."
  },
  "card.ambient.help.2": {
   "en": "Tiny: a few reads of the sky picture.",
-  "ru": ""
+  "ru": "Совсем немного: несколько чтений изображения неба."
  },
  "card.fill.help.0": {
   "en": "Shade in the game is lit by a strong, even fill light: on many maps it is nearly as bright as the sun, so shaded sides, the insides of trees and trucks in shadow look flat and washed out. This turns that fill light down in the day, dusk and dawn light of every map, so shade gets the depth it has in a photo. Night, the garage and the menus keep theirs. Because less fill light darkens the whole picture, the game's eye adaptation would lift it all back up and sunlit parts would end up brighter than before; so the exposure of the same light is lowered with it, which keeps sunlit parts about where they were.",
-  "ru": ""
+  "ru": "Тень в игре освещается сильным ровным заполняющим светом: на многих картах он почти такой же яркий, как солнце, поэтому затенённые стороны, кроны изнутри и грузовики в тени выглядят плоскими и блёклыми. Карточка приглушает этот заполняющий свет днём, в сумерках и на рассвете на каждой карте, чтобы тень получила глубину, как на фотографии. Ночь, гараж и меню сохраняют свой. Поскольку меньше заполняющего света затемняет всю картинку, адаптация глаза в игре подняла бы её обратно, и освещённые солнцем места стали бы ярче, чем раньше; поэтому вместе с ним снижается экспозиция того же освещения, и освещённые места остаются примерно такими, как были."
  },
  "card.fill.help.1": {
   "en": "Deeper shade under trees and on the shaded sides of trucks and rocks, more depth inside foliage, and sunlit parts that stand out more.",
-  "ru": ""
+  "ru": "Глубже тень под деревьями и на теневых сторонах грузовиков и камней, больше глубины в листве, а освещённые места выделяются сильнее."
  },
  "card.fill.help.2": {
   "en": "None: it changes how much of the game's own fill light is used.",
-  "ru": ""
+  "ru": "Ничего: карточка меняет только долю собственного заполняющего света игры."
  },
  "card.fill.help.3": {
   "en": "Strength: how much of the fill light stays. 55 %, the default, gives deep shade, 70 % a little less, 85 % a light touch.",
-  "ru": ""
+  "ru": "Strength: какая доля заполняющего света остаётся. 55 %, значение по умолчанию, даёт глубокую тень, 70 % чуть слабее, 85 % лишь слегка."
  },
  "card.fill.help.4": {
   "en": "It changes initial.pak, together with Grass reach, which it keeps. Other mods that change initial.pak change the same file. Sky ambient still colours what fill light is left.",
-  "ru": ""
+  "ru": "Меняет initial.pak вместе с Grass reach и сохраняет его изменения. Другие моды, которые меняют initial.pak, меняют тот же файл. Sky ambient по-прежнему окрашивает оставшийся заполняющий свет."
  },
  "ui.offbydefault": {
   "en": "off by default",
-  "ru": ""
+  "ru": "выключена по умолчанию"
  },
  "card.gi.help.0": {
   "en": "Light bounces. Sunlit snow brightens the underside of a truck, and red paint tints the ground beside it. This adds that bounce at short range, up to about 1.5 metres, gathered from the scene's picture every frame.",
-  "ru": ""
+  "ru": "Свет отражается. Освещённый солнцем снег подсвечивает днище грузовика, а красная краска подкрашивает землю рядом. Карточка добавляет это переотражение на малом расстоянии, примерно до 1.5 м, и собирает его каждый кадр из изображения сцены."
  },
  "card.gi.help.1": {
   "en": "Less black under trucks and in wheel arches on bright days, and a faint spill of colour from paint and mud.",
-  "ru": ""
+  "ru": "Меньше черноты под грузовиками и в колёсных арках в яркие дни и слабый цветной отсвет от краски и грязи."
  },
  "card.gi.help.2": {
   "en": "Under 1 ms per frame at 4K (measured on an RTX 4080): it gathers light in the ambient occlusion pass and adds it to every lit material.",
-  "ru": ""
+  "ru": "Меньше 1 мс на кадр в 4K (замер на RTX 4080): свет собирается в проходе фонового затенения и добавляется ко всем освещённым материалам."
  },
  "card.gi.help.3": {
   "en": "Off by default and experimental: in places the bounce comes out too strong. On snow and ice it takes its colour from the reflection cube, so keep Reflection cubes on with it. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene's picture. In the game, F10 switches it off and on.",
-  "ru": ""
+  "ru": "По умолчанию выключена и экспериментальная: местами переотражение получается слишком сильным. На снегу и льду цвет берётся из кубической карты отражений, поэтому держите вместе с ней включённой Reflection cubes. Требует GTAO, в проходе которого работает, и SnowRunner Shadows, который передаёт изображение сцены. В игре F10 выключает и включает её."
  },
  "card.objrefl.help.0": {
   "en": "The game's paint, glass and chrome reflect a ready-made picture of the sky, so trucks never mirror what is around them. This makes them reflect what is on screen: the road, the trees and other trucks.",
-  "ru": ""
+  "ru": "Краска, стёкла и хром в игре отражают готовую картинку неба, так что грузовики никогда не отражают то, что вокруг. Карточка заставляет их отражать то, что на экране: дорогу, деревья и другие грузовики."
  },
  "card.objrefl.help.1": {
   "en": "Paint and windows mirroring their surroundings, most at shallow angles, and chrome showing the ground.",
-  "ru": ""
+  "ru": "Краска и окна отражают окружение, сильнее всего под пологим углом, а в хроме видна земля."
  },
  "card.objrefl.help.2": {
   "en": "About 0.3 to 0.4 milliseconds per frame at 4K with the reflection pass.",
-  "ru": ""
+  "ru": "От 0.3 до 0.4 мс на кадр в 4K с reflection pass."
  },
  "card.objrefl.help.3": {
   "en": "Method: the reflection pass traces the reflections of the whole screen in one go (in SnowRunner Shadows), blurs them by how rough each surface is and steadies them over frames; windows, and whatever the pass misses, fall back to the march. March only lets every material search the last frame on its own: the older method, kept as a choice.",
-  "ru": ""
+  "ru": "Method: reflection pass трассирует отражения всего экрана за один раз (в SnowRunner Shadows), размывает их по шероховатости каждой поверхности и стабилизирует по кадрам; окна и всё, что проход пропустил, возвращаются к маршу. March only позволяет каждому материалу самостоятельно искать в прошлом кадре: это старый метод, оставленный как вариант."
  },
  "card.objrefl.help.4": {
   "en": "Only what is on screen can be reflected, so what is behind the camera shows the sky picture as before. In the game, F6 switches the reflection pass off and on.",
-  "ru": ""
+  "ru": "Отразиться может только то, что есть на экране, поэтому вместо того, что за камерой, по-прежнему видна картинка неба. В игре F6 выключает и включает reflection pass."
  },
  "card.objrefl.help.5": {
   "en": "The reflection pass follows AMD FidelityFX SSSR (MIT), with Morgan McGuire and Michael Mara's screen-space ray tracing, Eric Heitz's visible-normal sampling and Marco Salvi's variance clipping.",
-  "ru": ""
+  "ru": "Метод reflection pass основан на AMD FidelityFX SSSR (MIT), с трассировкой лучей в экранном пространстве Morgan McGuire и Michael Mara, сэмплированием видимых нормалей Eric Heitz и variance clipping Marco Salvi."
  },
  "card.headglow.help.0": {
   "en": "With Object reflections, a hood or roof whose reflection finds nothing on screen shows a picture of the sky. At night this adds the headlights' warm light to those reflections, where the mirrored ray crosses the headlight beam.",
-  "ru": ""
+  "ru": "С Object reflections капот или крыша, чьё отражение ничего не находит на экране, показывает картинку неба. Ночью карточка добавляет в эти отражения тёплый свет фар там, где отражённый луч пересекает луч фары."
  },
  "card.headglow.help.1": {
   "en": "At night, hoods and roofs pick up the glow of the truck's own lamps.",
-  "ru": ""
+  "ru": "Ночью капоты и крыши ловят отсвет собственных фар грузовика."
  },
  "card.headglow.help.2": {
   "en": "None while the lamps are off. With two lamps on, at most 0.15 ms per frame at 4K if glossy paint filled the whole screen (measured on an RTX 4080), so far less in a real frame.",
-  "ru": ""
+  "ru": "Ничего, пока фары выключены. С двумя включёнными фарами не больше 0.15 мс на кадр в 4K, даже если бы глянцевая краска заполняла весь экран (замер на RTX 4080), так что в реальном кадре намного меньше."
  },
  "card.headglow.help.3": {
   "en": "Needs Object reflections with the reflection pass.",
-  "ru": ""
+  "ru": "Требует Object reflections с reflection pass."
  },
  "card.water.help.0": {
   "en": "Rivers, mud, lakes, seas and the puddles on the roads reflect what is on screen: banks, trees and trucks, not just the sky. The water's own colour gives way to the reflection at shallow angles, as with real water.",
-  "ru": ""
+  "ru": "Реки, грязь, озёра, моря и лужи на дорогах отражают то, что есть на экране: берега, деревья и грузовики, а не только небо. Под пологим углом собственный цвет воды уступает место отражению, как у настоящей воды."
  },
  "card.water.help.1": {
   "en": "Mirrored banks and trees in calm water, trucks in the road puddles.",
-  "ru": ""
+  "ru": "Отражения берегов и деревьев в спокойной воде, грузовиков в дорожных лужах."
  },
  "card.water.help.2": {
   "en": "Small, and only where water is on screen.",
-  "ru": ""
+  "ru": "Немного, и только там, где на экране вода."
  },
  "card.water.help.3": {
   "en": "Sun glitter in shade: the game leaves a share of the sun's glitter on water that lies in the sun's shadow, so a glitter path can run on under a cliff or a bridge. Off in shadow puts it out where the water's own shadow test says the sun is hidden, in the 64 lake and 8 river shaders drawn with the sun's shadow map. Off by default and experimental: where it was tried, the game's test said the water was lit and nothing changed.",
-  "ru": ""
+  "ru": "Sun glitter in shade: игра оставляет часть солнечных бликов на воде, лежащей в тени от солнца, так что солнечная дорожка может тянуться и под скалой или мостом. Off in shadow гасит их там, где собственная проверка теней воды говорит, что солнце скрыто, в 64 шейдерах озёр и 8 шейдерах рек, которые рисуются с солнечной картой теней. По умолчанию выключено и экспериментально: там, где это пробовали, проверка игры считала воду освещённой, и ничего не менялось."
  },
  "card.water.help.4": {
   "en": "Needs SnowRunner Shadows for the scene's picture. What is off screen falls back to the game's own reflection.",
-  "ru": ""
+  "ru": "Требует SnowRunner Shadows для изображения сцены. Для того, что за пределами экрана, остаётся собственное отражение игры."
  },
  "card.puddles.help.0": {
   "en": "Wet ground in the game reflects only a ready-made picture of the sky. This lets it reflect what is really around it, trucks, trees and banks, from the scene SnowRunner Shadows hands over: sharp where the ground is glossy, blurred where it is rough, the way wet mud mirrors. Rough dry ground is left alone.",
-  "ru": ""
+  "ru": "Мокрая земля в игре отражает только готовую картинку неба. Карточка позволяет ей отражать то, что действительно вокруг: грузовики, деревья и берега, из сцены, которую передаёт SnowRunner Shadows. Чётко там, где земля глянцевая, размыто там, где шероховатая, как отражает мокрая грязь. Шероховатую сухую землю карточка не трогает."
  },
  "card.puddles.help.1": {
   "en": "Trucks and trees mirrored softly in wet mud and in shiny wet patches, most at shallow angles.",
-  "ru": ""
+  "ru": "Грузовики и деревья мягко отражаются в мокрой грязи и на блестящих мокрых участках, сильнее всего под пологим углом."
  },
  "card.puddles.help.2": {
   "en": "Some frame rate where a lot of wet ground is on screen: each glossy pixel searches the scene.",
-  "ru": ""
+  "ru": "Немного частоты кадров там, где на экране много мокрой земли: каждый глянцевый пиксель ищет отражение по сцене."
  },
  "card.puddles.help.3": {
   "en": "Needs SnowRunner Shadows. The road puddles are water, which Water reflections covers. What is off screen falls back to the sky picture. In the game, F9 switches it off and on.",
-  "ru": ""
+  "ru": "Требует SnowRunner Shadows. Лужи на дорогах это вода, за них отвечает Water reflections. Для того, что за пределами экрана, остаётся картинка неба. В игре F9 выключает и включает её."
  },
  "card.rivertint.help.0": {
   "en": "Deep river water fades to a flat grey in the game. This tints it by its own colour as it gets deeper: teal in clear rivers, brown in muddy ones.",
-  "ru": ""
+  "ru": "Глубокая речная вода в игре выцветает в ровный серый. Карточка окрашивает её собственным цветом по мере глубины: в бирюзовый в чистых реках, в бурый в мутных."
  },
  "card.rivertint.help.1": {
   "en": "Tiny.",
-  "ru": ""
+  "ru": "Совсем немного."
  },
  "card.crestglow.help.0": {
   "en": "Looking across water towards a low sun, light comes through the thin tops of the waves and glows in the water's colour: teal in clear water, brown in muddy. This adds that light to the rivers, strongest looking straight into the light, and only where the sun really reaches the water: it reads the game's own sun shadows, so water under trees stays dark.",
-  "ru": ""
+  "ru": "Если смотреть через воду на низкое солнце, свет проходит сквозь тонкие гребни волн и светится цветом воды: бирюзовым в чистой, бурым в мутной. Карточка добавляет этот свет рекам, сильнее всего при взгляде прямо на свет, и только там, где солнце действительно достаёт до воды: она читает собственные солнечные тени игры, так что вода под деревьями остаётся тёмной."
  },
  "card.crestglow.help.1": {
   "en": "Glowing wave tops on rivers against a low sun.",
-  "ru": ""
+  "ru": "Светящиеся гребни волн на реках против низкого солнца."
  },
  "card.crestglow.help.2": {
   "en": "Small: one more look at the sun's shadow on river water.",
-  "ru": ""
+  "ru": "Немного: ещё одна проверка солнечной тени на речной воде."
  },
  "card.crestglow.help.3": {
   "en": "The rivers whose shader knows where the sun's shadow falls (12 of the game's 20 river shaders); lakes and seas not yet. Needs Water reflections.",
-  "ru": ""
+  "ru": "Реки, чей шейдер знает, куда падает тень от солнца (12 из 20 речных шейдеров игры); озёра и моря пока нет. Требует Water reflections."
  },
  "card.glare.help.0": {
   "en": "At night, headlights draw a long, very bright band across wet ground and puddles. This caps that highlight, so wet ground still shines, without the band.",
-  "ru": ""
+  "ru": "Ночью фары рисуют на мокрой земле и лужах длинную, очень яркую полосу. Карточка ограничивает этот блик: мокрая земля по-прежнему блестит, но без полосы."
  },
  "card.glare.help.1": {
   "en": "None.",
-  "ru": ""
+  "ru": "Ничего."
  },
  "card.glare.help.2": {
   "en": "Off by default for now: it was tuned before the reflections changed. Tick it if the band bothers you.",
-  "ru": ""
+  "ru": "Пока по умолчанию выключена: её настраивали до того, как изменились отражения. Отметьте её, если полоса вам мешает."
  },
  "card.cubes.help.0": {
   "en": "Each state names a reflection cube, a small painted sky with its ground, which paint, glass and chrome mirror where the scene has nothing nearer, and which Sky ambient and Bounce light read the sky's and the ground's colour from. The game's states name 26 of them, in five families whose files are named after Michigan, Taymyr, Mexico, Alaska and Scandinavia. This replaces 25 with cubes made from photographs: clear days, weather days, dusk, dawn and night. The sky, the sky straight overhead and the ground land at the brightness of the game's own cube, and at dusk, at dawn and at night at its colours too, so every hour keeps its light. In the two snow families the ground is snow at its own brightness by day, at dusk and at dawn. Their night cubes are winter day pictures graded to night. The garage keeps the game's cube, which shows the garage itself. While the cubes are in, Kola's and Yukon's clear days all name the snow cube, and the few states of Wisconsin and North Carolina that named a snow cube name one of their own region's.",
-  "ru": ""
+  "ru": "Каждое состояние дня называет кубическую карту отражений (кубмапу): маленькое нарисованное небо с землёй, которое отражают краска, стёкла и хром там, где в сцене нет ничего ближе, и из которого Sky ambient и Bounce light берут цвет неба и земли. Состояния игры называют 26 таких кубмап в пяти семействах, чьи файлы названы в честь Мичигана, Таймыра, Мексики, Аляски и Скандинавии. Карточка заменяет 25 из них кубмапами, сделанными по фотографиям: ясные дни, непогожие дни, сумерки, рассвет и ночь. Небо, небо прямо над головой и земля выставлены на яркость игровой кубмапы, а в сумерках, на рассвете и ночью ещё и на её цвета, так что каждый час сохраняет свой свет. В двух снежных семействах земля днём, в сумерках и на рассвете покрыта снегом его собственной яркости. Их ночные кубмапы это зимние дневные снимки, переведённые цветокоррекцией в ночь. Гараж сохраняет игровую кубмапу, на которой виден сам гараж. Пока кубмапы установлены, все ясные дни Кольского полуострова и Юкона называют снежную кубмапу, а те немногие состояния Висконсина и Северной Каролины, которые называли снежную, называют кубмапу своего региона."
  },
  "card.cubes.help.1": {
   "en": "Chrome and glass mirroring a photographed sky and ground instead of a hazy painting, on every map and at every hour, and the shade and the bounce light taking their colour from it.",
-  "ru": ""
+  "ru": "Хром и стекло отражают сфотографированные небо и землю, а не размытую картинку, на каждой карте и в любой час, и тень с переотражённым светом берут цвет из них."
  },
  "card.cubes.help.2": {
   "en": "Nothing in the game: the cubes have the size of the game's own. 12 MB more in the download.",
-  "ru": ""
+  "ru": "В игре ничего: кубмапы того же размера, что и игровые. Архив больше на 12 МБ."
  },
  "card.cubes.help.3": {
   "en": "It changes boot.pak, together with Photo grade, Sharper smoke and particles and Night sky, which it keeps. The cubes are made with engine\\tools\\make_cube.js from 21 CC0 panoramas by Poly Haven. THIRD_PARTY_NOTICES.md names them and their authors.",
-  "ru": ""
+  "ru": "Меняет boot.pak вместе с Photo grade, Sharper smoke and particles и Night sky и сохраняет их изменения. Кубмапы сделаны с помощью engine\\tools\\make_cube.js из 21 панорамы CC0 от Poly Haven. В THIRD_PARTY_NOTICES.md перечислены они и их авторы."
  },
  "card.fog.help.0": {
   "en": "The game draws its fog in steps that show as bands. This breaks the bands up and adds a glow toward the sun. Sun shafts: the fog also sees the sun's shadows, so shafts of light show through trees and dust.",
-  "ru": ""
+  "ru": "Игра рисует туман ступенями, которые видны как полосы. Карточка разбивает эти полосы и добавляет свечение в сторону солнца. Sun shafts: туман также видит солнечные тени, так что сквозь деревья и пыль видны лучи света."
  },
  "card.fog.help.1": {
   "en": "Smooth fog and a bright haze toward the sun. With the sun shafts on, fog and a low sun behind trees: rays of light.",
-  "ru": ""
+  "ru": "Ровный туман и яркая дымка в сторону солнца. С включёнными солнечными лучами, в тумане и при низком солнце за деревьями: лучи света."
  },
  "card.fog.help.2": {
   "en": "Small.",
-  "ru": ""
+  "ru": "Немного."
  },
  "card.fog.help.3": {
   "en": "Off by default. The sun shafts on the card are off too unless you switch them on. They are experimental: the fog is drawn without knowing what stands in front of it, so with a low sun the rays also show over your truck and other things close to the camera.\nThe rays need fog and a low sun. On a clear day there is little to see.",
-  "ru": ""
+  "ru": "По умолчанию выключена. Sun shafts на карточке тоже выключены, пока вы их не включите. Они экспериментальные: туман рисуется, не зная, что стоит перед ним, поэтому при низком солнце лучи видны и поверх вашего грузовика и других предметов рядом с камерой.\nЛучам нужны туман и низкое солнце. В ясный день смотреть почти не на что."
  },
  "card.weather.help.0": {
   "en": "The game cycles each region through day states that can carry rain or snow, and on two maps moving cloud shadows. This adds more of that, from the game's own weather system. Cloud shadows: every map gets them, drawn from the game's own shadow textures. Showers: rain and snow swell and ease over time instead of holding one strength, never heavier than the game's own. Evening drizzle: the rain regions get light rain at dusk, at night and at dawn, as the snow regions already have flurries then. Horizon clouds: the cloud layer on the horizon that 17 sky files hold switched off, switched on. Far rain, off by default: rain drawn out to 1.5 times the distance, 48 metres instead of 32. Snow keeps the game's distance: drawn that far, heavy snow cost too much frame rate. Fireflies: fireflies at night in the rain regions, drawn with the game's own firefly sprite. Pollen: pollen drifting through the clear days of the same regions. These two are weather types from the game's later engine, written in as two new files. Drifting clouds: a sky is made of layers that turn, each at a speed the day state sets, and in most states the nearest band of clouds and some of the sky pictures stand still while the bands behind them move. Where a cloud picture stands still it now turns slowly, about 150 settings in 17 sky files. The stars, the sun and moon, the aurora, the Milky Way and a painted sunset stay where they are. Far land: 46 states, most of them on Kola, Yukon, Quebec and Scandinavia, stop drawing the ground at 800 metres although their distant fog reaches farther, so in clear air the land ends short. There the ground is drawn as far as the fog reaches, 3000 metres at most.",
-  "ru": ""
+  "ru": "Игра проводит каждый регион по циклу состояний дня, которые могут нести дождь или снег, а на двух картах ещё и движущиеся тени облаков. Карточка добавляет всего этого больше из собственной погодной системы игры. Cloud shadows: тени облаков появляются на каждой карте, они рисуются из собственных текстур теней игры. Showers: дождь и снег со временем то усиливаются, то стихают, а не держат одну силу, и никогда не бывают сильнее игровых. Evening drizzle: в дождливых регионах идёт слабый дождь в сумерках, ночью и на рассвете, так же как в снежных регионах в это время уже идёт лёгкий снег. Horizon clouds: слой облаков на горизонте, который есть в 17 файлах неба, но выключен, теперь включён. Far rain, по умолчанию выключено: дождь рисуется в 1.5 раза дальше, на 48 м вместо 32. Снег остаётся на игровом расстоянии: когда его рисовали так далеко, сильный снегопад отнимал слишком много частоты кадров. Fireflies: светлячки ночью в дождливых регионах, нарисованные собственным спрайтом светлячка из игры. Pollen: пыльца, плывущая в воздухе в ясные дни тех же регионов. Это два типа погоды из более позднего движка игры, вписанные как два новых файла. Drifting clouds: небо состоит из вращающихся слоёв, у каждого своя скорость, заданная состоянием дня, и в большинстве состояний ближняя полоса облаков и некоторые картинки неба стоят на месте, пока полосы за ними движутся. Там, где картинка облаков стояла на месте, она теперь медленно вращается: около 150 настроек в 17 файлах неба. Звёзды, солнце и луна, северное сияние, Млечный Путь и нарисованный закат остаются на месте. Far land: 46 состояний, в основном на Кольском полуострове, Юконе, в Квебеке и Скандинавии, перестают рисовать землю на 800 м, хотя их дальний туман доходит дальше, так что в ясную погоду земля обрывается слишком близко. Там земля рисуется так далеко, как доходит туман, но не дальше 3000 м."
  },
  "card.weather.help.1": {
   "en": "Cloud shadows drifting over every map, and rain and snow that come and go.",
-  "ru": ""
+  "ru": "Тени облаков плывут над каждой картой, а дождь и снег приходят и уходят."
  },
  "card.weather.help.2": {
   "en": "Little. The cloud shadows are drawn the way the game draws them on the maps that have them; the other parts change numbers the game reads anyway. Far rain draws more raindrops around the camera, so it costs some frame rate in heavy rain.",
-  "ru": ""
+  "ru": "Немного. Тени облаков рисуются так же, как игра рисует их на картах, где они есть; остальные части меняют числа, которые игра и так читает. Far rain рисует больше капель вокруг камеры, поэтому в сильный дождь немного снижает частоту кадров."
  },
  "card.weather.help.3": {
   "en": "Each part on its own, all on by default except Far rain. Far land draws more ground; its cost has not been measured yet. With Fireflies and Evening drizzle both on, the nights of the rain regions take the fireflies and the drizzle keeps to dusk and dawn.",
-  "ru": ""
+  "ru": "Каждая часть включается отдельно, все включены по умолчанию, кроме Far rain. Far land рисует больше земли; во что это обходится, ещё не измерено. Если включены и Fireflies, и Evening drizzle, ночи в дождливых регионах достаются светлячкам, а морось идёт только в сумерках и на рассвете."
  },
  "card.weather.help.4": {
   "en": "It changes initial.pak, together with Grass reach, Fill light and Brighter stars, which it keeps. Other mods that change initial.pak change the same file: Apply asks before it builds on it.",
-  "ru": ""
+  "ru": "Меняет initial.pak вместе с Grass reach, Fill light и Brighter stars и сохраняет их изменения. Другие моды, которые меняют initial.pak, меняют тот же файл: Apply спрашивает, прежде чем собирать поверх него."
  },
  "card.maps.help.0": {
   "en": "Each map's level file names the day states it cycles through and its sky file. Four regions have none of their own and name another region's. Maine: its first map names Yukon's and its second Alaska's, two snow regions, so Maine gets their snowfall at dusk and at night and their light. This gives both maps Michigan's days, weather and sky. British Columbia: its maps name Michigan's, and the row gives them North Carolina's, which the game itself gives Washington, the region next to it. Austria: its first map names another region's days than its second, and the row gives the first the second's. Washington, an autumn region: its three maps name North Carolina's summer, and the row gives them Michigan's autumn.",
-  "ru": ""
+  "ru": "В файле уровня каждой карты названы состояния дня, по которым она проходит, и её файл неба. У четырёх регионов своих нет, и они называют чужие. Мэн: его первая карта называет состояния Юкона, а вторая Аляски, двух снежных регионов, поэтому в Мэне идёт их снег в сумерках и ночью и стоит их свет. Карточка даёт обеим картам дни, погоду и небо Мичигана. Британская Колумбия: её карты называют дни Мичигана, а строка даёт им дни Северной Каролины, которые сама игра даёт Вашингтону, соседнему региону. Австрия: первая карта называет дни не того региона, что вторая, и строка даёт первой дни второй. Вашингтон, осенний регион: три его карты называют лето Северной Каролины, а строка даёт им осень Мичигана."
  },
  "card.maps.help.1": {
   "en": "On Maine: no snow in the air, and the light, weather and sky of an autumn forest map.",
-  "ru": ""
+  "ru": "В Мэне: никакого снега в воздухе, а свет, погода и небо осенней лесной карты."
  },
  "card.maps.help.2": {
   "en": "Nothing.",
-  "ru": ""
+  "ru": "Ничего."
  },
  "card.maps.help.3": {
   "en": "A row for each region, each map by map by default: days chosen for each map on its own. The other values give a region's maps one other region's days, or leave the game's. Maine: The Lowland has no snow on the ground and gets Michigan's wet days; Yellowrock National Forest has snow and ice and gets Yukon's spring with flurries instead of blizzards. Both are sets of Maine's own, so each map can be tuned on its own later. British Columbia: Duncan Bay, flooded, gets Wisconsin's summer with its heavy rain; North Peak National Park gets North Carolina's. Austria: Unterfeld, the farmland, gets Tennessee's summer; Foothills keeps the game's North Carolina. Washington is an autumn region whose three maps show North Carolina's summer: its row gives them Michigan's autumn, and map by map Selten River Mountains gets Zurdania's mountain autumn.",
-  "ru": ""
+  "ru": "Строка для каждого региона, у каждой по умолчанию map by map: дни подобраны для каждой карты отдельно. Остальные значения дают картам региона дни одного другого региона или оставляют игровые. Maine: на The Lowland нет снега на земле, и она получает дождливые дни Мичигана; Yellowrock National Forest со снегом и льдом получает весну Юкона с лёгким снегом вместо метелей. Оба набора собственные, мэнские, так что позже каждую карту можно будет настроить отдельно. British Columbia: затопленная Duncan Bay получает лето Висконсина с его сильными дождями; North Peak National Park получает дни Северной Каролины. Austria: Unterfeld, сельскохозяйственная карта, получает лето Теннесси; Foothills сохраняет игровую Северную Каролину. Washington это осенний регион, три карты которого показывают лето Северной Каролины: его строка даёт им Michigan's autumn, а при map by map Selten River Mountains получает горную осень Зурдании."
  },
  "card.maps.help.4": {
   "en": "It changes a few names in your own level files (level_us_06_01.pak and the like), in place, and Restore writes the game's names back, after which the files are as they were, byte for byte. A level file that another mod changed is left as it is. A game update or the store's file check brings the game's names back: Apply again. Most values only name days the game ships. Maine map by map also adds twenty small files to initial.pak and names them in its load list. When a game update or the store's file check replaces initial.pak while Maine's level files still name them, Maine stops loading until Apply has run again.",
-  "ru": ""
+  "ru": "Карточка меняет несколько названий прямо в ваших файлах уровней (level_us_06_01.pak и подобных), а Restore записывает обратно игровые названия, после чего файлы становятся такими же, как были, байт в байт. Файл уровня, изменённый другим модом, остаётся как есть. Обновление игры или проверка файлов в магазине возвращает игровые названия: снова нажмите Apply. Большинство значений называют только дни, которые уже есть в игре. Строка Maine со значением map by map также добавляет двадцать небольших файлов в initial.pak и прописывает их в его списке загрузки. Если обновление игры или проверка файлов в магазине заменит initial.pak, а файлы уровней Мэна всё ещё ссылаются на них, Мэн перестанет загружаться, пока Apply не запустят снова."
  },
  "card.smoke.help.0": {
   "en": "Exhaust, smoke, dust and steam glow when the sun is behind them, the way real smoke lights up against the sun.",
-  "ru": ""
+  "ru": "Выхлоп, дым, пыль и пар светятся, когда солнце позади них, как настоящий дым светится против солнца."
  },
  "card.smoke.help.1": {
   "en": "Exhaust and dust clouds lighting up when you look toward a low sun.",
-  "ru": ""
+  "ru": "Выхлоп и облака пыли загораются, когда вы смотрите в сторону низкого солнца."
  },
  "card.smoke.help.2": {
   "en": "Tiny.",
-  "ru": ""
+  "ru": "Совсем немного."
  },
  "card.smoke.help.3": {
   "en": "The glow reaches 162 of the game's 205 particle shaders. More kinds of smoke adds eight that light their puffs the same way; it is off by default because it has not been looked at in the game yet.",
-  "ru": ""
+  "ru": "Свечение работает в 162 из 205 шейдеров частиц игры. More kinds of smoke добавляет ещё восемь, которые освещают свои клубы так же; по умолчанию выключено, потому что в игре это ещё не проверяли."
  },
  "card.smokeshade.help.0": {
   "en": "The game lights each smoke or dust puff as one flat colour. This gives the 80 lit puff sprites shape pixel by pixel: a lit side towards the sun, a shaded far side, lighter tops and slightly darker dense cores. The 110 sprites that fade where they cut into the ground or a truck now fade over twice the distance, so the hard line where a puff meets a surface is gone.",
-  "ru": ""
+  "ru": "Игра освещает каждый клуб дыма или пыли одним плоским цветом. Карточка попиксельно придаёт объём 80 освещаемым спрайтам клубов: освещённая сторона к солнцу, затенённая дальняя, светлее верх и чуть темнее плотная середина. 110 спрайтов, которые растворяются там, где врезаются в землю или грузовик, теперь растворяются на вдвое большем расстоянии, так что резкой линии там, где клуб встречается с поверхностью, больше нет."
  },
  "card.smokeshade.help.1": {
   "en": "Rounder, more solid exhaust and dust clouds, and no sharp edge where smoke meets the ground.",
-  "ru": ""
+  "ru": "Более круглые и плотные облака выхлопа и пыли и никакого резкого края там, где дым касается земли."
  },
  "card.smokeshade.help.2": {
   "en": "Small: a few more instructions in the particle shaders.",
-  "ru": ""
+  "ru": "Немного: несколько лишних инструкций в шейдерах частиц."
  },
  "card.smokeshade.help.3": {
   "en": "Works with or without Smoke glow.",
-  "ru": ""
+  "ru": "Работает и с Smoke glow, и без неё."
  },
  "card.particles.help.0": {
   "en": "Smoke, dust, spray, sparks, leaves and the other particles are drawn from small textures that the game stretches, so up close they look soft and blocky. This puts in the same textures at twice their size, upscaled from the game's own with NVIDIA's DLSS 5 Visual Enhancer, inside boot.pak next to the photo grade.",
-  "ru": ""
+  "ru": "Дым, пыль, брызги, искры, листья и другие частицы рисуются из маленьких текстур, которые игра растягивает, так что вблизи они выглядят мыльными и квадратными. Карточка ставит те же текстуры в удвоенном размере, увеличенные из игровых с помощью NVIDIA DLSS 5 Visual Enhancer, в boot.pak рядом с цветокоррекцией."
  },
  "card.particles.help.1": {
   "en": "Crisper exhaust, dust clouds and spray near the camera, with the same colours and shapes.",
-  "ru": ""
+  "ru": "Чётче выхлоп, облака пыли и брызги рядом с камерой, с теми же цветами и формами."
  },
  "card.particles.help.2": {
   "en": "Video memory for the larger textures. The installer is 114 MB larger for the set.",
-  "ru": ""
+  "ru": "Видеопамять под увеличенные текстуры. Из-за этого набора установщик больше на 114 МБ."
  },
  "card.particles.help.3": {
   "en": "It changes boot.pak, together with Photo grade and Night sky, which it keeps. Other mods that change boot.pak, such as a texture pack, are kept too: Apply asks before it builds on them.",
-  "ru": ""
+  "ru": "Меняет boot.pak вместе с Photo grade и Night sky и сохраняет их изменения. Другие моды, которые меняют boot.pak, например текстурпак, тоже сохраняются: Apply спрашивает, прежде чем собирать поверх них."
  },
  "card.debris.help.0": {
   "en": "What the wheels throw up is gone in a few seconds: leaves, grass and twigs after four, the drops of a mud or water splash after two. This keeps it around. Leaves, grass, twigs, dirt and stones live 30 to 40 seconds and come to rest on the ground, where the tyres push them. Mud, water and snow splashes throw four times the drops, the drops lie twice as long, the splash lasts twice as long and leaves twice the mud and water marks on the truck. Exhaust, dust and steam hang in the air half as long again. Snow spray hangs in the air as it does in life: the snow drops fall at half the gravity with less air resistance and live 15 seconds, and the snow splashes last three times as long. The spray a wheel throws spinning in water flies about 2.5 times as far and is half as big again: it and its drops have less air to slow them, and they live longer. Everywhere else, air resistance, gravity, wind and the sizes stay the game's.",
-  "ru": ""
+  "ru": "То, что выбрасывают колёса, пропадает за несколько секунд: листья, трава и ветки через четыре, капли брызг грязи или воды через две. Карточка оставляет их подольше. Листья, трава, ветки, комья земли и камни живут от 30 до 40 секунд и ложатся на землю, где их толкают шины. Брызги грязи, воды и снега дают вчетверо больше капель, капли лежат вдвое дольше, сами брызги держатся вдвое дольше и оставляют на грузовике вдвое больше следов грязи и воды. Выхлоп, пыль и пар висят в воздухе в полтора раза дольше. Снежная пыль висит в воздухе, как в жизни: снежные частицы падают с половинной гравитацией и меньшим сопротивлением воздуха и живут 15 секунд, а снежные брызги держатся втрое дольше. Брызги, которые бросает колесо, буксующее в воде, летят примерно в 2.5 раза дальше и в полтора раза крупнее: у них и их капель меньше сопротивление воздуха, и живут они дольше. Во всём остальном сопротивление воздуха, гравитация, ветер и размеры остаются игровыми."
  },
  "card.debris.help.1": {
   "en": "A trail of leaves and torn grass behind the truck that stays, mud splashes with more and longer-lived drops, big water spray off a spinning wheel, exhaust that lingers.",
-  "ru": ""
+  "ru": "За грузовиком остаётся след из листьев и вырванной травы, в брызгах грязи больше капель и они живут дольше, от буксующего колеса летят большие фонтаны воды, выхлоп держится в воздухе."
  },
  "card.debris.help.2": {
   "en": "Frame rate where much is thrown up: about ten times as many pieces are alive at once, and a splash has four times the drops. At 8x drops, twice that.",
-  "ru": ""
+  "ru": "Частота кадров там, где из-под колёс летит много всего: одновременно живёт примерно в десять раз больше частиц, а в брызгах вчетверо больше капель. При 8x всё это вдвое больше."
  },
  "card.debris.help.3": {
   "en": "Splash drops: 4x or 8x the game's drops per splash.",
-  "ru": ""
+  "ru": "Splash drops: 4x или 8x игровых капель на одни брызги."
  },
  "card.debris.help.4": {
   "en": "It changes initial.pak, together with Grass reach, Fill light, Brighter stars and Weather, which it keeps. Other mods that change initial.pak change the same file: Apply asks before it builds on it.",
-  "ru": ""
+  "ru": "Меняет initial.pak вместе с Grass reach, Fill light, Brighter stars и Weather и сохраняет их изменения. Другие моды, которые меняют initial.pak, меняют тот же файл: Apply спрашивает, прежде чем собирать поверх него."
  },
  "card.sky.help.0": {
   "en": "The game's night sky is a small texture whose stars are one texel each. This puts NASA's star map in its place, with four times the pixels: the real sky's stars as fine points, and the glow of the Milky Way. Scandinavia, Kola and Quebec have a photo for a night sky, with the northern lights in it. There the same stars are painted into the photo.",
-  "ru": ""
+  "ru": "Ночное небо игры это маленькая текстура, где каждая звезда занимает один тексель. Карточка ставит на её место звёздную карту NASA с вчетверо большим числом пикселей: звёзды настоящего неба тонкими точками и свечение Млечного Пути. В Скандинавии, на Кольском полуострове и в Квебеке ночное небо это фотография с северным сиянием. Там те же звёзды нарисованы прямо на фотографии."
  },
  "card.sky.help.1": {
   "en": "A night sky full of fine stars, with the Milky Way across it.",
-  "ru": ""
+  "ru": "Ночное небо, полное тонких звёзд, и Млечный Путь через него."
  },
  "card.sky.help.2": {
   "en": "Video memory for the larger sky textures. The installer is 65 MB larger for the set.",
-  "ru": ""
+  "ru": "Видеопамять под увеличенные текстуры неба. Из-за этого набора установщик больше на 65 МБ."
  },
  "card.sky.help.3": {
   "en": "It changes boot.pak, together with Photo grade and Sharper smoke and particles, which it keeps, and it sets the levels its photo skies need in initial.pak. The new stars are finer than the game's and come out dim at the game's own level. Brighter stars is set for them.",
-  "ru": ""
+  "ru": "Меняет boot.pak вместе с Photo grade и Sharper smoke and particles и сохраняет их изменения, а ещё выставляет в initial.pak уровни, нужные её небу-фотографиям. Новые звёзды тоньше игровых и при игровом уровне выходят тусклыми. Brighter stars настроена под них."
  },
  "card.sky.help.4": {
   "en": "The star map is made from Deep Star Maps 2020. Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.",
-  "ru": ""
+  "ru": "Звёздная карта сделана из Deep Star Maps 2020. Источник: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC."
  },
  "card.skies.help.0": {
   "en": "A region's sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 49 of the game's sky domes and cloud bands, across every region, with ones made from photographs of real skies, the Milky Way on two night layers with the real one from NASA's star map, and the aurora's blue and violet with a real aurora's green. Each keeps the size of the texture it replaces and the game's own brightness for it. The photographs' own sun is taken out, so the game's sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency.",
-  "ru": ""
+  "ru": "Небо региона это стопка слоёв: нарисованный купол всего верхнего неба, полосы облаков, плывущие над ним, звёзды, солнце. Карточка заменяет 49 игровых небесных куполов и полос облаков во всех регионах на сделанные по фотографиям настоящего неба, Млечный Путь на двух ночных слоях на настоящий из звёздной карты NASA, а синее и фиолетовое северное сияние на зелёное, как у настоящего. Каждая текстура сохраняет размер той, которую заменяет, и игровую яркость для неё. Солнце с фотографий убрано, так что солнечный диск игры остаётся единственным солнцем; полосы облаков вырезаны из фотографий с их собственной прозрачностью."
  },
  "card.skies.help.1": {
   "en": "Real clouds and skies by day, still drifting; at dusk, dawn and night the game's tint over them.",
-  "ru": ""
+  "ru": "Настоящие облака и небо днём, которые по-прежнему плывут; в сумерках, на рассвете и ночью поверх них игровой оттенок."
  },
  "card.skies.help.2": {
   "en": "Nothing in the game. The textures come as a download of their own, the sky pack (SnowRunnerNextGen_Skies.zip, about 100 MB, 300 MB unzipped), unzipped into this program's folder; without it Apply leaves the skies out and says so.",
-  "ru": ""
+  "ru": "В игре ничего. Текстуры идут отдельной загрузкой, набором неба (SnowRunnerNextGen_Skies.zip, около 100 МБ, 300 МБ в распакованном виде), который распаковывается в папку этой программы; без него Apply пропускает небо и сообщает об этом."
  },
  "card.skies.help.3": {
   "en": "The rainbow, the comet, the sun's and the moon's discs and glows stay the game's. It changes boot.pak, together with Photo grade, Sharper smoke and particles, Night sky and Reflection cubes, which it keeps. The skies are made with engine\\tools\\make_cube.js and make_clouds.js from 23 CC0 panoramas by Poly Haven, the Milky Way from NASA's Deep Star Maps 2020.",
-  "ru": ""
+  "ru": "Радуга, комета, диски и ореолы солнца и луны остаются игровыми. Меняет boot.pak вместе с Photo grade, Sharper smoke and particles, Night sky и Reflection cubes и сохраняет их изменения. Небо сделано с помощью engine\\tools\\make_cube.js и make_clouds.js из 23 панорам CC0 от Poly Haven, Млечный Путь из Deep Star Maps 2020 от NASA."
  },
  "card.stars.help.0": {
   "en": "The night sky draws its stars as one layer, at a low level set per region. This raises that level at night in every region where the stars are their own layer, so they stand out against the dark sky. Dusk and dawn keep the game's level.",
-  "ru": ""
+  "ru": "Ночное небо рисует звёзды одним слоем, с низким уровнем, заданным для каждого региона. Карточка поднимает этот уровень ночью во всех регионах, где звёзды идут отдельным слоем, чтобы они выделялись на тёмном небе. Сумерки и рассвет сохраняют игровой уровень."
  },
  "card.stars.help.1": {
   "en": "A night sky with clearly visible stars.",
-  "ru": ""
+  "ru": "Ночное небо с хорошо заметными звёздами."
  },
  "card.stars.help.2": {
   "en": "None: it changes how bright the game draws a layer it draws anyway.",
-  "ru": ""
+  "ru": "Ничего: карточка меняет только яркость слоя, который игра и так рисует."
  },
  "card.stars.help.3": {
   "en": "Brightness: three or two times the game's level.",
-  "ru": ""
+  "ru": "Brightness: в три или в два раза выше игрового уровня."
  },
  "card.stars.help.4": {
   "en": "It changes initial.pak, together with Grass reach and Fill light, which it keeps. Three times is the level set for Night sky's star map, whose fine stars come out dim at the game's own level. With the game's own star texture the stars simply come out that much brighter. The regions whose night sky is a photo are not changed by this: with Night sky their photos carry the stars at a fixed level.",
-  "ru": ""
+  "ru": "Меняет initial.pak вместе с Grass reach и Fill light и сохраняет их изменения. Трёхкратный уровень подобран под звёздную карту Night sky, чьи тонкие звёзды при игровом уровне выходят тусклыми. С игровой текстурой звёзд звёзды просто становятся во столько же раз ярче. Регионы, где ночное небо это фотография, карточка не меняет: с Night sky звёзды на их фотографиях имеют постоянный уровень."
  },
  "card.tonemap.help.0": {
   "en": "Tonemapping turns the scene's light into the colours of your screen. This uses a curve with more contrast than the game's own. Mid-grey stays where it was, shade gets deeper and keeps its detail, and bright parts get brighter and roll off without a hard clip. The bloom is turned down to 60 %.",
-  "ru": ""
+  "ru": "Тонмаппинг переводит свет сцены в цвета вашего экрана. Карточка использует кривую с большим контрастом, чем у игры. Средний серый остаётся на месте, тень становится глубже и сохраняет детали, а яркие места становятся ярче и плавно уходят в белое без жёсткой обрезки. Блум ослаблен до 60 %."
  },
  "card.tonemap.help.1": {
   "en": "Deeper shadows and richer colour, less of a washed-out look.",
-  "ru": ""
+  "ru": "Глубже тени и насыщеннее цвет, меньше блёклости."
  },
  "card.tonemap.help.2": {
   "en": "None to speak of.",
-  "ru": ""
+  "ru": "Практически ничего."
  },
  "card.bloom.help.0": {
   "en": "Bloom makes bright things glow. The game's bloom starts early, so bright snow and sky spread a haze over the picture. This gives it a soft threshold: only really bright things glow.",
-  "ru": ""
+  "ru": "Блум заставляет яркое светиться. Игровой блум включается рано, поэтому яркий снег и небо стелют дымку по всей картинке. Карточка даёт ему мягкий порог: светится только действительно яркое."
  },
  "card.bloom.help.1": {
   "en": "Clear snowy views without the milky haze; lamps and the sun still glow.",
-  "ru": ""
+  "ru": "Чистые снежные виды без молочной дымки; фонари и солнце по-прежнему светятся."
  },
  "card.bloom.help.2": {
   "en": "None to speak of.",
-  "ru": ""
+  "ru": "Практически ничего."
  },
  "card.grade.help.0": {
   "en": "The game finishes every picture with a colour grade for the time of day. This builds a photographic grade into it: greens, autumn leaves and the violet haze lose some of their loudness, and whites land a little lower instead of glaring. How much of each colour goes was measured against DLSS 5 shots of the same scenes. Greys stay grey, and the game's own grade stays underneath. It also takes out the game's lens dirt: soft discs the camera adds over bright sky and clouds.",
-  "ru": ""
+  "ru": "Игра завершает каждую картинку цветокоррекцией под время суток. Карточка встраивает в неё фотографическую цветокоррекцию: зелень, осенняя листва и фиолетовая дымка становятся спокойнее, а белое ложится чуть ниже и не слепит. Сколько убрать у каждого цвета, измерено по снимкам тех же сцен с DLSS 5. Серое остаётся серым, а собственная цветокоррекция игры остаётся под ней. Ещё карточка убирает игровую грязь на объективе: мягкие круги, которые камера добавляет поверх яркого неба и облаков."
  },
  "card.grade.help.1": {
   "en": "Foliage and hills in the calmer colours of a photo, a haze that reads grey-blue rather than lavender, less glare on white paint and snow, and no blurry discs over the clouds.",
-  "ru": ""
+  "ru": "Листва и холмы в более спокойных цветах фотографии, дымка серо-голубая, а не лавандовая, меньше блеска на белой краске и снегу и никаких размытых кругов поверх облаков."
  },
  "card.grade.help.2": {
   "en": "None: the game grades the picture anyway.",
-  "ru": ""
+  "ru": "Ничего: игра и так делает цветокоррекцию картинки."
  },
  "card.grade.help.3": {
   "en": "Strength: 100 % is the measured grade, 50 % half of it.",
-  "ru": ""
+  "ru": "Strength: 100 % это измеренная цветокоррекция, 50 % её половина."
  },
  "card.grade.help.4": {
   "en": "It changes the four colour tables that the day, dusk and dawn light use (a few night scenes share them), inside boot.pak, where Sharper smoke and particles and Night sky go too; the garage, the map and the darkest night table keep theirs. Best together with Fill light, which does the shade: this one does the colour. When another mod has added its files to boot.pak (a texture pack, say), Apply asks before it builds on them, and they stay in (see How it works, Other mods).",
-  "ru": ""
+  "ru": "Меняет четыре цветовые таблицы, которые использует освещение дня, сумерек и рассвета (их делят и несколько ночных сцен), внутри boot.pak, куда идут также Sharper smoke and particles и Night sky; гараж, карта и самая тёмная ночная таблица сохраняют свои. Лучше всего вместе с Fill light, которая отвечает за тень, а эта карточка за цвет. Если другой мод добавил свои файлы в boot.pak (например, текстурпак), Apply спрашивает, прежде чем собирать поверх них, и они остаются (см. How it works, раздел Other mods)."
  },
  "card.scenery.help.0": {
   "en": "Rocks, trees and bushes switch to simpler models close to you (some rocks at 10 metres), and the switch shows as shapes and shadows that flip while you drive. This moves the first switch out to at least 40 metres and the later ones to 70, 110 and 160.",
-  "ru": ""
+  "ru": "Камни, деревья и кусты переключаются на более простые модели рядом с вами (некоторые камни уже на 10 м), и это видно: формы и тени скачут на ходу. Карточка отодвигает первое переключение минимум на 40 м, а следующие на 70, 110 и 160."
  },
  "card.scenery.help.1": {
   "en": "Far less popping on rocks and trees.",
-  "ru": ""
+  "ru": "Камни и деревья гораздо меньше меняются на глазах."
  },
  "card.scenery.help.2": {
   "en": "More detailed models drawn farther out: some frame rate in dense forest. Each of the two extras adds to that: more plants drawn far away, more shadows drawn.",
-  "ru": ""
+  "ru": "Более детальные модели рисуются дальше: немного частоты кадров в густом лесу. Каждое из двух дополнений добавляет к этому: больше растений вдали, больше теней."
  },
  "card.scenery.help.3": {
   "en": "Set: nature changes rocks, trees and bushes (351 models). All meshes changes every model that has detail steps (1626), which makes shared.pak larger than 2 GB; the game loads it fine. Shown far away: the game stops drawing most things beyond a distance of their own (small rocks and twigs at 55 to 80 metres, trees and buildings farther), which shows as things appearing ahead of you. Plants takes that distance out of every plant (314 models: trees, bushes, rocks, twigs, roots), everything out of every model that has one (3468: signs, fences, pipes, houses and the rest as well). Small shadows: some models cast no shadow at all or lose it 25 to 50 metres away. Plants gives each of those plants its shadow at any distance (163 models), everything does the same for all 395.",
-  "ru": ""
+  "ru": "Set: nature меняет камни, деревья и кусты (351 модель). All meshes меняет все модели со ступенями детализации (1626), из-за чего shared.pak становится больше 2 ГБ; игра загружает его нормально. Shown far away: игра перестаёт рисовать большинство объектов дальше их собственного расстояния (мелкие камни и ветки от 55 до 80 м, деревья и здания дальше), и видно, как впереди появляются предметы. Plants убирает это расстояние у всех растений (314 моделей: деревья, кусты, камни, ветки, корни), everything у всех моделей, где оно есть (3468: ещё и знаки, заборы, трубы, дома и всё остальное). Small shadows: некоторые модели вообще не отбрасывают тень или теряют её на расстоянии от 25 до 50 м. Plants даёт каждому из этих растений тень на любом расстоянии (163 модели), everything делает то же для всех 395."
  },
  "card.scenery.help.4": {
   "en": "A game update or a Steam file check puts the original shared.pak back. Apply again afterwards.",
-  "ru": ""
+  "ru": "Обновление игры или проверка файлов в Steam возвращает оригинальный shared.pak. После этого снова нажмите Apply."
  },
  "card.grass.help.0": {
   "en": "Most grass fades out about 30 metres from the camera. This draws it out to 60 metres, and it still grows in as it comes nearer.",
-  "ru": ""
+  "ru": "Большая часть травы исчезает примерно в 30 м от камеры. Карточка рисует её до 60 м, и она по-прежнему плавно вырастает по мере приближения."
  },
  "card.grass.help.1": {
   "en": "Frame rate in grassy areas: grass covers up to four times the ground, and at 3x it stays thick farther out than at 2x.",
-  "ru": ""
+  "ru": "Частота кадров на травянистых участках: трава покрывает до четырёх раз больше земли, а на 3x она остаётся густой дальше, чем на 2x."
  },
  "card.grass.help.2": {
   "en": "Reach: 3x or 2x the game's fade distances, each step at most 50, 55 and 60 metres.",
-  "ru": ""
+  "ru": "Reach: 3x или 2x игровых расстояний исчезновения, каждая ступень не дальше 50, 55 и 60 м."
  },
  "card.grass.help.3": {
   "en": "The game draws grass only to about 64 metres from the camera. Set farther, the grass at the edge appears whole at once instead of growing in, so no step goes past 60 metres; a step the game itself sets farther stays. It changes initial.pak, a file that other mods change too.",
-  "ru": ""
+  "ru": "Игра рисует траву только примерно до 64 м от камеры. Если задать дальше, трава на краю появляется сразу целиком, а не вырастает, поэтому ни одна ступень не уходит дальше 60 м; ступень, которую сама игра задаёт дальше, остаётся как есть. Меняет initial.pak, файл, который меняют и другие моды."
  },
  "card.logos.help.0": {
   "en": "Adds NEXT GEN under the game's logo wherever the interface shows it: on the title screen, the first loading screen, the main menu, the pause menu and the map.",
-  "ru": ""
+  "ru": "Добавляет NEXT GEN под логотип игры везде, где его показывает интерфейс: на титульном экране, первом экране загрузки, в главном меню, меню паузы и на карте."
  },
  "card.logos.help.1": {
   "en": "The mod's name under the SnowRunner logo, so you can tell at a glance that it is installed.",
-  "ru": ""
+  "ru": "Название мода под логотипом SnowRunner, чтобы с первого взгляда было видно, что он установлен."
  },
  "card.logos.help.2": {
   "en": "Nothing in the game. The first Apply keeps a copy of gfx.pak, several hundred MB, so that Restore can put it back.",
-  "ru": ""
+  "ru": "В игре ничего. Первый Apply сохраняет копию gfx.pak, несколько сотен МБ, чтобы Restore мог её вернуть."
  },
  "card.logos.help.3": {
   "en": "Start-up: the game's intro (its warning and the publisher logos, about 18 s), or the Next Gen splash only: the game goes straight to its first loading screen. Measured on 2026-10-17 with a warm disk cache: the title screen came 41 s after start with the intro and 24 to 25 s without. The splash only is the default.",
-  "ru": ""
+  "ru": "Start-up: the game's intro (её предупреждение и логотипы издателей, около 18 с) или Next Gen splash only: игра сразу переходит к первому экрану загрузки. Замер 2026-10-17 с прогретым дисковым кэшем: титульный экран появился через 41 с после запуска со вступлением и через 24 или 25 с без него. По умолчанию выбрано Next Gen splash only."
  },
  "card.logos.help.4": {
   "en": "It changes gfx.pak, the file of the interface. The start-up row changes the game's start-up movie in the same file: two small edits to its script, and a game version whose movie differs keeps its intro (Apply says so). The title screen, the first loading screen and the main menu have a picture of their own for the logo, and those are replaced whole. On the pause menu and the map the logo shares a sheet with other pictures: there only the logo changes, so an interface mod's sheet keeps everything else, and a sheet with another layout is left as it is.",
-  "ru": ""
+  "ru": "Меняет gfx.pak, файл интерфейса. Строка Start-up меняет стартовый ролик игры в том же файле: это две небольшие правки в его скрипте, а версия игры с другим роликом сохраняет своё вступление (Apply сообщает об этом). У титульного экрана, первого экрана загрузки и главного меню есть своя картинка для логотипа, и они заменяются целиком. В меню паузы и на карте логотип делит лист с другими картинками: там меняется только логотип, так что лист мода интерфейса сохраняет всё остальное, а лист с другой раскладкой остаётся как есть."
  },
  "part.p1": {
   "en": "Part 1. Next Gen for dummies",
-  "ru": ""
+  "ru": "Часть 1. Next Gen для чайников"
  },
  "toc.p1-what": {
   "en": "What Next Gen is",
-  "ru": ""
+  "ru": "Что такое Next Gen"
  },
  "toc.p1-need": {
   "en": "What you need",
-  "ru": ""
+  "ru": "Что понадобится"
  },
  "toc.p1-install": {
   "en": "Put it in, step by step",
-  "ru": ""
+  "ru": "Установка шаг за шагом"
  },
  "toc.p1-switch": {
   "en": "What to switch on",
-  "ru": ""
+  "ru": "Что включить"
  },
  "toc.p1-change": {
   "en": "Change your mind, or take it all out",
-  "ru": ""
+  "ru": "Передумали или хотите удалить всё"
  },
  "toc.p1-update": {
   "en": "After a game update",
-  "ru": ""
+  "ru": "После обновления игры"
  },
  "toc.p1-mods": {
   "en": "Other mods",
-  "ru": ""
+  "ru": "Другие моды"
  },
  "toc.p1-wrong": {
   "en": "When something goes wrong",
-  "ru": ""
+  "ru": "Если что-то пошло не так"
  },
  "part.p2": {
   "en": "Part 2. The window",
-  "ru": ""
+  "ru": "Часть 2. Окно программы"
  },
  "part.p3": {
   "en": "Part 3. Every card at a glance",
-  "ru": ""
+  "ru": "Часть 3. Все карточки вкратце"
  },
  "part.p4": {
   "en": "Part 4. How it works, in depth",
-  "ru": ""
+  "ru": "Часть 4. Как это устроено, подробно"
  },
  "part.p5": {
   "en": "Part 5. What it changes on your PC",
-  "ru": ""
+  "ru": "Часть 5. Что меняется на вашем ПК"
  },
  "part.p6": {
   "en": "Part 6. Licence and credits",
-  "ru": ""
+  "ru": "Часть 6. Лицензия и авторы"
  },
  "ui.title": {
   "en": "Next Gen Graphics: the guide",
-  "ru": ""
+  "ru": "Next Gen Graphics: руководство"
  },
  "ui.sub": {
   "en": "for SnowRunner (SnowRunner Next Gen before October 2026). The guide: for beginners, and every card in depth",
-  "ru": ""
+  "ru": "для SnowRunner (до октября 2026 года SnowRunner Next Gen). Руководство: для новичков и подробно о каждой карточке"
  },
  "ui.edition": {
   "en": "For Next Gen 1.0.2 and the changes since. The card texts are the program's own, from the build of {built}.",
-  "ru": ""
+  "ru": "Для Next Gen 1.0.2 и всех изменений после него. Тексты карточек взяты из самой программы, из сборки от {built}."
  },
  "ui.count": {
   "en": "{cards} cards, {rows} rows of options.",
-  "ru": ""
+  "ru": "Карточек: {cards}, строк настроек: {rows}."
  },
  "ui.contents": {
   "en": "Contents",
-  "ru": ""
+  "ru": "Содержание"
  }
 }

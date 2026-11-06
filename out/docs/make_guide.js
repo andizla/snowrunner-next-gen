@@ -11,6 +11,8 @@
 // English text changed since its translation (or has none), naming each, so a change brings its Russian text along.
 // --pack: writes ru\ for a translator instead: strings.json with every English text (ru left empty where none is
 // current), and each part or chapter without a current Russian file as <name>.en to translate.
+// --stamp <name>...: a part or chapter whose Russian file was brought in line with its English by hand (a small change
+// made in both): its English as it is now counts as the one translated.
 'use strict';
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), { execFileSync } = require('child_process');
 const here = __dirname, cat = JSON.parse(fs.readFileSync(path.join(here, 'catalog.json'), 'utf8').replace(/^\uFEFF/, ''));
@@ -177,7 +179,7 @@ const files = F('files.html', `
 <tr><td>shader.pak</td><td>the shader modules: shadows, occlusion, light, reflections, water, fog, smoke, the tonemap</td></tr>
 <tr><td>shared.pak</td><td>Scenery detail</td></tr>
 <tr><td>initial.pak</td><td>Grass reach, the fill light, Brighter stars, Weather, Debris and splashes, and Maine's own days (Map days, map by map)</td></tr>
-<tr><td>boot.pak</td><td>Photo grade, Sharper smoke and particles, Night sky, Reflection cubes, Winter skies</td></tr>
+<tr><td>boot.pak</td><td>Photo grade, Sharper smoke and particles, Night sky, Reflection cubes, Skies</td></tr>
 <tr><td>gfx.pak</td><td>Next Gen logo, and the start without the intro</td></tr>
 <tr><td>level files</td><td>with Map days, a few names in the level files of Maine, British Columbia, Austria and Washington, changed in place</td></tr>
 </tbody></table>
@@ -245,6 +247,19 @@ const html = '<!doctype html><html' + (RU ? ' lang="ru"' : '') + '><head><meta c
     '<div class="partpage"><h2 class="part">' + T('ui.contents', 'Contents') + '</h2>' + toc + '</div>' +
     parts.map(([id, t, body]) => '<div class="partpage"><h2 class="part" id="' + id + '">' + esc(t) + '</h2>' + body + '</div>').join('') + '</body></html>';
 
+if (process.argv.includes('--stamp'))
+{
+    const names = process.argv.slice(process.argv.indexOf('--stamp') + 1).filter((a) => !a.startsWith('--'));
+    for (const name of names)
+    {
+        if (!(name in usedFiles)) throw new Error('no part or chapter named ' + name);
+        if (!fs.existsSync(path.join(ruDir, name))) throw new Error('no Russian file for ' + name);
+        sources[name] = sha(usedFiles[name]);
+    }
+    fs.writeFileSync(path.join(ruDir, 'sources.json'), JSON.stringify(sources, null, 1) + '\n');
+    console.log('stamped: ' + names.join(', '));
+    process.exit(0);
+}
 if (PACK)
 {
     // the translator's pack: every English text, the Russian kept where it is still current

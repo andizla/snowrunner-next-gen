@@ -1,0 +1,15 @@
+
+<p>Всё в папке игры <b>preload\paks\client</b>, и только те файлы, которые нужны отмеченным карточкам:</p>
+<table class="rows"><thead><tr><th>Файл</th><th>Что в него кладёт Next Gen</th></tr></thead><tbody>
+<tr><td>shader.pak</td><td>шейдерные модули: тени, затенение, свет, отражения, вода, туман, дым, тонмаппинг</td></tr>
+<tr><td>shared.pak</td><td>Scenery detail</td></tr>
+<tr><td>initial.pak</td><td>Grass reach, заполняющий свет, Brighter stars, Weather, Debris and splashes и собственные дни Мэна (Map days, map by map)</td></tr>
+<tr><td>boot.pak</td><td>Photo grade, Sharper smoke and particles, Night sky, Reflection cubes, Skies</td></tr>
+<tr><td>gfx.pak</td><td>Next Gen logo и запуск без вступительного ролика</td></tr>
+<tr><td>файлы уровней</td><td>с Map days несколько имён в файлах уровней Мэна, Британской Колумбии, Австрии и Вашингтона, изменённые на месте</td></tr>
+</tbody></table>
+<p>В папке с SnowRunner.exe (в Steam это Sources\Bin): <b>hid.dll</b>, то есть SnowRunner Shadows, и его настройки,
+<b>SnowRunnerShadows.ini</b>. hid.dll другого мода продолжает загружаться под именем hid_chain.dll.</p>
+<p>Копии исходных файлов хранятся в <b>%LOCALAPPDATA%\SnowRunnerNextGen</b>. Каждый новый файл записывается рядом со
+старым, читается обратно и проверяется, и только потом занимает место старого. Рядом с паками программа оставляет небольшую заметку,
+<b>SnowRunnerNextGen.json</b>, со списком файлов, в которых есть её изменения; кнопка Restore originals её удаляет.</p>
