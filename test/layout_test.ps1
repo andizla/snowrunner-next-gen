@@ -118,6 +118,58 @@ foreach ($l in $layouts) {
   finally { Stop-Process -Id $running.Id -Force -ErrorAction SilentlyContinue; $running.WaitForExit() }
   Check 'the game closed: the status says so' (Status $top).running 'False'
 
+  if (-not $l.game) {
+    # the game started during an Apply (2026-11-03): Windows refuses the swap of a pak the game holds. Here shader.pak is
+    # held open without delete sharing, and the stand-in game starts at Apply's first line, after its own check at
+    # the start; the stop then says the game was started and what to do
+    $r = Engine $top @('restore')
+    Check 'restore before the started-game run: done' $r[$r.Count - 1].type 'done'
+    $out = Join-Path $base 'started.out'
+    $hold = [IO.File]::Open($pak, 'Open', 'Read', 'ReadWrite')
+    $running = $null
+    try {
+      $run = Start-Process -FilePath $node -ArgumentList $ngen, 'apply', '--selection', $selection, '--game', $top -RedirectStandardOutput $out -WindowStyle Hidden -PassThru
+      $until = (Get-Date).AddSeconds(300)
+      while (-not $run.HasExited -and -not ((Test-Path -LiteralPath $out) -and (Get-Item -LiteralPath $out).Length -gt 0) -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 20 }
+      $running = Start-Process -FilePath (Join-Path $bin 'SnowRunner.exe') -ArgumentList '-n', '60', '127.0.0.1' -WindowStyle Hidden -PassThru
+      if (-not $run.WaitForExit(300000)) { $run.Kill(); throw 'the started-game Apply did not end in 5 minutes' }
+    }
+    finally {
+      $hold.Dispose()
+      if ($running) { Stop-Process -Id $running.Id -Force -ErrorAction SilentlyContinue; $running.WaitForExit() }
+    }
+    $e = @(Get-Content -LiteralPath $out | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) | Select-Object -Last 1
+    '     {0,-5} {1}' -f $e.type, $e.text | Out-Host
+    Check 'the game started during Apply: the stop says so and what to do' ('{0} {1} {2}' -f $e.type, $e.code, ($e.text -match '^SnowRunner was started while this ran.*Close the game and run it again')) 'error running True'
+    $r = Engine $top @('apply', '--selection', $selection)
+    Check 'the game closed again: Apply is done' $r[$r.Count - 1].type 'done'
+    Check 'the game closed again: status' ('{0} {1}' -f (Status $top).shader.state, (Status $top).dll.state) 'ours ours'
+    # and a Restore: hid.dll held open without delete sharing, so the engine's own unlink stops with Node's EPERM or EBUSY
+    # (review 19, F1); a Restore builds nothing, so the text says the rest goes back (F2)
+    $dll = Join-Path $bin 'hid.dll'
+    $hold = [IO.File]::Open($dll, 'Open', 'Read', 'Read')
+    $running = $null
+    Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
+    try {
+      $run = Start-Process -FilePath $node -ArgumentList $ngen, 'restore', '--game', $top -RedirectStandardOutput $out -WindowStyle Hidden -PassThru
+      $until = (Get-Date).AddSeconds(300)
+      while (-not $run.HasExited -and -not ((Test-Path -LiteralPath $out) -and (Get-Item -LiteralPath $out).Length -gt 0) -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 20 }
+      $running = Start-Process -FilePath (Join-Path $bin 'SnowRunner.exe') -ArgumentList '-n', '60', '127.0.0.1' -WindowStyle Hidden -PassThru
+      if (-not $run.WaitForExit(300000)) { $run.Kill(); throw 'the started-game Restore did not end in 5 minutes' }
+    }
+    finally {
+      $hold.Dispose()
+      if ($running) { Stop-Process -Id $running.Id -Force -ErrorAction SilentlyContinue; $running.WaitForExit() }
+    }
+    $e = @(Get-Content -LiteralPath $out | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) | Select-Object -Last 1
+    '     {0,-5} {1}' -f $e.type, $e.text | Out-Host
+    Check 'the game started during Restore: the stop says so, and that the rest goes back' ('{0} {1} {2}' -f $e.type, $e.code, ($e.text -match '^SnowRunner was started while this ran.*the files already put back stay so, the rest goes back then\.$')) 'error running True'
+    $r = Engine $top @('restore')
+    Check 'the game closed again: Restore is done' ('{0} {1}' -f $r[$r.Count - 1].type, (Status $top).dll.state) 'done none'
+    $r = Engine $top @('apply', '--selection', $selection)
+    Check 'and Apply again: done' ('{0} {1} {2}' -f $r[$r.Count - 1].type, (Status $top).shader.state, (Status $top).dll.state) 'done ours ours'
+  }
+
   if ($deep) {
     'the same install through en_us (SnowRunner.exe picked in the window)'
     Check 'en_us: the same install' ('{0} {1}' -f (Status $game).shader.state, (Status $game).dll.state) 'ours ours'

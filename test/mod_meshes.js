@@ -1,6 +1,6 @@
 // The stand-in for a mesh mod in shared.pak (as RLM puts its own trucks' and rocks' meshes in with WinRAR): named
 // meshes replaced by other bytes, each the original mesh with its last byte changed, stored. engine_test.ps1 uses it.
-// usage: node test/mod_meshes.js pick <shared.pak.orig>   JSON: { set: [three meshes the nature set changes], other: a
+// usage: node test/mod_meshes.js pick <shared.pak.orig>   JSON: { set: [four meshes the nature set changes], other: a
 //        mesh no set changes, nature: how many meshes the nature set with hide=plants changes }
 //        node test/mod_meshes.js put <shared.pak> <shared.pak.orig> <name>...   the named meshes replaced in place; JSON:
 //        { name: "crc/size" } as engine_test.ps1's Entries gives them
@@ -12,7 +12,7 @@ const hex = (v) => (v >>> 0).toString(16).padStart(8, '0');
 if (cmd === 'pick')
 {
     const p = lod.plan(pak, 'nature', { hide: 'plants', shadows: 'off' }), set = [];
-    for (const [ent, job] of p.jobs) if (job.raised && set.length < 3) set.push(ent.name);
+    for (const [ent, job] of p.jobs) if (job.raised && set.length < 4) set.push(ent.name);
     const fd = fs.openSync(pak, 'r');
     let other = null;
     // a truck's or a building's mesh: a model the nature set leaves alone (hide=plants takes only plants)

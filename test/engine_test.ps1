@@ -475,6 +475,16 @@ $want[$pick.set[2]] = $more.($pick.set[2])
 Check 'adopt stopped, run again: done, the original the game''s plus the mod''s four meshes, none of Next Gen''s' ('{0} {1} {2}' -f (Last $r), (Status).scenery, (EntriesDiff (Entries (Join-Path $stateDir 'shared.pak.orig')) $want)) 'done nature same'
 $r = Engine @('restore')
 Check 'adopt stopped, run again, restore: shared.pak is that original' ('{0} {1}' -f (Last $r), (EntriesDiff (Entries $shared) $want)) 'done same'
+'a mesh mod put in after the build, then Scenery detail unticked (review 18, N4): the other mod''s mesh stays, none of Next Gen''s'
+$r = Apply $meshSel
+$more = (& $node $modMeshesJs put $shared $stockShared $pick.set[3]) | ConvertFrom-Json
+$noScenery = [ordered]@{ shader = @(); shadows = $null; scenery = $null; grass = $null; fill = $null; grade = $null }
+$r = Apply $noScenery
+$e = $r[$r.Count - 1]
+Check 'scenery unticked over a mesh mod: asks first, naming shared.pak' ('{0} {1} {2}' -f $e.type, $e.code, (@($e.files) -join ',')) 'error adopt-files shared.pak'
+$r = Apply $noScenery @('--adopt')
+$want[$pick.set[3]] = $more.($pick.set[3])
+Check 'scenery unticked over a mesh mod, taken as the original: shared.pak is the game''s plus the mod''s five meshes' ('{0} {1} {2}' -f (Last $r), (Status).scenery, (EntriesDiff (Entries $shared) $want)) 'done vanilla same'
 
 }
 
