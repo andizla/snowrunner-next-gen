@@ -33,7 +33,7 @@ smaller than a pixel, and ground seen at a flat angle starts to shadow itself in
 <ul>
 <li>Screen space only: an occluder outside the picture, or hidden behind something nearer, casts nothing.</li>
 <li>The thickness is one number for everything: very thin things (wires) may cast too long a shadow behind them.</li>
-<li>F4 switches the pass off and on.</li>
+<li>The Graphics tab's Contact shadows switch turns the pass off and on.</li>
 </ul>
 
 <h2 id="t-headshadow">Headlight shadows</h2>
@@ -226,7 +226,7 @@ quarter of the far reads: 0.9 ms instead of 3.3 ms at 3840 &times; 2160.</p>
 <ul>
 <li>Screen space: what is outside the picture or hidden behind something casts no occlusion.</li>
 <li>Thin things in front of a wall make a dark halo on the wall; the depth weighting and the fade keep it small.</li>
-<li>F11 compares GTAO with the game's SSAO, F5 switches between half and full size.</li>
+<li>The Graphics tab's GTAO switch compares it with the game's SSAO, and its AO at half size switches between half and full size.</li>
 </ul>
 
 <h2 id="t-gi">Bounce light</h2>
@@ -256,7 +256,7 @@ the camera (the player's truck). Last frame's depth decides which applies; where
 light this frame. The AO pass stores the bounce divided by the darkening the AO apply pass will give the pixel, so after the
 apply the bounce keeps its strength.</p>
 <p>Limits: it is experimental because in places (bright snow next to dark wood) it comes out too strong, and like every
-screen-space effect it knows only what is on screen. F10 switches it off and on.</p>
+screen-space effect it knows only what is on screen. The Graphics tab's Bounce light switch turns it off and on.</p>
 
 <h2 id="t-ambient">Sky ambient and fill light</h2>
 <p class="lead">Cards: Sky ambient, Fill light. The colour and the amount of the light that fills in shade.</p>

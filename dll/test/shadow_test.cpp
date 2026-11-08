@@ -8,15 +8,18 @@
 //                          hooks the runtime's device class under ReShade's wrappers (the case the layer guard covers)
 //   ... nofeed             expects no scene feed (ini Feed=0), so no bounce light either
 //   ... nogi               expects the scene feed but no bounce light (ini GI=0)
-//   ... puddlesoff         dev switch F9 off at start (ini PuddlesOn=0): feed readers get the depth but no scene colour
+//   ... puddlesoff         the puddles switch off at start (ini PuddlesOn=0): feed readers get the depth but no scene colour
 //   ... nomips             expects the colour copy with one mip level (ini FeedMips=0) instead of a full chain
-//   ... bounceoff          dev switch F10 off at start (ini BounceOn=0): no bounce light, as with nogi
+//   ... bounceoff          the bounce light switch off at start (ini BounceOn=0): no bounce light, as with nogi
 //   ... aohalf             with ini AOHalf=1: the bounce-light checks with the AO pass drawn at half size (an R8 AO target,
 //                          as the game's), plus the half-size target, the full-size result at t1, the game's viewport and t1 back
 //   shadow_test aohalfodd  the AO pass at half size on a 65 x 37 target (see AOHalfOddTest): the last column and row too
-//   shadow_test maketable  writes SnowRunnerShadows.stock (the stock twins table) from this test's own shaders, then exits
-//   ... twins [stockall|stockao]   with that table next to the DLL: the dev switches F8 (ini StockAll=1) and F11 (ini
-//                          StockAO=1) at start: a changed shader draws with its original exactly when its group is stock
+//   shadow_test maketable  writes SnowRunnerShadows.stock (the stock twins table, version 2 with four modules) from this
+//                          test's own shaders, then exits; maketable1 the version-1 table of installs up to 1.1.2,
+//                          maketable62 and maketable63 version 2 with that many made-up modules (62 fill the tab, 63 are refused)
+//   ... twins [stockall|stockao|moduleoff <switch>]   with that table next to the DLL: F8's state (ini StockAll=1) or
+//                          the AO switch's (ini StockAO=1) at start, or a module's switch set off through the Graphics
+//                          tab's list: a changed shader draws with its original exactly when a switch over it is off
 //   ... dump [immediate]   with ini DumpAfter=1: the AO pass a second after the first one is saved to SnowRunnerShadows_dump_*
 //                          next to this program (recorded on a deferred context, or with `immediate` on the immediate
 //                          one), and the files are read back and checked; older dump files here are deleted first
@@ -151,8 +154,13 @@ static ID3DBlob *CompileVS(const char *src)
 // a changed vertex shader (group 2): the triangle moved off screen, so it draws nothing; its original is kVS
 static const char *kTwinVS = "float4 main(uint id : SV_VertexID) : SV_Position { float2 t = float2((id << 1) & 2, id & 2); return float4(t * float2(2, -2) + float2(9, 11), 0.25, 1); }";
 // the stock twins table next to this program (and so next to the DLL it loads): the format of the fidelity bundle's
-// engine\tools\stock_twins.js
-static bool MakeTwinTable()
+// engine\tools\stock_twins.js. Version 2 (what the bundle writes since 1.1.3) names four modules and marks the changed
+// shader with two of them (tonemap and water: the shared-shader rule), the AO pass's shader with gtao and the AO bit,
+// and the vertex shader with smoke; with generated > 0 it names that many made-up modules instead, the changed shader
+// marked with every one of them (62 is the most a table may name, so the tab shows its 64 switches exactly; 63 is
+// refused). Version 1 is the table of installs up to 1.1.2 (groups: 1 the AO pass, 2 any other)
+static const char *kTwinModules[4][2] = { { "tonemap", "Tonemap" }, { "gtao", "GTAO" }, { "smoke", "Smoke glow" }, { "water", "Water reflections" } };
+static bool MakeTwinTable(int version, int generated)
 {
     ID3DBlob *b[6] = {};
     for (int i = 0; i < 4; i++)
@@ -162,19 +170,54 @@ static bool MakeTwinTable()
     }
     b[4] = CompileVS(kTwinVS); b[5] = CompileVS(kVS);
     if (!b[4] || !b[5]) return false;
-    struct E { uint32_t key, group; ID3DBlob *stock; } e[3] = { { Crc32(b[0]->GetBufferPointer(), b[0]->GetBufferSize()), 2, b[1] },
-                                                              { Crc32(b[2]->GetBufferPointer(), b[2]->GetBufferSize()), 1, b[3] },
-                                                              { Crc32(b[4]->GetBufferPointer(), b[4]->GetBufferSize()), 2, b[5] } };
+    const uint64_t every = generated ? (generated >= 64 ? ~0ull : (1ull << generated) - 1) : (1ull << 0) | (1ull << 3);
+    struct E { uint32_t key, group; uint64_t mask; ID3DBlob *stock; } e[3] = { { Crc32(b[0]->GetBufferPointer(), b[0]->GetBufferSize()), 2, every, b[1] },
+                                                                             { Crc32(b[2]->GetBufferPointer(), b[2]->GetBufferSize()), 1, (1ull << 1) | (1ull << 62), b[3] },
+                                                                             { Crc32(b[4]->GetBufferPointer(), b[4]->GetBufferSize()), 2, 1ull << 2, b[5] } };
     std::sort(e, e + 3, [](const E &x, const E &y) { return x.key < y.key; });
-    std::vector<BYTE> file(16 + 3 * 16);
-    const uint32_t head[4] = { 0x57545253u /* 'SRTW' */, 1, 3, 0 };
-    memcpy(file.data(), head, 16);
-    for (int i = 0; i < 3; i++)
+    std::vector<BYTE> file;
+    if (version == 1)
     {
-        const uint32_t entry[4] = { e[i].key, e[i].group, (uint32_t)file.size(), (uint32_t)e[i].stock->GetBufferSize() };
-        memcpy(file.data() + 16 + i * 16, entry, 16);
-        const BYTE *p = (const BYTE *)e[i].stock->GetBufferPointer();
-        file.insert(file.end(), p, p + e[i].stock->GetBufferSize());
+        file.resize(16 + 3 * 16);
+        const uint32_t head[4] = { 0x57545253u /* 'SRTW' */, 1, 3, 0 };
+        memcpy(file.data(), head, 16);
+        for (int i = 0; i < 3; i++)
+        {
+            const uint32_t entry[4] = { e[i].key, e[i].group, (uint32_t)file.size(), (uint32_t)e[i].stock->GetBufferSize() };
+            memcpy(file.data() + 16 + i * 16, entry, 16);
+            const BYTE *p = (const BYTE *)e[i].stock->GetBufferPointer();
+            file.insert(file.end(), p, p + e[i].stock->GetBufferSize());
+        }
+    }
+    else
+    {
+        const uint32_t count = generated ? (uint32_t)generated : 4;
+        std::vector<BYTE> table(4);
+        memcpy(table.data(), &count, 4);
+        for (uint32_t i = 0; i < count; i++)
+        {
+            char id[16], title[24];
+            snprintf(id, sizeof id, "m%02u", i);
+            snprintf(title, sizeof title, "Module %02u", i);
+            for (const char *s : { generated ? id : kTwinModules[i][0], generated ? title : kTwinModules[i][1] })
+            {
+                table.push_back((BYTE)strlen(s));
+                table.insert(table.end(), s, s + strlen(s));
+            }
+        }
+        const uint32_t entriesAt = (uint32_t)((16 + table.size() + 7) / 8 * 8);
+        file.resize(entriesAt + 3 * 24);
+        const uint32_t head[4] = { 0x57545253u /* 'SRTW' */, 2, 3, entriesAt };
+        memcpy(file.data(), head, 16);
+        memcpy(file.data() + 16, table.data(), table.size());
+        for (int i = 0; i < 3; i++)
+        {
+            const uint32_t entry[4] = { e[i].key, (uint32_t)file.size(), (uint32_t)e[i].stock->GetBufferSize(), 0 };
+            memcpy(file.data() + entriesAt + i * 24, entry, 16);
+            memcpy(file.data() + entriesAt + i * 24 + 16, &e[i].mask, 8);
+            const BYTE *p = (const BYTE *)e[i].stock->GetBufferPointer();
+            file.insert(file.end(), p, p + e[i].stock->GetBufferSize());
+        }
     }
     wchar_t path[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, path, MAX_PATH);
@@ -989,7 +1032,21 @@ static void **ImportSlot(HMODULE module, const char *dll, const char *func)
     return nullptr;
 }
 static bool Ascii(const char *s) { if (!s || !*s) return false; for (; *s; s++) if ((unsigned char)*s < 32 || (unsigned char)*s > 126) return false; return true; }
-static int GraphicsTest(int expected, bool keys)
+// the DLL's list, as the overlay fetches it; and a switch's index by its name, -1 for none
+static const NgGraphicsApi *GfxApi()
+{
+    const HMODULE dll = GetModuleHandleW((ExeDir() + L"hid.dll").c_str());
+    typedef const NgGraphicsApi *(*PFN_Get)(int);
+    const PFN_Get getApi = dll ? (PFN_Get)GetProcAddress(dll, "NgGraphicsGetApi") : nullptr;
+    return getApi ? getApi(1) : nullptr;
+}
+static int GfxIndex(const NgGraphicsApi *api, const char *name)
+{
+    for (int i = 0; api && i < api->count; i++) if (api->name(i) && strcmp(api->name(i), name) == 0) return i;
+    return -1;
+}
+// refused: the table next to the DLL names more modules than a table may (63), so the DLL ignores it and says so
+static int GraphicsTest(int expected, bool refused)
 {
     const HMODULE dll = GetModuleHandleW((ExeDir() + L"hid.dll").c_str());
     typedef const NgGraphicsApi *(*PFN_Get)(int);
@@ -1003,6 +1060,13 @@ static int GraphicsTest(int expected, bool keys)
     char line[200];
     snprintf(line, sizeof line, "graphics tab: %d switches, %d expected", api->count, expected);
     Check(api->count == expected, line);
+    Check(api->count <= 64, "graphics tab: never more than the 64 switches the overlays take");
+    if (refused) Check(ReadDllLog().find("stock twins: SnowRunnerShadows.stock is not a valid table, ignored") != std::string::npos, "graphics tab: a table naming 63 modules is refused and said so in the log");
+    // the shared-shader rule in the tips: the test table's Tonemap and Water reflections change one shader together
+    const int tonemap = GfxIndex(api, "Tonemap"), water = GfxIndex(api, "Water reflections");
+    if (tonemap >= 0) Check(strstr(api->help(tonemap), "shares shaders with water") != nullptr, "graphics tab: Tonemap's tip names water as sharing its shaders");
+    if (water >= 0) Check(strstr(api->help(water), "shares shaders with tonemap") != nullptr, "graphics tab: Water reflections' tip names tonemap as sharing its shaders");
+    if (api->count == 64) Check(GfxIndex(api, "Module 61") >= 0 && ReadDllLog().find("menu: 64 switches") != std::string::npos, "graphics tab: 62 modules fill the 64 switches, the last module listed");
     bool named = true, flips = true;
     for (int i = 0; i < api->count; i++)
     {
@@ -1015,7 +1079,7 @@ static int GraphicsTest(int expected, bool keys)
         printf("     %s = %d: %s\n", api->name(i), was, api->help(i));
     }
     Check(named, "graphics tab: every switch has an ASCII name and tip");
-    if (api->count) Check((strstr(api->help(0), "(key ") != nullptr) == keys, keys ? "graphics tab: the tips name the keys (KeysWithMenu=1)" : "graphics tab: the tips name no key (silent beside the tab)");
+    if (api->count) Check(strcmp(api->name(0), "Next Gen shaders") == 0 && strstr(api->help(0), "F8") != nullptr, "graphics tab: the first switch is Next Gen shaders, its tip names F8, the one key that stays");
     Check(flips, "graphics tab: every switch set off and on reads back what was set");
     Check(*api->name(-1) == 0 && *api->name(api->count) == 0 && *api->help(api->count) == 0 && api->get(api->count) == 0, "graphics tab: indices out of range answer empty and 0");
     api->set(api->count, 1);   // must do nothing
@@ -1063,8 +1127,8 @@ static int GraphicsTest(int expected, bool keys)
             InterlockedCompareExchangePointer(slot, (void *)g_nextCreateDevice, (void *)&FrontCreateDevice);
             VirtualProtect(slot, sizeof(void *), old, &old);
         }
-        // the switch keys beside a NEXT GEN menu: a stand-in of its shared block (version 3, the Graphics tab's slot at
-        // byte 192) with the tab claimed, then let go; the DLL's hotkey thread looks once a second
+        // F8 beside a NEXT GEN menu: a stand-in of its shared block (version 3, the Graphics tab's slot at byte 192) with
+        // the tab claimed; since 1.1.3 the DLL does not read it, F8 stays live and no key goes silent
         swprintf_s(name, L"Local\\NextGen.Menu.%lu", GetCurrentProcessId());
         HANDLE menu = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, 4096, name);
         uint8_t *block = menu ? (uint8_t *)MapViewOfFile(menu, FILE_MAP_ALL_ACCESS, 0, 0, 4096) : nullptr;
@@ -1073,17 +1137,9 @@ static int GraphicsTest(int expected, bool keys)
         {
             *(volatile LONG *)block = 3;
             *(volatile LONG64 *)(block + 192) = 1;
-            Sleep(2500);
-            const bool quiet = ReadDllLog().find("keys: the switch keys are silent while the NEXT GEN menu has the Graphics tab") != std::string::npos;
+            Sleep(1500);
+            Check(ReadDllLog().find("silent") == std::string::npos, "switch keys: F8 stays live while a NEXT GEN menu has the Graphics tab (nothing goes silent)");
             *(volatile LONG64 *)(block + 192) = 0;
-            Sleep(2500);
-            const bool back = ReadDllLog().find("keys: the switch keys work again") != std::string::npos;
-            if (keys) Check(!quiet && !back, "switch keys: KeysWithMenu=1 keeps them beside the menu's Graphics tab");
-            else
-            {
-                Check(quiet, "switch keys: silent while a NEXT GEN menu has the Graphics tab");
-                Check(back, "switch keys: back when the menu lets the tab go");
-            }
             UnmapViewOfFile(block);
         }
         if (menu) CloseHandle(menu);
@@ -1653,9 +1709,14 @@ int main(int argc, char **argv)
     bool expectOff = false, hardware = false, twoDevices = false, noFeed = false, noGI = false, puddlesOff = false, bounceOff = false;
     bool makeTable = false, twins = false, stockAll = false, stockAO = false, dumpMode = false, dumpImmediate = false, noMips = false;
     bool ssrMode = false, ssrRough = false, aoHalfMode = false, aoFullMode = false, contactMode = false, texOff = false;
-    const char *replayDir = nullptr;
+    int tableVersion = 2, tableModules = 0;   // maketable: version 2 with the four named modules; maketable1, maketable62, maketable63
+    const char *replayDir = nullptr, *moduleOff = nullptr;   // twins moduleoff <name>: that switch of the Graphics tab off first
     for (int i = 1; i < argc; i++)
     {
+        if (strcmp(argv[i], "maketable1") == 0) { makeTable = true; tableVersion = 1; }
+        if (strcmp(argv[i], "maketable62") == 0) { makeTable = true; tableModules = 62; }
+        if (strcmp(argv[i], "maketable63") == 0) { makeTable = true; tableModules = 63; }
+        if (strcmp(argv[i], "moduleoff") == 0 && i + 1 < argc) { moduleOff = argv[++i]; continue; }
         contactMode |= strcmp(argv[i], "contact") == 0; texOff |= strcmp(argv[i], "texoff") == 0;
         ssrMode |= strcmp(argv[i], "ssr") == 0; ssrRough |= strcmp(argv[i], "rough") == 0; aoHalfMode |= strcmp(argv[i], "aohalf") == 0;
         aoFullMode |= strcmp(argv[i], "aofull") == 0;
@@ -1672,14 +1733,14 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "gpuprofile") == 0) return GpuTimersTest(true);
         if (strcmp(argv[i], "aohalfodd") == 0) return AOHalfOddTest();
         if (strcmp(argv[i], "retable") == 0) return RetableTest();
-        if (strcmp(argv[i], "graphics") == 0 && i + 1 < argc) return GraphicsTest(atoi(argv[i + 1]), i + 2 < argc && strcmp(argv[i + 2], "keys") == 0);
+        if (strcmp(argv[i], "graphics") == 0 && i + 1 < argc) return GraphicsTest(atoi(argv[i + 1]), i + 2 < argc && strcmp(argv[i + 2], "refused") == 0);
         if (strcmp(argv[i], "zmips") == 0) return ZMipsTest(false);
         if (strcmp(argv[i], "zmipsoff") == 0) return ZMipsTest(true);
     }
     if (dumpMode) DeleteDumpFiles();
     if (makeTable)
     {
-        const bool ok = MakeTwinTable();
+        const bool ok = MakeTwinTable(tableVersion, tableModules);
         printf(ok ? "stock twins table written next to this program\n" : "FAIL  could not write the stock twins table\n");
         return ok ? 0 : 2;
     }
@@ -1950,7 +2011,7 @@ int main(int argc, char **argv)
             return std::vector<float>(v, v + 4);
         };
         auto is = [](const std::vector<float> &v, float a, float b, float c, float d) { return std::fabs(v[0] - a) < 1e-3f && std::fabs(v[1] - b) < 1e-3f && std::fabs(v[2] - c) < 1e-3f && std::fabs(v[3] - d) < 1e-3f; };
-        // what a feed reader sees: nothing without the feed, the depth but no colour with the puddles switched off (F9)
+        // what a feed reader sees: nothing without the feed, the depth but no colour with the puddles switched off (the menu's Wet ground reflections)
         auto feedIs = [&](const std::vector<float> &v, float a, float b, float c) {
             return noFeed ? is(v, -1, -1, -1, -1) : puddlesOff ? is(v, 0, 0, 0, 7) : is(v, a, b, c, 7);
         };
@@ -2394,8 +2455,9 @@ int main(int argc, char **argv)
     }
 
     // Dev switches, the stock twins (after "shadow_test maketable"): each changed shader draws its own colour, or its
-    // original's while its group is switched to stock (F8 every changed shader, F11 the AO pass's group); a shader the
-    // table does not know always draws its own; on a deferred context too.
+    // original's while a switch over it is off (F8 or ini StockAll=1 every changed shader, the AO switch or ini StockAO=1
+    // the AO pass's shader, a module switch of the Graphics tab the shaders of that module, shared ones included); a
+    // shader the table does not know always draws its own; on a deferred context too. F8 twice leaves a module off.
     if (twins)
     {
         ID3DBlob *blob[5] = {};
@@ -2437,14 +2499,26 @@ int main(int argc, char **argv)
                 if (SUCCEEDED(r.ctx->Map(st, 0, D3D11_MAP_READ, 0, &m))) { memcpy(&v, (const BYTE *)m.pData + 5 * m.RowPitch + 5 * 16, 4); r.ctx->Unmap(st, 0); }
                 return v;
             };
-            const float wantOther = stockAll ? 5.f : 1.f, wantAO = stockAll || stockAO ? 13.f : 9.f;
+            // a module switch off first, through the list the overlay draws: the test table's changed shader belongs to
+            // tonemap and water, its AO pass shader to gtao (the AO switch), its vertex shader to smoke
+            const NgGraphicsApi *api = moduleOff ? GfxApi() : nullptr;
+            const int sw = GfxIndex(api, moduleOff ? moduleOff : "");
+            if (moduleOff)
+            {
+                snprintf(line, sizeof line, "stock twins: %s is a switch of the Graphics tab", moduleOff);
+                Check(sw >= 0, line);
+                if (sw >= 0) { api->set(sw, 0); Check(api->get(sw) == 0, "stock twins: switched off through the list"); }
+            }
+            const bool offShared = moduleOff && (!strcmp(moduleOff, "Tonemap") || !strcmp(moduleOff, "Water reflections"));
+            const bool offAO = moduleOff && !strcmp(moduleOff, "GTAO"), offSmoke = moduleOff && !strcmp(moduleOff, "Smoke glow");
+            const float wantOther = stockAll || offShared ? 5.f : 1.f, wantAO = stockAll || stockAO || offAO ? 13.f : 9.f, wantVS = stockAll || offSmoke ? 17.f : 0.f;
             drawWith(r.ctx, ps[0]);
             float v = red();
-            snprintf(line, sizeof line, "stock twins: a changed shader draws %g (%s)", v, stockAll ? "its original, every effect switched off" : "itself");
+            snprintf(line, sizeof line, "stock twins: a changed shader draws %g (%s)", v, stockAll ? "its original, every effect switched off" : offShared ? "its original: a module that changed it is off" : "itself");
             Check(v == wantOther, line);
             drawWith(r.ctx, ps[2]);
             v = red();
-            snprintf(line, sizeof line, "stock twins: a changed AO pass shader draws %g (%s)", v, stockAll || stockAO ? "its original: the game's own AO" : "itself");
+            snprintf(line, sizeof line, "stock twins: a changed AO pass shader draws %g (%s)", v, stockAll || stockAO || offAO ? "its original: the game's own AO" : "itself");
             Check(v == wantAO, line);
             drawWith(r.ctx, ps[4]);
             Check(red() == 17.f, "stock twins: a shader the table does not know draws itself");
@@ -2452,8 +2526,22 @@ int main(int argc, char **argv)
             r.ctx->ClearRenderTargetView(rtv, zero);
             drawWith(r.ctx, ps[4], cvs);
             v = red();
-            snprintf(line, sizeof line, "stock twins: a changed vertex shader draws %g (%s)", v, stockAll ? "its original: the triangle is back on screen" : "itself: nothing on screen");
-            Check(v == (stockAll ? 17.f : 0.f), line);
+            snprintf(line, sizeof line, "stock twins: a changed vertex shader draws %g (%s)", v, wantVS == 17.f ? "its original: the triangle is back on screen" : "itself: nothing on screen");
+            Check(v == wantVS, line);
+            if (sw >= 0)
+            {
+                // F8 twice (the list's Next Gen shaders off and on) leaves the module as it was switched
+                const int all = GfxIndex(api, "Next Gen shaders");
+                Check(all >= 0, "stock twins: the list has Next Gen shaders");
+                if (all >= 0) { api->set(all, 0); Check(api->get(all) == 0, "stock twins: Next Gen shaders off"); api->set(all, 1); Check(api->get(all) == 1, "stock twins: and on again"); }
+                Check(api->get(sw) == 0, "stock twins: F8 twice leaves the module switched off");
+                drawWith(r.ctx, ps[0]);
+                Check(red() == wantOther, "stock twins: and its shader draws as before");
+                api->set(sw, 1);
+                drawWith(r.ctx, ps[0]);
+                Check(red() == (stockAll ? 5.f : 1.f), "stock twins: the module on again: the shader draws itself");
+                api->set(sw, 0);   // as the configuration had it
+            }
             ID3D11DeviceContext *d = nullptr;
             ID3D11CommandList *l = nullptr;
             r.dev->CreateDeferredContext(0, &d);

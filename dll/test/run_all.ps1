@@ -1,5 +1,6 @@
 # Runs out\shadow_test.exe in every configuration (each with its SnowRunnerShadows.ini next to the DLL), the stock twins
-# ones with the test's own table (shadow_test maketable), and removes the ini, the table and the dump files afterwards.
+# ones with the test's own table (shadow_test maketable, maketable1, maketable62 or maketable63: the table's version and
+# modules), and removes the ini, the table and the dump files afterwards.
 # Results: out\run_all.txt; exit code 0 = every configuration passed.
 $out = Join-Path (Split-Path -Parent $PSScriptRoot) 'out'
 $ini = Join-Path $out 'SnowRunnerShadows.ini'
@@ -19,9 +20,21 @@ $configs = @(
     @{ name = 'hw';             ini = @();                          args = @('hw') },
     @{ name = 'puddles off';    ini = @('PuddlesOn=0');             args = @('puddlesoff') },
     @{ name = 'bounce off';     ini = @('BounceOn=0');              args = @('bounceoff') },
-    @{ name = 'twins';          ini = @();                          args = @('twins'); table = $true },
-    @{ name = 'twins stock AO'; ini = @('StockAO=1');               args = @('twins', 'stockao'); table = $true },
-    @{ name = 'twins stock all'; ini = @('StockAll=1');             args = @('twins', 'stockall'); table = $true },
+    # the stock twins with a version-2 table (four modules): all on, the AO switch off at start, F8's state at start
+    @{ name = 'twins';          ini = @();                          args = @('twins'); table = 'maketable' },
+    @{ name = 'twins stock AO'; ini = @('StockAO=1');               args = @('twins', 'stockao'); table = 'maketable' },
+    @{ name = 'twins stock all'; ini = @('StockAll=1');             args = @('twins', 'stockall'); table = 'maketable' },
+    # a module switched off in the Graphics tab: its shaders draw as the game's own, a shader it shares with another
+    # module too (Tonemap and Water reflections change one shader together), the AO pass's module through the AO switch,
+    # the vertex shader's module; and F8 twice leaves the module off
+    @{ name = 'twins module off'; ini = @();                        args = @('twins', 'moduleoff', 'Tonemap'); table = 'maketable' },
+    @{ name = 'twins shared off'; ini = @();                        args = @('twins', 'moduleoff', 'Water reflections'); table = 'maketable' },
+    @{ name = 'twins AO module off'; ini = @();                     args = @('twins', 'moduleoff', 'GTAO'); table = 'maketable' },
+    @{ name = 'twins VS module off'; ini = @();                     args = @('twins', 'moduleoff', 'Smoke glow'); table = 'maketable' },
+    # the table of installs up to 1.1.2 (version 1): F8 and the AO switch as before
+    @{ name = 'twins v1';       ini = @();                          args = @('twins'); table = 'maketable1' },
+    @{ name = 'twins v1 stock AO'; ini = @('StockAO=1');            args = @('twins', 'stockao'); table = 'maketable1' },
+    @{ name = 'twins v1 stock all'; ini = @('StockAll=1');          args = @('twins', 'stockall'); table = 'maketable1' },
     @{ name = 'dump deferred';  ini = @('DumpAfter=1');             args = @('dump') },
     @{ name = 'dump immediate'; ini = @('DumpAfter=1');             args = @('dump', 'immediate') },
     @{ name = 'ssr mirror';     ini = @('SSRHalf=0');               args = @('ssr') },
@@ -61,7 +74,7 @@ $configs = @(
     @{ name = 'zmips';          ini = @();                          args = @('zmips') },
     @{ name = 'zmips off';      ini = @('ZMips=0');                 args = @('zmipsoff') },
     @{ name = 'zmips off default'; ini = @('ZMips=0');              args = @() },
-    # contact shadows: the lab with render targets 6 and 7 together, 6 alone (no reflections), F4's state off,
+    # contact shadows: the lab with render targets 6 and 7 together, 6 alone (no reflections), the pass's switch off at start (ini ContactOn=0),
     # on the GPU; and every check of the default run with a ContactDebug view set (nothing writes output 6 there)
     @{ name = 'contact';        ini = @();                          args = @('contact') },
     @{ name = 'contact no ssr'; ini = @('SSR=0');                   args = @('contact') },
@@ -70,14 +83,18 @@ $configs = @(
     @{ name = 'contact off';    ini = @('ContactOn=0');             args = @('contact', 'off') },
     @{ name = 'contact hw';     ini = @();                          args = @('contact', 'hw') },
     @{ name = 'contact default'; ini = @('ContactDebug=1');         args = @() },
-    # the NEXT GEN overlay's Graphics tab: the switches the ini turned on (GTAO only with a table that has the AO pass's
-    # stock shaders), and the shared import slot lock with a second mod's hook in front of the DLL's
+    # the NEXT GEN overlay's Graphics tab: without a table the passes' switches the ini turned on; with a version-2 table
+    # Next Gen shaders, AO at half size and one switch per module (GTAO through the AO bit); with a version-1 table the
+    # switches of 1.1.2 (GTAO from its AO pass's stock shaders), no module rows; 62 modules (the most a table may name)
+    # fill the 64 switches the overlays take; 63 modules: the table is refused and the tab is as without one. And the
+    # shared import slot lock with a second mod's hook in front of the DLL's; F8 stays live beside a stand-in menu
     @{ name = 'graphics';       ini = @();                          args = @('graphics', '6') },
-    @{ name = 'graphics twins'; ini = @();                          args = @('graphics', '7'); table = $true },
+    @{ name = 'graphics twins'; ini = @();                          args = @('graphics', '6'); table = 'maketable' },
+    @{ name = 'graphics twins v1'; ini = @();                       args = @('graphics', '7'); table = 'maketable1' },
+    @{ name = 'graphics 62 modules'; ini = @();                     args = @('graphics', '64'); table = 'maketable62' },
+    @{ name = 'graphics 63 modules'; ini = @();                     args = @('graphics', '6', 'refused'); table = 'maketable63' },
     @{ name = 'graphics no gi ssr'; ini = @('GI=0', 'SSR=0');       args = @('graphics', '3') },
-    @{ name = 'graphics none';  ini = @('Factor=1', 'Feed=0');      args = @('graphics', '0') },
-    # the switch keys: silent while a NEXT GEN menu (a stand-in block) has the Graphics tab, unless KeysWithMenu=1
-    @{ name = 'graphics keys';  ini = @('KeysWithMenu=1');          args = @('graphics', '6', 'keys') }
+    @{ name = 'graphics none';  ini = @('Factor=1', 'Feed=0');      args = @('graphics', '0') }
 )
 $dumps = Join-Path $out 'SnowRunnerShadows_dump_*'
 Set-Content -Path $report -Value '' -Encoding UTF8
@@ -88,7 +105,7 @@ try
     foreach ($c in $configs)
     {
         Remove-Item $ini, $table, $dumps -ErrorAction SilentlyContinue
-        if ($c.table) { & .\shadow_test.exe maketable | Out-Null; if (-not (Test-Path $table)) { throw 'the stock twins table was not written' } }
+        if ($c.table) { & .\shadow_test.exe $c.table | Out-Null; if (-not (Test-Path $table)) { throw 'the stock twins table was not written' } }
         if ($c.ini.Count) { Set-Content -Path $ini -Value (@('[Shadows]') + $c.ini) -Encoding ASCII }
         $text = & .\shadow_test.exe @($c.args) 2>&1 | Out-String
         $code = $LASTEXITCODE
