@@ -131,7 +131,7 @@ $default = 'gtao', 'aofar', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'tonem
 # place of the rebuilt edges (so both filters' sets get made, and the seam dither goes with the rebuilt edges)
 $less = @($default | Where-Object { $_ -notin 'fog', 'seam', 'contact', 'headglow' } | ForEach-Object { if ($_ -eq 'revec') { 'crisp' } else { $_ } })
 
-$everything = [ordered]@{ shader = $default; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = 'all'; grass = '3'; fill = '0.7'; grade = '1'; particles = '1'; sky = '1'; stars = '3'; weather = 'shadows,showers,evening,horizon,far,fireflies,pollen'; logos = '1'; debris = '4'; cubes = '1'; skies = '1' }
+$everything = [ordered]@{ shader = $default; shadows = [ordered]@{ factor = '1'; slopeBias = '1'; aoHalf = '1' }; scenery = 'all'; grass = '3'; fill = '0.7'; grade = '1'; particles = '1'; sky = '1'; stars = '3'; weather = 'shadows,showers,evening,horizon,far,fireflies,pollen'; logos = '1'; debris = '4'; exhaust = '150'; cubes = '1'; skies = '1' }
 
 if (Part 1) {
 'the untouched copy'
@@ -141,6 +141,7 @@ Check 'status: the originals' (Summary (Status)) 'stock [] dll none / scenery va
 $r = Apply $everything
 Check 'every part: done' (Last $r) 'done'
 Check 'every part: status' (Summary (Status)) ('ours [' + ($default -join ',') + '] dll ours 1/1 scenery all grass ours3 fill ours0.7 grade ours1 particles ours stars ours3 sky ours logos ours weather oursshadows,showers,evening,horizon,far,fireflies,pollen debris ours4 cubes ours skies ours')
+Check 'every part: exhaust strength over real originals' ([string](Status).exhaust.percent) '150'
 # the tool of the engine under test, run from a copy of the test in the work folder: a packaged engine reads nothing of the working tree
 $levelTest = Join-Path $work 'ngen_level_states_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'level_states_test.js') -Destination $levelTest -Force
@@ -154,6 +155,20 @@ Check 'load list: the tool on a made-up list' ([string](& $node $listTest $level
 $introTest = Join-Path $work 'ngen_gfx_intro_test.js'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'gfx_intro_test.js') -Destination $introTest -Force
 Check 'intro: the edits on a made-up bundle' ([string](& $node $introTest $levelTools | Select-Object -Last 1)) 'all passed'
+# Exhaust uses the engine under test, including the packaged copy, on independent stand-in archives.
+$env:NGEN_TEST_WORK = $work
+try {
+  foreach ($name in 'exhaust_smoke_test', 'exhaust_test') {
+    $exhaustTest = Join-Path $work ($name + '.js')
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot ($name + '.js')) -Destination $exhaustTest -Force
+    $arguments = @($levelTools)
+    if ($name -eq 'exhaust_test') { $arguments = @((Split-Path -Parent $ngen), $levelTools) }
+    $said = & $node $exhaustTest @arguments
+    Check ($name + ': the tool and archive workflow') ([string]($said | Select-Object -Last 1)) 'all passed'
+    if ($LASTEXITCODE -ne 0) { throw "$name failed" }
+  }
+}
+finally { Remove-Item Env:\NGEN_TEST_WORK }
 # (a sky texture at the stock texture's size goes in with the game's own .pct_header, byte for byte: 25 of the 49)
 Check 'every part: boot.pak holds the grade (its LUTs and the emptied lens dirt), the sprites and the night sky' ((EntriesDiff (Entries $boot) (Entries (Join-Path $originals 'boot.pak.orig'))) -replace ':.*$', '') 'differs in 214'
 Check 'every part: gfx.pak holds the logos' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
