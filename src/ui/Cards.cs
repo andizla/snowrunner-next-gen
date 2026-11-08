@@ -77,6 +77,7 @@ namespace SnowRunnerNextGen
             {
                 Choice[row] = index;
                 Invalidate();
+                AccessibilityNotifyClients(AccessibleEvents.ValueChange, -1);
                 if (Picked != null) Picked(this, EventArgs.Empty);
             }
             if (!on) ToggleByUser();
@@ -119,6 +120,12 @@ namespace SnowRunnerNextGen
                 OptionSet o = Module.Options[r];
                 y += look.U(r == 0 ? 14 : 6);
                 int[] widths = look.SegmentWidths(o.Labels);
+                if (o.Stepper)
+                {
+                    int valueWidth = 0;
+                    foreach (int w in widths) valueWidth = Math.Max(valueWidth, w);
+                    widths = new[] { look.U(36), valueWidth, look.U(36) };
+                }
                 int total = 2 * inset;
                 foreach (int w in widths) total += w;
                 int x = left;
@@ -196,8 +203,10 @@ namespace SnowRunnerNextGen
             {
                 OptionSet o = Module.Options[row];
                 Look.Text(g, o.Name, look.Small, rowLabel[row], Theme.Muted, Look.Middle);
-                look.DrawSegments(g, buttons[row], o.Labels, Choice[row], row == hotRow ? hotButton : -1, on, track,
-                                  Focused && ShowFocusCues && row == keyRow);
+                string[] labels = o.Stepper ? new[] { "-", o.Labels[Choice[row]], "+" } : o.Labels;
+                bool[] enabled = o.Stepper ? new[] { Choice[row] > 0, true, Choice[row] < o.Keys.Length - 1 } : null;
+                look.DrawSegments(g, buttons[row], labels, o.Stepper ? 1 : Choice[row], row == hotRow ? hotButton : -1, on, track,
+                                  Focused && ShowFocusCues && row == keyRow, enabled);
             }
             if (!needs.IsEmpty) Look.Text(g, Needs, look.Small, needs, Theme.Muted, Look.Wrap);
         }
@@ -265,7 +274,18 @@ namespace SnowRunnerNextGen
             int row, index;
             ButtonAt(e.Location, out row, out index);
             if (row != downRow || index != downButton || info.Contains(e.Location)) return;   // pressed on one part, let go on another
-            if (row >= 0) { keyRow = row; PickByUser(row, index); }
+            if (row >= 0)
+            {
+                keyRow = row;
+                if (Module.Options[row].Stepper)
+                {
+                    if (index == 1) return;   // the current value is read-only; it does not toggle the card
+                    int next = Choice[row] + (index == 0 ? -1 : 1);
+                    if (next < 0 || next >= Module.Options[row].Keys.Length) return;
+                    PickByUser(row, next);
+                }
+                else PickByUser(row, index);
+            }
             else ToggleByUser();
         }
 
@@ -291,7 +311,7 @@ namespace SnowRunnerNextGen
             if (e.KeyCode == Keys.Up && keyRow > 0) { keyRow--; Invalidate(); }
             else if (e.KeyCode == Keys.Down && keyRow < buttons.Length - 1) { keyRow++; Invalidate(); }
             else if (e.KeyCode == Keys.Left && choice > 0) PickByUser(keyRow, choice - 1);
-            else if (e.KeyCode == Keys.Right && choice < buttons[keyRow].Length - 1) PickByUser(keyRow, choice + 1);
+            else if (e.KeyCode == Keys.Right && choice < Module.Options[keyRow].Keys.Length - 1) PickByUser(keyRow, choice + 1);
             else return;
             e.Handled = true;
         }
@@ -318,6 +338,15 @@ namespace SnowRunnerNextGen
                 get { AccessibleStates s = base.State; if (card.On) s |= AccessibleStates.Checked; return s; }
             }
             public override string Name { get { return card.Module.Title; } }
+            public override string Value
+            {
+                get
+                {
+                    List<string> values = new List<string>();
+                    for (int i = 0; i < card.Choice.Length; i++) values.Add(card.Module.Options[i].Name + " " + card.Module.Options[i].Labels[card.Choice[i]]);
+                    return string.Join(", ", values.ToArray());
+                }
+            }
             public override string Description { get { return card.Module.Description + " Press F1 for more."; } }
             public override string DefaultAction { get { return card.On ? "Untick" : "Tick"; } }
             public override void DoDefaultAction() { card.ToggleByUser(); }

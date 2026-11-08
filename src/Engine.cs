@@ -47,6 +47,8 @@ namespace SnowRunnerNextGen
         public string WeatherParts;               // its parts as a comma list (shadows, showers, evening, horizon, far)
         public string Debris = "vanilla";         // the debris and splashes, the fifth part of initial.pak: the same states
         public string DebrisFactor;               // its drops factor
+        public string Exhaust = "vanilla";       // size and opacity in initial.pak; zero percent is an active selection
+        public string ExhaustPercent;
         public string Sky = "vanilla";            // the night sky, the third part of boot.pak: the same states
         public string Cubes = "vanilla";          // the reflection cubes, the fourth part of boot.pak: the same states
         public string Skies = "vanilla";          // the winter skies, the fifth part of boot.pak: the same states
@@ -61,7 +63,7 @@ namespace SnowRunnerNextGen
         {
             get
             {
-                return Shader == "ours" || Dll == "ours" || Scenery == "nature" || Scenery == "all" || Grass == "ours" || Fill == "ours" || Stars == "ours" || Weather == "ours" || Debris == "ours"
+                return Shader == "ours" || Dll == "ours" || Scenery == "nature" || Scenery == "all" || Grass == "ours" || Fill == "ours" || Stars == "ours" || Weather == "ours" || Debris == "ours" || Exhaust == "ours"
                     || Grade == "ours" || Particles == "ours" || Sky == "ours" || Cubes == "ours" || Skies == "ours" || Logos == "ours" || Maps == "ours";
             }
         }
@@ -100,6 +102,9 @@ namespace SnowRunnerNextGen
             Dictionary<string, object> debris = Part(d, "debris");
             s.Debris = Text(debris, "state") ?? "missing";
             s.DebrisFactor = Text(debris, "factor");
+            Dictionary<string, object> exhaust = Part(d, "exhaust");
+            s.Exhaust = Text(exhaust, "state") ?? "vanilla";
+            s.ExhaustPercent = Text(exhaust, "percent");
             s.Sky = Text(Part(d, "sky"), "state") ?? "missing";
             s.Cubes = Text(Part(d, "cubes"), "state") ?? "missing";
             s.Skies = Text(Part(d, "skies"), "state") ?? "missing";

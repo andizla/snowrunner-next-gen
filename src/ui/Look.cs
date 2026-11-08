@@ -143,7 +143,7 @@ namespace SnowRunnerNextGen
         public int SegmentHeight { get { return Body.Height + U(10); } }
         public int SegmentInset { get { return U(3); } }
 
-        public void DrawSegments(Graphics g, Rectangle[] buttons, string[] labels, int picked, int hot, bool active, Color track, bool ring)
+        public void DrawSegments(Graphics g, Rectangle[] buttons, string[] labels, int picked, int hot, bool active, Color track, bool ring, bool[] enabled = null)
         {
             if (buttons.Length == 0) return;
             int inset = SegmentInset;
@@ -154,8 +154,10 @@ namespace SnowRunnerNextGen
             {
                 bool chosen = picked == i;
                 if (chosen) Fill(g, buttons[i], F(6), active ? Theme.Accent : Theme.Border);
-                else if (hot == i) Fill(g, buttons[i], F(6), Mix(track, Theme.Text, 0.1f));
-                Text(g, labels[i], Body, buttons[i], chosen ? (active ? Theme.AccentText : Theme.Text) : Theme.Muted, Center);
+                else if (hot == i && (enabled == null || enabled[i])) Fill(g, buttons[i], F(6), Mix(track, Theme.Text, 0.1f));
+                Color color = chosen ? (active ? Theme.AccentText : Theme.Text) : Theme.Muted;
+                if (enabled != null && !enabled[i]) color = Mix(track, Theme.Muted, 0.45f);
+                Text(g, labels[i], Body, buttons[i], color, Center);
             }
         }
 

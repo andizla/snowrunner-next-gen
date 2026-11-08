@@ -39,6 +39,23 @@ the game's opacity.</p>
 <p>Where a sprite cuts through the ground it shows a hard line. The game fades sprites against the depth behind them; in the 110
 shaders that do, the fade now runs over twice the distance, so puffs meet the ground softly.</p>
 
+<h2 id="t-exhaust">Exhaust smoke: size and opacity</h2>
+<p class="lead">Card: Exhaust smoke. On at 150 % in Defaults, with a Strength stepper from 0 to 300 % in steps of 10.</p>
+<p>Each vehicle uses shared particle definitions in initial.pak. This card scales the three components of
+Size/@Function and the alpha component of every Color/Key/@Value in exhaust_small.xml, exhaust_large.xml,
+exhaust_fog.xml and exhaust_heat_winter.xml under [media]\classes\particles. A strength P uses a factor P / 100.
+RGB values, colour multipliers, particle count and the heat distortion in exhaust_heat.xml stay as they are.
+Larger, more opaque puffs can cost frame rate where they overlap.</p>
+<p>Every build starts from Next Gen's kept original initial.pak. At 100 %, the target attributes keep their original
+bytes; 0 % sets size and alpha to zero. The original remains available after a restart, so going back from 0 % works.
+Repeated Apply never multiplies a previously scaled value. Unticking the card removes this adjustment; Restore originals
+removes every module. Debris and splashes independently extends exhaust lifetime, and both edits are composed in the
+same archive build. Smoke glow and Smoke shape and softer edges still control lighting and shader opacity separately.</p>
+<p>100 % refers to the kept original, including any earlier mod changes. No standalone Tuner state is imported. If that
+original already has invisible smoke, have the store verify the game's files and adopt those originals before tuning.
+The builder preserves the archive's entry names, order, compression methods and untouched payloads, verifies the new file
+before replacement, and rejects missing or unsupported exhaust definitions.</p>
+
 <h2 id="t-particles">Sharper smoke and particles</h2>
 <p class="lead">Card: Sharper smoke and particles.</p>
 <p>The game's 40 particle textures (the sfx_* files: smoke, dust, sparks, spray) are replaced with versions at twice their

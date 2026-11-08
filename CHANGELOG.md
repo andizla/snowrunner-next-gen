@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Exhaust smoke: adjust size and opacity for every vehicle from 0 to 300 % in steps of 10, using a minus/plus stepper. Enabled at 150 % in Defaults. The card uses Next Gen's kept original initial.pak, works alongside Debris and splashes, and can restore smoke after 0 % and a program restart. The standalone Tuner and its saved state are no longer needed for this adjustment; old Tuner baselines are not imported.
+
 ## [1.1.2]
 
 - GTAO at half size no longer leaves a ghost image: a faint outline of an old view stayed on the screen wherever the camera pointed. At half size the pass drew into SnowRunner Shadows' own textures and never into the game's AO target, so a pass reading that target saw the last frame drawn at full size. The result now goes into the game's target too. GTAO's quality is full size by default.
