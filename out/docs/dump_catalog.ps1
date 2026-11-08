@@ -11,7 +11,7 @@ $mods = foreach ($m in $catalog.GetMethod('All', $flags).Invoke($null, $null))
 {
     $t = $help.GetMethod('TopicFor', $flags).Invoke($null, @($m))
     [ordered]@{ id = $m.Id; title = $m.Title; category = $m.Category; group = $m.Group; description = $m.Description; on = $m.DefaultOn; requires = @($m.Requires)
-        options = @($m.Options | ForEach-Object { [ordered]@{ name = $_.Name; labels = @($_.Labels); keys = @($_.Keys); default = $_.Default } }); help = (& $sections $t.Entry) }
+        options = @($m.Options | ForEach-Object { $row = [ordered]@{ name = $_.Name; labels = @($_.Labels); keys = @($_.Keys); default = $_.Default }; if ($_.Stepper) { $row['stepper'] = $true }; $row }); help = (& $sections $t.Entry) }
 }
 $inst = $help.GetMethod('InstallerTopic', $flags).Invoke($null, $null)
 $doc = [ordered]@{ exe = Split-Path -Leaf $Exe; built = (Get-Item $Exe).LastWriteTime.ToString('yyyy-MM-dd HH:mm'); modules = @($mods); installer = [ordered]@{ title = $inst.Title; summary = $inst.Summary; sections = (& $sections $inst.Entry) } }

@@ -1,6 +1,6 @@
 {
     "exe":  "SnowRunnerNextGen.exe",
-    "built":  "2026-11-06 10:07",
+    "built":  "2026-11-08 11:52",
     "modules":  [
                     {
                         "id":  "shadows",
@@ -1016,6 +1016,112 @@
                                      {
                                          "heading":  "Options",
                                          "text":  "The glow reaches 162 of the game\u0027s 205 particle shaders. More kinds of smoke adds eight that light their puffs the same way; it is off by default because it has not been looked at in the game yet."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "exhaust",
+                        "title":  "Exhaust smoke",
+                        "category":  "ATMOSPHERE",
+                        "group":  "Atmosphere and image",
+                        "description":  "Adjust the size and opacity of exhaust smoke for every vehicle. 150 % by default; 0 % turns it off, 100 % uses the kept original values.",
+                        "on":  true,
+                        "requires":  [
+
+                                     ],
+                        "options":  [
+                                        {
+                                            "name":  "Strength",
+                                            "labels":  [
+                                                           "0 %",
+                                                           "10 %",
+                                                           "20 %",
+                                                           "30 %",
+                                                           "40 %",
+                                                           "50 %",
+                                                           "60 %",
+                                                           "70 %",
+                                                           "80 %",
+                                                           "90 %",
+                                                           "100 %",
+                                                           "110 %",
+                                                           "120 %",
+                                                           "130 %",
+                                                           "140 %",
+                                                           "150 %",
+                                                           "160 %",
+                                                           "170 %",
+                                                           "180 %",
+                                                           "190 %",
+                                                           "200 %",
+                                                           "210 %",
+                                                           "220 %",
+                                                           "230 %",
+                                                           "240 %",
+                                                           "250 %",
+                                                           "260 %",
+                                                           "270 %",
+                                                           "280 %",
+                                                           "290 %",
+                                                           "300 %"
+                                                       ],
+                                            "keys":  [
+                                                         "0",
+                                                         "10",
+                                                         "20",
+                                                         "30",
+                                                         "40",
+                                                         "50",
+                                                         "60",
+                                                         "70",
+                                                         "80",
+                                                         "90",
+                                                         "100",
+                                                         "110",
+                                                         "120",
+                                                         "130",
+                                                         "140",
+                                                         "150",
+                                                         "160",
+                                                         "170",
+                                                         "180",
+                                                         "190",
+                                                         "200",
+                                                         "210",
+                                                         "220",
+                                                         "230",
+                                                         "240",
+                                                         "250",
+                                                         "260",
+                                                         "270",
+                                                         "280",
+                                                         "290",
+                                                         "300"
+                                                     ],
+                                            "default":  15,
+                                            "stepper":  true
+                                        }
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "Scales the size and opacity of the shared exhaust particles for every vehicle. The default is 150 % of the values in the kept original initial.pak. Particle count, RGB colours and colour multipliers stay as they are."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Larger, denser exhaust at higher strengths; smaller, thinner puffs at lower strengths. At 0 % the exhaust smoke is invisible. Heat distortion remains."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Larger and more opaque puffs can cost frame rate where they overlap. The particle count is unchanged."
+                                     },
+                                     {
+                                         "heading":  "Options",
+                                         "text":  "Strength: 0 to 300 % in steps of 10, 150 % by default. Click minus or plus, or focus the card and press Left or Right. Space ticks or unticks the card. Only Apply writes the selected strength."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "100 % means the kept original values, which may include another mod. Every Apply starts from that copy, so strengths do not compound and 0 % can be changed back after restarting the program. Untick and Apply to remove this adjustment, or Restore originals to remove every module. Debris and splashes independently extends exhaust lifetime; this card keeps that change. Old standalone Tuner state is not imported: if the kept original already has invisible smoke, these percentages cannot bring it back. Have the store verify the game\u0027s files and adopt those originals first."
                                      }
                                  ]
                     },

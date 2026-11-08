@@ -59,7 +59,7 @@ const DEEP = {
     shadows: ['t-found', 't-shadowmap'], edges: ['t-shadowmap'], blocker: ['t-shadowmap'], contact: ['t-contact'], headshadow: ['t-headshadow'], gtao: ['t-gtao'], aofar: ['t-gtao'],
     ambient: ['t-ambient'], fill: ['t-ambient'], gi: ['t-gi'], objrefl: ['t-sssr'], headglow: ['t-headglow'], water: ['t-water'], puddles: ['t-puddles'],
     rivertint: ['t-water'], crestglow: ['t-water'], glare: ['t-puddles'], cubes: ['t-cubes'], fog: ['t-fog'], weather: ['t-weather'], maps: ['t-maps', 't-loadlist'],
-    smoke: ['t-smoke'], smokeshade: ['t-smoke'], particles: ['t-particles'], debris: ['t-weather'], sky: ['t-sky'], skies: ['t-sky'], stars: ['t-sky'],
+    smoke: ['t-smoke'], exhaust: ['t-exhaust'], smokeshade: ['t-smoke'], particles: ['t-particles'], debris: ['t-weather'], sky: ['t-sky'], skies: ['t-sky'], stars: ['t-sky'],
     tonemap: ['t-tonemap'], bloom: ['t-tonemap'], grade: ['t-tonemap'], scenery: ['t-scenery'], grass: ['t-scenery'], logos: ['t-interface'],
 };
 
@@ -121,7 +121,7 @@ and play for a while.</p>
 cost more frame rate. Each has its own page in Part 3 that says what it does, what you will notice and what it costs.
 Switch one on, click Apply, and look in the game. With SnowRunner Shadows in, <b>F8</b> switches every shader effect off
 and on, so you can compare from the same spot.</p>
-<p>Some cards have rows of buttons: a resolution, a strength, or which maps a change applies to. The values a card starts
+<p>Some cards have rows of buttons: a resolution, a strength, or which maps a change applies to. Exhaust smoke has a minus/plus stepper from 0 to 300 % in steps of 10, starting at 150 %. The values a card starts
 with are the recommended ones. Part 3 lists every row with its values.</p>
 {{table}}
 
@@ -163,7 +163,12 @@ function card(m)
     if (m.options.length)
     {
         h += '<table class="rows"><thead><tr><th>' + T('ui.row', 'Row') + '</th><th>' + T('ui.values', 'Values (the default in bold)') + '</th></tr></thead><tbody>';
-        for (const o of m.options) h += '<tr><td>' + esc(o.name) + '</td><td>' + o.labels.map((l, i) => (i === o.default ? '<b>' + esc(l) + '</b>' : esc(l))).join(' &middot; ') + '</td></tr>';
+        for (const o of m.options)
+        {
+            const values = o.stepper ? esc(o.labels[0]) + ' - ' + esc(o.labels.at(-1)) + ' (' + esc(T('ui.stepsof', 'steps of')) + ' ' + (Number(o.keys[1]) - Number(o.keys[0])) + '); <b>' + esc(o.labels[o.default]) + '</b>' :
+                o.labels.map((l, i) => (i === o.default ? '<b>' + esc(l) + '</b>' : esc(l))).join(' &middot; ');
+            h += '<tr><td>' + esc(o.name) + '</td><td>' + values + '</td></tr>';
+        }
         h += '</tbody></table>';
     }
     m.help.forEach((s, i) => { h += '<h4>' + esc(T('heading.' + s.heading, s.heading)) + '</h4><p>' + esc(T('card.' + m.id + '.help.' + i, s.text)) + '</p>'; });
@@ -180,7 +185,7 @@ const files = F('files.html', `
 <table class="rows"><thead><tr><th>File</th><th>What Next Gen puts in it</th></tr></thead><tbody>
 <tr><td>shader.pak</td><td>the shader modules: shadows, occlusion, light, reflections, water, fog, smoke, the tonemap</td></tr>
 <tr><td>shared.pak</td><td>Scenery detail</td></tr>
-<tr><td>initial.pak</td><td>Grass reach, the fill light, Brighter stars, Weather, Debris and splashes, and Maine's own days (Map days, map by map)</td></tr>
+<tr><td>initial.pak</td><td>Grass reach, the fill light, Brighter stars, Weather, Exhaust smoke, Debris and splashes, and Maine's own days (Map days, map by map)</td></tr>
 <tr><td>boot.pak</td><td>Photo grade, Sharper smoke and particles, Night sky, Reflection cubes, Skies</td></tr>
 <tr><td>gfx.pak</td><td>Next Gen logo, and the start without the intro</td></tr>
 <tr><td>level files</td><td>with Map days, a few names in the level files of Maine, British Columbia, Austria and Washington, changed in place</td></tr>

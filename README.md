@@ -38,6 +38,7 @@ Atmosphere and image
 
 - Volumetric fog, off by default: no banding and a glow toward the sun. Sun shafts through trees and dust are a separate switch on the card, also off: they are experimental and also show over the truck and other things close to the camera.
 - Weather: moving cloud shadows on every map, showers that swell and ease, drizzle at dusk and night, horizon clouds, rain drawn farther out (off by default), fireflies at night and pollen by day.
+- Exhaust smoke: size and opacity for every vehicle, 0 to 300 % in steps of 10; on at 150 % by default.
 - Smoke glow: smoke glows when the sun is behind it.
 - Smoke shape and softer edges: puffs get a lit and a shaded side and fade softly where they meet the ground.
 - Sharper smoke and particles: the particle textures at twice their size.
@@ -60,6 +61,16 @@ Interface
 - Next Gen logo: NEXT GEN under the game's logo on the title screen, the first loading screen, the main menu, the pause menu and the map. A row Start-up, on by default, starts the game on the Next Gen splash without the warning and the publisher logos.
 
 The (?) on each card says what the module does, what to look for, and what it costs.
+
+## Exhaust smoke
+
+The Strength stepper adjusts exhaust size and opacity from 0 to 300 % in steps of 10. Click minus or plus, or focus the card and press Left or Right. Defaults enables the card at 150 %. Only Apply writes the selected value.
+
+0 % makes exhaust smoke invisible; 100 % uses the values in Next Gen's kept original `initial.pak`, including any earlier mod changes. Each Apply starts from that copy, so adjustments do not compound and smoke turned off here can be restored after restarting the program. Untick the card and Apply to remove this adjustment, or use Restore originals to remove all modules.
+
+The card edits `exhaust_small.xml`, `exhaust_large.xml`, `exhaust_fog.xml` and `exhaust_heat_winter.xml`. Particle count, RGB colours, colour multipliers and heat distortion stay as they are. Debris and splashes controls lifetime independently and works alongside this card. Larger puffs can cost frame rate where they overlap.
+
+The standalone Tuner's saved baselines are not imported. If the kept original already contains invisible smoke, these percentages cannot bring it back: have the store verify the game files and adopt those originals first. When updating an existing Next Gen installation, the window shows the installed selection; use Defaults or tick Exhaust smoke to enable the new card.
 
 ## Install
 
@@ -93,7 +104,7 @@ Support, questions and talk about the mod: the channel on [EnthusiastRunner's Di
 
 ## What it changes
 
-In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather, debris and splashes, and Maine's own days with Map days map by map), `boot.pak` (photo grade, particles, night sky, reflection cubes, winter skies), `gfx.pak` (the logo, and the start without the intro) and, with Map days, a few names in the level files of Maine, British Columbia, Austria and Washington, all under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in the folder with `SnowRunner.exe` (`Sources\Bin` on Steam). Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
+In the game folder: `shader.pak` (the shader modules), `shared.pak` (scenery detail), `initial.pak` (grass reach, fill light, stars, weather, exhaust smoke, debris and splashes, and Maine's own days with Map days map by map), `boot.pak` (photo grade, particles, night sky, reflection cubes, winter skies), `gfx.pak` (the logo, and the start without the intro) and, with Map days, a few names in the level files of Maine, British Columbia, Austria and Washington, all under `preload\paks\client`, and `hid.dll` with its `SnowRunnerShadows.ini` in the folder with `SnowRunner.exe` (`Sources\Bin` on Steam). Another mod's `hid.dll` stays loaded as `hid_chain.dll`.
 
 The kept originals live in `%LOCALAPPDATA%\SnowRunnerNextGen`. Every new file is written next to the old one, read back and checked before it takes the old one's place. The program refuses to write while the game runs.
 
@@ -120,6 +131,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File package.ps1
 SnowRunner Shadows is in `dll`: `dll\build.bat` builds `dll\out\hid.dll`, and `dll\test\run_all.ps1` tests it. The package takes the DLL from `assets\engine\hid.dll` and wants the build named in `assets\engine\hid.dll.sha256`, the one the modules were tested with. A rebuild never has that hash, because the linker stamps the time into the file: copy the new DLL there and put its SHA-256 into the `.sha256` file.
 
 The tests run on copies and never touch the game folder: `test\run_tests.ps1` draws the window at four scales and checks the tick rules, `test\engine_test.ps1` runs the engine on a copy of the game made from original paks (`-Originals` names their folder), `test\package_test.ps1` runs the same against the packaged engine and fails when it reaches any file outside the package, and `test\paths_test.ps1` runs the packaged engine and the exe on a copy whose every folder has a space and a letter outside ASCII in its name, as a Windows user name gives them. `test\chain.ps1` runs the whole set side by side where the steps share no folder: the engine and package tests in four parts each (`-Part`, `-Work`), each part on a game copy of its own (about 8 GB), with a log per step in `out\chain`.
+
+The exhaust checks can also run directly with Node.js, without a game installation or a build:
+
+```
+node test/exhaust_smoke_test.js
+node test/exhaust_test.js
+```
+
+The second command uses small stand-in paks under `out`, covering Apply, Restore, adoption and the interaction with Debris and splashes.
 
 ## Licence and credits
 
