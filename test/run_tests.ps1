@@ -209,6 +209,25 @@ try {
   }
   Check 'every module has help' ($without -join ' ') ''
   Check 'every help picture is there' ($missing -join ' ') ''
+
+  # the names the Graphics tab gives the shader modules (engine\tools\fidelity_bundle.js's TITLES, carried in the stock
+  # twins table): a module that is a card has the card's title, a module that is a row of a card starts with the card's title
+  $node = (Get-Command node -ErrorAction SilentlyContinue).Source
+  if (-not $node) { $node = 'C:\Program Files\nodejs\node.exe' }
+  $titles = (& $node -e "console.log(JSON.stringify(require(process.argv[1]).TITLES))" (Join-Path $root 'engine\tools\fidelity_bundle.js')) | ConvertFrom-Json
+  $wrong = @()
+  foreach ($c in $list.Cards) {
+    $own = $titles.PSObject.Properties[$c.Module.Id]
+    if ($own -and $own.Value -ne $c.Module.Title) { $wrong += "$($c.Module.Id): $($own.Value)" }
+    foreach ($o in $c.Module.Options) {
+      foreach ($k in $o.Keys) {
+        if (-not $k -or $k -eq $c.Module.Id) { continue }
+        $row = $titles.PSObject.Properties[$k]
+        if ($row -and -not $row.Value.StartsWith($c.Module.Title)) { $wrong += "${k}: $($row.Value)" }
+      }
+    }
+  }
+  Check 'module titles follow the cards' ($wrong -join ' | ') ''
 }
 finally { $view.Dispose() }
 

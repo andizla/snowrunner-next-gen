@@ -77,7 +77,7 @@ namespace SnowRunnerNextGen
                 "Other mods", "When another mod (a texture pack, say) or a game update has changed one of those files since, Apply and Restore ask first. Take it as it is now as the original, and " + Header.AppName + " writes its changes over it; Restore then puts it back in that modded state, the other mod's changes included, not the game's own file. Or leave it out: the file and its modules stay as they are.",
                 "Before you start", "Close the game: its files cannot be changed while it runs.",
                 "When something goes wrong", "Every Apply and Restore is written to install.log in %LOCALAPPDATA%\\SnowRunnerNextGen: what the program found and each step it took. After a stop or a note, Show the log in the result window opens that folder. Send the file along when you report a problem.",
-                "Comparing in the game", "With SnowRunner Shadows installed: F8 switches every shader effect off and on, F4 the contact shadows, F5 the ambient occlusion pass between half and full size, F6 the reflection pass, F9 the reflections on wet ground, F10 the bounce light, and F11 GTAO against the game's SSAO. The first press of F8 or F11 takes a moment: the game's own shaders are made then. The keys do nothing while Alt, Ctrl or Shift is held. With Next Gen Gameplay or Next Gen Tire Inflation installed, the same switches are on a Graphics tab next to theirs in their NEXT GEN menu (F2), and these keys stay silent, as other mods use some of them; KeysWithMenu=1 in SnowRunnerShadows.ini keeps them. Next Gen Graphics alone has no menu, and its keys work as before.");
+                "Comparing in the game", "With SnowRunner Shadows installed: F8 switches every shader effect off and on. The first press takes a moment: the game's own shaders are made then. The key does nothing while Alt, Ctrl or Shift is held. With Next Gen Gameplay or Next Gen Tire Inflation installed, their NEXT GEN menu (F2) has a Graphics tab next to theirs with one switch per shader module, to see what each one does, and switches for the passes: GTAO against the game's SSAO, the bounce light, the reflection pass, the wet ground reflections, the contact shadows, and the ambient occlusion pass at half or full size. A shader two modules changed is drawn as the game's own while either is off; the switch's tip names the modules it shares with. F8 works beside the tab too. Next Gen Graphics alone has no menu, and F8 is its one key.");
             return t;
         }
 
@@ -106,7 +106,7 @@ namespace SnowRunnerNextGen
                 Notice, "At 2x and above: finer shadow detail on trees, fences, cranes and trucks, also some way off.",
                 Costs, "At 1x the shadow texture costs nothing extra. A larger one costs graphics time while the shadows are drawn, and video memory (a few hundred MB at 3.5x). Measured at 4K on an RTX 4080 with every other module on: 2x 43 fps, 3x 37 fps, 3.5x 33 fps, against 49 fps at the game's own size.",
                 Choices, "Resolution: 1x keeps the game's own shadow texture, and Shadow edges keeps its edges straight; 2x, 3x and 3.5x draw it larger for finer detail, at the frame rates above.\nSelf-shadow fix: keeps the game's shadow bias in step with the larger texture, so steep rock faces do not shadow themselves in patches. Leave it on.",
-                Know, "In the game, F8 switches every shader effect of this installer off and on again, for a quick comparison. The larger shadow texture stays.");
+                Know, "In the game, F8 switches every shader effect of this installer off and on again, for a quick comparison; the NEXT GEN menu of Next Gen Gameplay or Next Gen Tire Inflation has a switch for each module. The larger shadow texture stays.");
 
             d["edges"] = E(
                 Does, "The sun's shadow texture has a limited number of texels, so the game draws the edge of a shadow as a staircase of them. Rebuilt edges follows each edge across the texels and draws the straight line they make, so edges come out straight and clean at any resolution, even at the game's own. The 16-tap filter, the earlier method, smooths the edges with 16 samples on an even grid instead.",
@@ -126,7 +126,7 @@ namespace SnowRunnerNextGen
                 Does, "The sun's shadow texture is too coarse for small things: a door handle, a mirror or a stone casts no shadow of its own, and a wheel seems to float just above the ground. For every pixel this follows a short ray towards the sun through what is on screen and adds the shadow of whatever blocks it.",
                 Notice, "Wheels and trucks sit on the ground, and small parts such as handles, mirrors and bolts cast their own shadows.",
                 Costs, "Some graphics time: one more pass over the screen.",
-                Know, "Needs SnowRunner Shadows, which runs the pass. Only what is on screen can cast these shadows. In the game, F4 switches it off and on.",
+                Know, "Needs SnowRunner Shadows, which runs the pass. Only what is on screen can cast these shadows. In the game, the Graphics tab's Contact shadows switch turns it off and on.",
                 Credits, "A modified copy of Bend Studio's screen-space shadows (Copyright 2023 Sony Interactive Entertainment, Apache License 2.0).");
 
             d["headshadow"] = E(
@@ -140,7 +140,7 @@ namespace SnowRunnerNextGen
                 Notice, "No dark outlines along grilles, treads and railings, clean open ground, and soft shadow where things really close in: between twin tyres, inside the frame, where a wheel meets the ground. Thin things such as poles, cables and railings no longer carry a halo.",
                 Costs, "More graphics time than the game's own pass at full size. At half size SnowRunner Shadows draws the pass at half the resolution, then blurs and scales it up: at 4K on an RTX 4080 that took the frame rate from 63.7 to 75.0 fps.",
                 Choices, "Quality: full size (the default, the sharpest) or half size (much faster). Half size needs SnowRunner Shadows, which draws the pass; without it the pass runs at full size.",
-                Know, "Ambient occlusion has to be on in the game's video settings. Bounce light is built on it. In the game, F11 switches between GTAO and the game's SSAO, and F5 between half and full size.",
+                Know, "Ambient occlusion has to be on in the game's video settings. Bounce light is built on it. In the game, the Graphics tab's GTAO switch switches between GTAO and the game's SSAO, and its AO at half size between half and full size.",
                 Credits, "Ground truth ambient occlusion by Jorge Jimenez, Xian-Chun Wu, Angelo Pesce and Adrian Jarabo (2016). The horizon integration follows Intel's XeGTAO by Filip Strugar and Steve Mccalla (MIT).")
                 .Picture("Roll cage", "gtao_cage", "The dark outlines around the roll cage and along the roof are gone.", "Game's SSAO", "GTAO")
                 .Picture("Garage", "gtao_garage", "The grille and the tyres lose the dark outline; the shadow stays where things close in.", "Game's SSAO", "GTAO")
@@ -150,7 +150,7 @@ namespace SnowRunnerNextGen
                 Does, "GTAO looks, in several directions around every point, for what hides the sky within 1.5 metres. This lets the same search go on to 6 metres, and what it finds out there darkens only gently: half as much at 1.5 metres, nothing at 6. So the ground under a truck, the walls under a roof and the inside of a tree crown get a soft shade, while the contact shadows stay exactly as GTAO draws them.",
                 Notice, "A soft pool of shade under trucks and trailers, shade under roofs and overhangs, a little more depth inside trees.",
                 Costs, "Little: about 1 ms per frame at 4K (measured on an RTX 4080). Each pixel looks far out in one direction and shares what it finds with its neighbours.",
-                Know, "Needs GTAO. In the game, F11 switches between GTAO (with this) and the game's own SSAO.");
+                Know, "Needs GTAO. In the game, the Graphics tab's Wide occlusion switch draws the ambient occlusion pass as the game's own SSAO while it is off, and its GTAO switch does the same for GTAO as a whole.");
 
             d["ambient"] = E(
                 Does, "Shaded places are lit by one fill colour per map and time of day. This makes the fill light take the colour of the sky above: bluer under a clear sky, warmer toward a low sun. How bright it is stays the game's choice.",
@@ -168,14 +168,14 @@ namespace SnowRunnerNextGen
                 Does, "Light bounces. Sunlit snow brightens the underside of a truck, and red paint tints the ground beside it. This adds that bounce at short range, up to about 1.5 metres, gathered from the scene's picture every frame.",
                 Notice, "Less black under trucks and in wheel arches on bright days, and a faint spill of colour from paint and mud.",
                 Costs, "Under 1 ms per frame at 4K (measured on an RTX 4080): it gathers light in the ambient occlusion pass and adds it to every lit material.",
-                Know, "Off by default and experimental: in places the bounce comes out too strong. On snow and ice it takes its colour from the reflection cube, so keep Reflection cubes on with it. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene's picture. In the game, F10 switches it off and on.");
+                Know, "Off by default and experimental: in places the bounce comes out too strong. On snow and ice it takes its colour from the reflection cube, so keep Reflection cubes on with it. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene's picture. In the game, the Graphics tab's Bounce light switch turns it off and on.");
 
             d["objrefl"] = E(
                 Does, "The game's paint, glass and chrome reflect a ready-made picture of the sky, so trucks never mirror what is around them. This makes them reflect what is on screen: the road, the trees and other trucks.",
                 Notice, "Paint and windows mirroring their surroundings, most at shallow angles, and chrome showing the ground.",
                 Costs, "About 0.3 to 0.4 milliseconds per frame at 4K with the reflection pass.",
                 Choices, "Method: the reflection pass traces the reflections of the whole screen in one go (in SnowRunner Shadows), blurs them by how rough each surface is and steadies them over frames; windows, and whatever the pass misses, fall back to the march. March only lets every material search the last frame on its own: the older method, kept as a choice.",
-                Know, "Only what is on screen can be reflected, so what is behind the camera shows the sky picture as before. In the game, F6 switches the reflection pass off and on.",
+                Know, "Only what is on screen can be reflected, so what is behind the camera shows the sky picture as before. In the game, the Graphics tab's Object reflections switch turns the reflection pass off and on.",
                 Credits, "The reflection pass follows AMD FidelityFX SSSR (MIT), with Morgan McGuire and Michael Mara's screen-space ray tracing, Eric Heitz's visible-normal sampling and Marco Salvi's variance clipping.");
 
             d["headglow"] = E(

@@ -1,6 +1,6 @@
 {
     "exe":  "SnowRunnerNextGen.exe",
-    "built":  "2026-11-06 10:07",
+    "built":  "2026-11-08 23:47",
     "modules":  [
                     {
                         "id":  "shadows",
@@ -61,7 +61,7 @@
                                      },
                                      {
                                          "heading":  "Good to know",
-                                         "text":  "In the game, F8 switches every shader effect of this installer off and on again, for a quick comparison. The larger shadow texture stays."
+                                         "text":  "In the game, F8 switches every shader effect of this installer off and on again, for a quick comparison; the NEXT GEN menu of Next Gen Gameplay or Next Gen Tire Inflation has a switch for each module. The larger shadow texture stays."
                                      }
                                  ]
                     },
@@ -188,7 +188,7 @@
                                      },
                                      {
                                          "heading":  "Good to know",
-                                         "text":  "Needs SnowRunner Shadows, which runs the pass. Only what is on screen can cast these shadows. In the game, F4 switches it off and on."
+                                         "text":  "Needs SnowRunner Shadows, which runs the pass. Only what is on screen can cast these shadows. In the game, the Graphics tab\u0027s Contact shadows switch turns it off and on."
                                      },
                                      {
                                          "heading":  "Credits",
@@ -271,7 +271,7 @@
                                      },
                                      {
                                          "heading":  "Good to know",
-                                         "text":  "Ambient occlusion has to be on in the game\u0027s video settings. Bounce light is built on it. In the game, F11 switches between GTAO and the game\u0027s SSAO, and F5 between half and full size."
+                                         "text":  "Ambient occlusion has to be on in the game\u0027s video settings. Bounce light is built on it. In the game, the Graphics tab\u0027s GTAO switch switches between GTAO and the game\u0027s SSAO, and its AO at half size between half and full size."
                                      },
                                      {
                                          "heading":  "Credits",
@@ -307,7 +307,7 @@
                                      },
                                      {
                                          "heading":  "Good to know",
-                                         "text":  "Needs GTAO. In the game, F11 switches between GTAO (with this) and the game\u0027s own SSAO."
+                                         "text":  "Needs GTAO. In the game, the Graphics tab\u0027s Wide occlusion switch draws the ambient occlusion pass as the game\u0027s own SSAO while it is off, and its GTAO switch does the same for GTAO as a whole."
                                      }
                                  ]
                     },
@@ -417,7 +417,7 @@
                                      },
                                      {
                                          "heading":  "Good to know",
-                                         "text":  "Off by default and experimental: in places the bounce comes out too strong. On snow and ice it takes its colour from the reflection cube, so keep Reflection cubes on with it. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene\u0027s picture. In the game, F10 switches it off and on."
+                                         "text":  "Off by default and experimental: in places the bounce comes out too strong. On snow and ice it takes its colour from the reflection cube, so keep Reflection cubes on with it. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene\u0027s picture. In the game, the Graphics tab\u0027s Bounce light switch turns it off and on."
                                      }
                                  ]
                     },
@@ -464,7 +464,7 @@
                                      },
                                      {
                                          "heading":  "Good to know",
-                                         "text":  "Only what is on screen can be reflected, so what is behind the camera shows the sky picture as before. In the game, F6 switches the reflection pass off and on."
+                                         "text":  "Only what is on screen can be reflected, so what is behind the camera shows the sky picture as before. In the game, the Graphics tab\u0027s Object reflections switch turns the reflection pass off and on."
                                      },
                                      {
                                          "heading":  "Credits",
@@ -1548,7 +1548,7 @@
                                        },
                                        {
                                            "heading":  "Comparing in the game",
-                                           "text":  "With SnowRunner Shadows installed: F8 switches every shader effect off and on, F4 the contact shadows, F5 the ambient occlusion pass between half and full size, F6 the reflection pass, F9 the reflections on wet ground, F10 the bounce light, and F11 GTAO against the game\u0027s SSAO. The first press of F8 or F11 takes a moment: the game\u0027s own shaders are made then. The keys do nothing while Alt, Ctrl or Shift is held. With Next Gen Gameplay or Next Gen Tire Inflation installed, the same switches are on a Graphics tab next to theirs in their NEXT GEN menu (F2), and these keys stay silent, as other mods use some of them; KeysWithMenu=1 in SnowRunnerShadows.ini keeps them. Next Gen Graphics alone has no menu, and its keys work as before."
+                                           "text":  "With SnowRunner Shadows installed: F8 switches every shader effect off and on. The first press takes a moment: the game\u0027s own shaders are made then. The key does nothing while Alt, Ctrl or Shift is held. With Next Gen Gameplay or Next Gen Tire Inflation installed, their NEXT GEN menu (F2) has a Graphics tab next to theirs with one switch per shader module, to see what each one does, and switches for the passes: GTAO against the game\u0027s SSAO, the bounce light, the reflection pass, the wet ground reflections, the contact shadows, and the ambient occlusion pass at half or full size. A shader two modules changed is drawn as the game\u0027s own while either is off; the switch\u0027s tip names the modules it shares with. F8 works beside the tab too. Next Gen Graphics alone has no menu, and F8 is its one key."
                                        }
                                    ]
                   }

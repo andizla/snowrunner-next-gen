@@ -104,7 +104,6 @@ Next to the paks the program leaves a small note, `SnowRunnerNextGen.json`, nami
 - A photo mode unlocker for 2.0: the camera without its collision wall, more zoom and a better depth of field.
 - DLSS compatibility, and later DLSS built in.
 - A texture pack, installed through the program's window like the other modules.
-- A switch for each shader module in the Graphics tab, to see what each one does.
 
 ## Build
 

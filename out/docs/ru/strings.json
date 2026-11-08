@@ -220,8 +220,8 @@
   "ru": "Сравнение в игре"
  },
  "installer.7.text": {
-  "en": "With SnowRunner Shadows installed: F8 switches every shader effect off and on, F4 the contact shadows, F5 the ambient occlusion pass between half and full size, F6 the reflection pass, F9 the reflections on wet ground, F10 the bounce light, and F11 GTAO against the game's SSAO. The first press of F8 or F11 takes a moment: the game's own shaders are made then. The keys do nothing while Alt, Ctrl or Shift is held. With Next Gen Gameplay or Next Gen Tire Inflation installed, the same switches are on a Graphics tab next to theirs in their NEXT GEN menu (F2), and these keys stay silent, as other mods use some of them; KeysWithMenu=1 in SnowRunnerShadows.ini keeps them. Next Gen Graphics alone has no menu, and its keys work as before.",
-  "ru": "Когда установлен SnowRunner Shadows: F8 выключает и включает все шейдерные эффекты, F4 контактные тени, F5 переключает проход фонового затенения между половинным и полным размером, F6 включает и выключает проход отражений, F9 отражения на мокрой земле, F10 переотражённый свет, а F11 переключает между GTAO и игровым SSAO. Первое нажатие F8 или F11 занимает какое-то время: в этот момент создаются собственные шейдеры игры. Пока зажаты Alt, Ctrl или Shift, клавиши ничего не делают. Если установлен Next Gen Gameplay или Next Gen Tire Inflation, те же переключатели находятся на вкладке Graphics рядом с их вкладками в меню NEXT GEN (F2), а эти клавиши молчат, потому что часть из них заняты другими модами; KeysWithMenu=1 в SnowRunnerShadows.ini оставляет их рабочими. Если установлен только Next Gen Graphics, меню нет, и клавиши работают как раньше."
+  "en": "With SnowRunner Shadows installed: F8 switches every shader effect off and on. The first press takes a moment: the game's own shaders are made then. The key does nothing while Alt, Ctrl or Shift is held. With Next Gen Gameplay or Next Gen Tire Inflation installed, their NEXT GEN menu (F2) has a Graphics tab next to theirs with one switch per shader module, to see what each one does, and switches for the passes: GTAO against the game's SSAO, the bounce light, the reflection pass, the wet ground reflections, the contact shadows, and the ambient occlusion pass at half or full size. A shader two modules changed is drawn as the game's own while either is off; the switch's tip names the modules it shares with. F8 works beside the tab too. Next Gen Graphics alone has no menu, and F8 is its one key.",
+  "ru": "Когда установлен SnowRunner Shadows: F8 выключает и включает все шейдерные эффекты. Первое нажатие занимает какое-то время: в этот момент создаются собственные шейдеры игры. Пока зажаты Alt, Ctrl или Shift, клавиша ничего не делает. Если установлен Next Gen Gameplay или Next Gen Tire Inflation, в их меню NEXT GEN (F2) рядом с их собственными вкладками есть вкладка Graphics: на ней по переключателю на каждый шейдерный модуль, чтобы посмотреть, что делает каждый, и переключатели проходов: GTAO против игрового SSAO, переотражённый свет, проход отражений, отражения на мокрой земле, контактные тени и проход фонового затенения в половинном или полном размере. Шейдер, который изменили два модуля, рисуется как игровой, пока выключен любой из них; подсказка переключателя называет модули, с которыми у него общие шейдеры. F8 работает и вместе с вкладкой. Если установлен только Next Gen Graphics, меню нет, и F8 его единственная клавиша."
  },
  "ui.onbydefault": {
   "en": "on by default",
@@ -276,8 +276,8 @@
   "ru": "Полезно знать"
  },
  "card.shadows.help.4": {
-  "en": "In the game, F8 switches every shader effect of this installer off and on again, for a quick comparison. The larger shadow texture stays.",
-  "ru": "В игре F8 выключает и снова включает все шейдерные эффекты этого установщика для быстрого сравнения. Увеличенная текстура теней остаётся."
+  "en": "In the game, F8 switches every shader effect of this installer off and on again, for a quick comparison; the NEXT GEN menu of Next Gen Gameplay or Next Gen Tire Inflation has a switch for each module. The larger shadow texture stays.",
+  "ru": "В игре F8 выключает и снова включает все шейдерные эффекты этого установщика для быстрого сравнения; в меню NEXT GEN из Next Gen Gameplay или Next Gen Tire Inflation есть переключатель для каждого модуля. Увеличенная текстура теней остаётся."
  },
  "card.edges.help.0": {
   "en": "The sun's shadow texture has a limited number of texels, so the game draws the edge of a shadow as a staircase of them. Rebuilt edges follows each edge across the texels and draws the straight line they make, so edges come out straight and clean at any resolution, even at the game's own. The 16-tap filter, the earlier method, smooths the edges with 16 samples on an even grid instead.",
@@ -340,8 +340,8 @@
   "ru": "Немного времени GPU: ещё один проход по экрану."
  },
  "card.contact.help.3": {
-  "en": "Needs SnowRunner Shadows, which runs the pass. Only what is on screen can cast these shadows. In the game, F4 switches it off and on.",
-  "ru": "Требует SnowRunner Shadows, который выполняет этот проход. Отбрасывать такие тени может только то, что есть на экране. В игре F4 выключает и включает их."
+  "en": "Needs SnowRunner Shadows, which runs the pass. Only what is on screen can cast these shadows. In the game, the Graphics tab's Contact shadows switch turns it off and on.",
+  "ru": "Требует SnowRunner Shadows, который выполняет этот проход. Отбрасывать такие тени может только то, что есть на экране. В игре их выключает и включает переключатель Contact shadows на вкладке Graphics."
  },
  "card.contact.help.4": {
   "en": "A modified copy of Bend Studio's screen-space shadows (Copyright 2023 Sony Interactive Entertainment, Apache License 2.0).",
@@ -380,8 +380,8 @@
   "ru": "Quality: full size (по умолчанию, самый чёткий) или half size (намного быстрее). Для half size нужен SnowRunner Shadows, который рисует проход; без него проход идёт в режиме full size."
  },
  "card.gtao.help.4": {
-  "en": "Ambient occlusion has to be on in the game's video settings. Bounce light is built on it. In the game, F11 switches between GTAO and the game's SSAO, and F5 between half and full size.",
-  "ru": "Фоновое затенение должно быть включено в настройках видео игры. На нём построен Bounce light. В игре F11 переключает между GTAO и игровым SSAO, а F5 между половинным и полным размером."
+  "en": "Ambient occlusion has to be on in the game's video settings. Bounce light is built on it. In the game, the Graphics tab's GTAO switch switches between GTAO and the game's SSAO, and its AO at half size between half and full size.",
+  "ru": "Фоновое затенение должно быть включено в настройках видео игры. На нём построен Bounce light. В игре переключатель GTAO на вкладке Graphics переключает между GTAO и игровым SSAO, а переключатель AO at half size между половинным и полным размером."
  },
  "card.gtao.help.5": {
   "en": "Ground truth ambient occlusion by Jorge Jimenez, Xian-Chun Wu, Angelo Pesce and Adrian Jarabo (2016). The horizon integration follows Intel's XeGTAO by Filip Strugar and Steve Mccalla (MIT).",
@@ -400,8 +400,8 @@
   "ru": "Немного: около 1 мс на кадр в 4K (замер на RTX 4080). Каждый пиксель смотрит далеко в одном направлении и делится найденным с соседями."
  },
  "card.aofar.help.3": {
-  "en": "Needs GTAO. In the game, F11 switches between GTAO (with this) and the game's own SSAO.",
-  "ru": "Требует GTAO. В игре F11 переключает между GTAO (вместе с этой карточкой) и игровым SSAO."
+  "en": "Needs GTAO. In the game, the Graphics tab's Wide occlusion switch draws the ambient occlusion pass as the game's own SSAO while it is off, and its GTAO switch does the same for GTAO as a whole.",
+  "ru": "Требует GTAO. В игре, пока на вкладке Graphics выключен переключатель Wide occlusion, проход фонового затенения рисуется как игровой SSAO, а переключатель GTAO делает то же самое для всего GTAO."
  },
  "card.ambient.help.0": {
   "en": "Shaded places are lit by one fill colour per map and time of day. This makes the fill light take the colour of the sky above: bluer under a clear sky, warmer toward a low sun. How bright it is stays the game's choice.",
@@ -452,8 +452,8 @@
   "ru": "Меньше 1 мс на кадр в 4K (замер на RTX 4080): свет собирается в проходе фонового затенения и добавляется ко всем освещённым материалам."
  },
  "card.gi.help.3": {
-  "en": "Off by default and experimental: in places the bounce comes out too strong. On snow and ice it takes its colour from the reflection cube, so keep Reflection cubes on with it. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene's picture. In the game, F10 switches it off and on.",
-  "ru": "По умолчанию выключена и экспериментальная: местами переотражение получается слишком сильным. На снегу и льду цвет берётся из кубической карты отражений, поэтому держите вместе с ней включённой Reflection cubes. Требует GTAO, в проходе которого работает, и SnowRunner Shadows, который передаёт изображение сцены. В игре F10 выключает и включает её."
+  "en": "Off by default and experimental: in places the bounce comes out too strong. On snow and ice it takes its colour from the reflection cube, so keep Reflection cubes on with it. Needs GTAO, whose pass it works in, and SnowRunner Shadows, which hands it the scene's picture. In the game, the Graphics tab's Bounce light switch turns it off and on.",
+  "ru": "По умолчанию выключена и экспериментальная: местами переотражение получается слишком сильным. На снегу и льду цвет берётся из кубической карты отражений, поэтому держите вместе с ней включённой Reflection cubes. Требует GTAO, в проходе которого работает, и SnowRunner Shadows, который передаёт изображение сцены. В игре её выключает и включает переключатель Bounce light на вкладке Graphics."
  },
  "card.objrefl.help.0": {
   "en": "The game's paint, glass and chrome reflect a ready-made picture of the sky, so trucks never mirror what is around them. This makes them reflect what is on screen: the road, the trees and other trucks.",
@@ -472,8 +472,8 @@
   "ru": "Method: reflection pass трассирует отражения всего экрана за один раз (в SnowRunner Shadows), размывает их по шероховатости каждой поверхности и стабилизирует по кадрам; окна и всё, что проход пропустил, возвращаются к маршу. March only позволяет каждому материалу самостоятельно искать в прошлом кадре: это старый метод, оставленный как вариант."
  },
  "card.objrefl.help.4": {
-  "en": "Only what is on screen can be reflected, so what is behind the camera shows the sky picture as before. In the game, F6 switches the reflection pass off and on.",
-  "ru": "Отразиться может только то, что есть на экране, поэтому вместо того, что за камерой, по-прежнему видна картинка неба. В игре F6 выключает и включает reflection pass."
+  "en": "Only what is on screen can be reflected, so what is behind the camera shows the sky picture as before. In the game, the Graphics tab's Object reflections switch turns the reflection pass off and on.",
+  "ru": "Отразиться может только то, что есть на экране, поэтому вместо того, что за камерой, по-прежнему видна картинка неба. В игре переключатель Object reflections на вкладке Graphics выключает и включает reflection pass."
  },
  "card.objrefl.help.5": {
   "en": "The reflection pass follows AMD FidelityFX SSSR (MIT), with Morgan McGuire and Michael Mara's screen-space ray tracing, Eric Heitz's visible-normal sampling and Marco Salvi's variance clipping.",

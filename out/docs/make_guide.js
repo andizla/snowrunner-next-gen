@@ -120,7 +120,8 @@ and play for a while.</p>
 <p>The {{off}} cards that are off by default are off for a reason: they are experimental, a matter of taste, or they
 cost more frame rate. Each has its own page in Part 3 that says what it does, what you will notice and what it costs.
 Switch one on, click Apply, and look in the game. With SnowRunner Shadows in, <b>F8</b> switches every shader effect off
-and on, so you can compare from the same spot.</p>
+and on, so you can compare from the same spot; with Next Gen Gameplay or Next Gen Tire Inflation installed, the Graphics tab
+of their NEXT GEN menu (F2) has a switch for each shader module, to see what each one does on its own.</p>
 <p>Some cards have rows of buttons: a resolution, a strength, or which maps a change applies to. The values a card starts
 with are the recommended ones. Part 3 lists every row with its values.</p>
 {{table}}

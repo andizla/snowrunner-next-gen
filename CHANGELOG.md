@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.3]
+
+- A switch for each shader module in the NEXT GEN menu's Graphics tab (with Next Gen Gameplay or Next Gen Tire Inflation installed), to see what each one does: Tonemap, Water reflections, Smoke glow and the rest, named as the installer's cards, each drawing that module's shaders as the game's own while it is off. A shader two modules changed is the game's own while either is off, and the switch's tip names the modules it shares with. The passes keep their switches, one per module (GTAO, Bounce light, Wet ground reflections, Object reflections, Contact shadows), and F8 keeps switching every effect at once; it leaves the module switches as they are, so a module switched off stays off through F8 twice. The table SnowRunner Shadows reads for this (SnowRunnerShadows.stock) names the modules and marks every changed shader with the modules that changed it; an older table still works, with F8 and GTAO alone. With every module on the cost per draw is unchanged: one lookup when a pixel shader is set, none for a vertex shader.
+- The F keys F4, F5, F6, F9, F10 and F11 are retired; F8 stays, and works beside the Graphics tab too, where the keys used to go silent. The ini keys KeyPuddles, KeyBounce, KeyAO, KeySSR, KeyAOHalf, KeyContact and KeysWithMenu are no longer read; an ini that still names them gets one line in the log.
+
 ## [1.1.2]
 
 - GTAO at half size no longer leaves a ghost image: a faint outline of an old view stayed on the screen wherever the camera pointed. At half size the pass drew into SnowRunner Shadows' own textures and never into the game's AO target, so a pass reading that target saw the last frame drawn at full size. The result now goes into the game's target too. GTAO's quality is full size by default.

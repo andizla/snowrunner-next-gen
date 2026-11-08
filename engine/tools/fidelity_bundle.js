@@ -62,7 +62,8 @@
 //            distance (SMOKE_SOFT 0.5), so puffs meet the ground without a hard line; in DEFAULT
 //   contact  tools\patch_contact.js: the 1269 sun shadow receivers write the sun's visibility they found (after the game's
 //            shadow floor) to render target 6, which SnowRunner Shadows (hid.dll Contact=1) binds beside the lit pass and
-//            uses for its contact shadows (screen-space sun shadows at the AO pass, darkening each pixel's sunlight; F4);
+//            uses for its contact shadows (screen-space sun shadows at the AO pass, darkening each pixel's sunlight; the
+//            Graphics tab's Contact shadows switch);
 //            patched last, on top of whatever the other modules made of each receiver; without the DLL the write goes
 //            nowhere; in DEFAULT
 //   headshadow tools\patch_headshadow.js + headlight\headshadow.cso: the ~4900 lit shaders that take the truck's headlight
@@ -128,6 +129,20 @@ const R = (...p) => path.join(W, 'replacements', ...p);
 const SETS = process.env.SR_SETS_DIR || path.join(W, 'replacements');
 const S = (...p) => path.join(SETS, ...p);
 const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'watersun', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokemore', 'smokeshade', 'sssr', 'headglow', 'contact', 'headshadow'];
+// each module's name in the NEXT GEN menu's Graphics tab, where SnowRunner Shadows lists one switch per module: the
+// installer's card title, or the card and its row for a module that is a row of a card; carried in the stock twins
+// table (tools\stock_twins.js), so the DLL keeps no list of its own. The test run_tests.ps1 holds them to the catalog
+const TITLES = { gtao: 'GTAO', aofar: 'Wide occlusion', crisp: 'Shadow edges: 16-tap filter', revec: 'Shadow edges: rebuilt', blocker: 'Blocker search',
+    seam: 'Shadow edges: cascade seams', ambient: 'Sky ambient', fog: 'Volumetric fog', fogsun: 'Volumetric fog: sun shafts', tonemap: 'Tonemap', bloom: 'Bloom soft cut',
+    water: 'Water reflections', rivertint: 'River depth colour', crestglow: 'Sun glow through waves', watersun: 'Water reflections: sun glitter off in shade',
+    glare: 'Headlight glare cap', puddles: 'Wet ground reflections', gi: 'Bounce light', reflections: 'Object reflections: march only', smoke: 'Smoke glow',
+    smokemore: 'Smoke glow: more kinds of smoke', smokeshade: 'Smoke shape and softer edges', sssr: 'Object reflections', headglow: 'Headlights in reflections',
+    contact: 'Contact shadows', headshadow: 'Headlight shadows' };
+const SHADOW_MODULES = ['crisp', 'revec', 'blocker', 'seam'];   // the modules the sun shadow filter set is built from
+const shadowModules = (modules) => modules.filter((m) => SHADOW_MODULES.includes(m));
+// the module table and who changed what, for stock_twins.js's buildTwins: build()'s who (a main cache slot -> the modules
+// whose changes its shader carries) and whoSide (a side cache original's CRC32 -> the same)
+const whoOf = (modules, r) => ({ modules: modules.map((id) => ({ id, title: TITLES[id] })), main: r.who, side: r.whoSide });
 // what install and build take without a list: every module but these seven, which stay selectable by name
 //   reflections  the per-material march alone: sssr took its place (the DLL's reflection pass, with that march only
 //                where the pass has nothing), and normalize refuses the two together
@@ -243,12 +258,14 @@ function distinctCopy(b)
 
 function plan(modules)
 {
-    const main = new Map(), hdr = new Map();
-    const add = (target, m) => { for (const [k, v] of m) target.set(k, v); };
+    const main = new Map(), hdr = new Map(), who = new Map();   // who: a hash -> the modules whose changes its blob carries
+    const credit = (h, ids) => { if (!who.has(h)) who.set(h, new Set()); for (const id of ids) who.get(h).add(id); };
+    const add = (target, m, ids) => { for (const [k, v] of m) { target.set(k, v); credit(k, ids); } };
     const shadows = shadowSet(modules);
-    if (shadows) add(main, setFrom(S('shadow_filter', shadows)));
-    if (modules.includes('ambient')) add(main, setFrom(S('ambient', shadows ? 'sky_on_' + shadows : 'sky')));
-    if (modules.includes('fog')) add(main, setFrom(S('fog_builds', fogVariant(modules))));
+    if (shadows) add(main, setFrom(S('shadow_filter', shadows)), shadowModules(modules));
+    // the ambient set is built on the shadow set: a shader in both carries both
+    if (modules.includes('ambient')) add(main, setFrom(S('ambient', shadows ? 'sky_on_' + shadows : 'sky')), ['ambient']);
+    if (modules.includes('fog')) add(main, setFrom(S('fog_builds', fogVariant(modules))), modules.includes('fogsun') ? ['fog', 'fogsun'] : ['fog']);
     if (modules.includes('gtao'))
     {
         // with the bounce light, the GTAO pass that also measures it; aofar: the builds with the far reach. Without the
@@ -261,15 +278,20 @@ function plan(modules)
             : process.env.GTAO_VARIANT && !far ? fs.readFileSync(R('ssao_builds', gtaoVariant(), '0xEA2414F8.shader'))
             : fs.readFileSync(R('gi', far ? 'gtao_ao_far.cso' : 'gtao_ao.cso'));
         main.set('EA2414F8', g); main.set('A3716E2B', distinctCopy(g));
+        for (const h of ['EA2414F8', 'A3716E2B']) credit(h, ['gtao', ...(modules.includes('gi') ? ['gi'] : []), ...(far ? ['aofar'] : [])]);
     }
-    if (modules.includes('tonemap')) add(hdr, setFrom(S('tonemap_builds', 'fidelity')));
-    if (modules.includes('bloom')) add(hdr, setFrom(S('bloom_builds', 'softknee')));
-    return { main, hdr };
+    if (modules.includes('tonemap')) add(hdr, setFrom(S('tonemap_builds', 'fidelity')), ['tonemap']);
+    if (modules.includes('bloom')) add(hdr, setFrom(S('bloom_builds', 'softknee')), ['bloom']);
+    return { main, hdr, who };
 }
 
 function build(orig, modules)
 {
-    const { main, hdr } = plan(modules);
+    const { main, hdr, who: planWho } = plan(modules);
+    // which modules' changes each changed slot carries (main cache slot -> ids; side cache original hash -> ids), for the
+    // stock twins table: a module's switch draws a shader as the game's own when any module that changed it is off
+    const who = new Map(), whoSide = new Map([...hdr.keys()].map((h) => [h, planWho.get(h)]));
+    const credit = (i, ...ids) => { if (!who.has(i)) who.set(i, new Set()); for (const id of ids) who.get(i).add(id); };
     const water = modules.includes('water'), tint = modules.includes('rivertint'), river = water || tint;
     const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), glowWide = modules.includes('smokemore'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact'), headShadow = modules.includes('headshadow');
     let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, lakeHits = 0, lakePlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, headHits = 0, headPlanned = 0, checked = 0;
@@ -285,7 +307,7 @@ function build(orig, modules)
         parsed.blobs.forEach((bl, i) =>
         {
             const h = pak.hex8(pak.crc32(inflated.subarray(bl.off, bl.off + bl.size)));
-            if (main.has(h)) { repl.set(i, main.get(h)); seen.add(h); }
+            if (main.has(h)) { repl.set(i, main.get(h)); seen.add(h); credit(i, ...planWho.get(h)); }
         });
         // bounce light, ahead of the water and wet-ground splices: the material shaders' ambient gets last frame's
         // bounce light, spliced on each shader as the shadow set left it (the sky tint comes with the same helper when
@@ -303,7 +325,8 @@ function build(orig, modules)
                 giPlanned++;
                 const base = shadowMap.get(h) || Buffer.from(own);
                 const r = gi.patchGI(base, gi.isDecal(base) ? decalHelper : helper);
-                if (r.blob) { repl.set(i, r.blob); giHits++; }
+                // the splice goes on the shadow set's version, and the gi_ambient helper carries the sky tint
+                if (r.blob) { repl.set(i, r.blob); giHits++; credit(i, 'gi', ...(modules.includes('ambient') ? ['ambient'] : []), ...(shadowMap.has(h) ? shadowModules(modules) : [])); }
             });
         }
         // the water goes on top of whatever the other modules made of each water shader. Rivers: reflections, then the
@@ -319,10 +342,10 @@ function build(orig, modules)
                 glow: modules.includes('crestglow') ? fs.readFileSync(path.join(W, 'replacements', 'water', 'blend_glow.cso')) : null };
             let glowHits = 0, sunHits = 0;
             // watersun: the sun's highlight out in the sun's shadow, in the variants drawn with the shadow map
-            const sunShade = (r) =>
+            const sunShade = (r, ids) =>
             {
                 const u = r.blob && modules.includes('watersun') ? sun.patchWaterSun(r.blob) : null;
-                if (u && u.blob) { sunHits++; return u; }
+                if (u && u.blob) { sunHits++; ids.push('watersun'); return u; }
                 return r;
             };
             parsed.blobs.forEach((bl, i) =>
@@ -331,18 +354,20 @@ function build(orig, modules)
                 if (!rivers.has(h) && !lakes.has(h)) return;
                 waterPlanned++;
                 let r = { blob: repl.get(i) || Buffer.from(own) };
+                const ids = [];   // the modules whose changes this shader gets here (a step that fails leaves it as it was)
                 if (rivers.has(h))
                 {
-                    if (water) r = ssr.patchWater(r.blob, helper.ssr);
+                    if (water) { r = ssr.patchWater(r.blob, helper.ssr); ids.push('water'); }
                     // crestglow: the blend with the sun glow through wave crests where the shader has the sun's shadow map
                     const g = water && r.blob && helper.glow ? mix.patchGlow(r.blob, helper.glow) : null;
-                    if (g && g.blob) { r = g; glowHits++; }
+                    if (g && g.blob) { r = g; glowHits++; ids.push('crestglow'); }
                     else if (water && r.blob) r = mix.patchBlend(r.blob, helper.blend);
-                    if (tint && r.blob) r = mix.patchAbsorb(r.blob, helper.absorb);
-                    if (water) r = sunShade(r);
+                    if (tint && r.blob) { r = mix.patchAbsorb(r.blob, helper.absorb); ids.push('rivertint'); }
+                    if (water) r = sunShade(r, ids);
                 }
                 else
                 {
+                    ids.push('water');
                     // a lake that reflects the cubemap gets the SSR at that sample; one that reflects the engine's planar
                     // image (88 shaders: the lakes, sea and road puddles seen in play) gets it at that sample
                     // instead, with the planar image as the fallback (patch_water_planar.js)
@@ -353,9 +378,9 @@ function build(orig, modules)
                     // (tools\patch_water_clear.js; the rivers get it in their absorb helper)
                     const k = r.blob ? clear.patchClear(r.blob) : null;
                     if (k && k.blob) r = k;
-                    r = sunShade(r);
+                    r = sunShade(r, ids);
                 }
-                if (r.blob) { repl.set(i, r.blob); waterHits++; }
+                if (r.blob) { repl.set(i, r.blob); waterHits++; credit(i, ...ids); }
                 else console.log('note: water shader ' + i + ' left as it was: ' + r.reason);
             });
             if (helper.glow) console.log('crest glow: ' + glowHits + ' river shaders (those with the sun shadow map)');
@@ -380,7 +405,7 @@ function build(orig, modules)
                 if (found.length !== lakePlanned) throw new Error(found.length + ' of its ' + lakePlanned + ' shaders are in this game version\'s shader.pak');
                 if (found.some(([i]) => repl.has(i))) throw new Error('another module changed its shaders');
                 const done = found.map(([i, h, own]) => [i, hits.patchReflHits(h, Buffer.from(own), hitRule)]);
-                for (const [i, blob] of done) repl.set(i, blob);
+                for (const [i, blob] of done) { repl.set(i, blob); credit(i, 'water'); }
                 lakeHits = done.length;
             }
             catch (e) { console.log('warning: the lakes\' reflection image keeps the game\'s own hit rule: ' + e.message); }
@@ -397,8 +422,8 @@ function build(orig, modules)
                 if (!targets.has(pak.hex8(pak.crc32(own)))) return;
                 glarePlanned++;
                 let blob = repl.get(i) || Buffer.from(own), changed = false;
-                if (cap) { const r = glare.patchGlare(blob); if (r.blob) { blob = r.blob; glareHits++; changed = true; } }
-                if (puddles) { const r = puddle.patchPuddle(blob, helper); if (r.blob) { blob = r.blob; puddleHits++; changed = true; } }
+                if (cap) { const r = glare.patchGlare(blob); if (r.blob) { blob = r.blob; glareHits++; changed = true; credit(i, 'glare'); } }
+                if (puddles) { const r = puddle.patchPuddle(blob, helper); if (r.blob) { blob = r.blob; puddleHits++; changed = true; credit(i, 'puddles'); } }
                 if (changed) repl.set(i, blob);
             });
         }
@@ -415,7 +440,7 @@ function build(orig, modules)
                 if (!set.has(pak.hex8(pak.crc32(own)))) return;
                 reflPlanned++;
                 const r = objssr.patchObject(repl.get(i) || Buffer.from(own), helper);
-                if (r.blob) { repl.set(i, r.blob); reflHits++; }
+                if (r.blob) { repl.set(i, r.blob); reflHits++; credit(i, 'reflections'); }
             });
         }
         // the reflection pass (module sssr): the object materials write the pass's G-buffer at render
@@ -443,13 +468,13 @@ function build(orig, modules)
                 if (own.includes(GLASS))
                 {
                     const m = objssr.patchObject(base, glassHelper);
-                    if (m.blob) { repl.set(i, m.blob); sssrHits++; sssrGlass++; }
+                    if (m.blob) { repl.set(i, m.blob); sssrHits++; sssrGlass++; credit(i, 'sssr'); }
                     return;
                 }
                 const g = gbuffer.patchGBuffer(base, gbHelper);
                 const r = objssr.patchObject(g.blob || base, helper);
-                if (r.blob) { repl.set(i, r.blob); sssrHits++; }
-                else if (g.blob) repl.set(i, g.blob);
+                if (r.blob) { repl.set(i, r.blob); sssrHits++; credit(i, 'sssr', ...(modules.includes('headglow') ? ['headglow'] : [])); }
+                else if (g.blob) { repl.set(i, g.blob); credit(i, 'sssr'); }
             });
         }
         // the sun glow through smoke (module smoke): the particle vertex shaders' sun light scaled by a forward scattering
@@ -465,7 +490,8 @@ function build(orig, modules)
                 if (!set.has(pak.hex8(pak.crc32(own)))) return;
                 smokePlanned++;
                 const r = smoke.patchSmoke(repl.get(i) || Buffer.from(own), helper, glowWide);
-                if (r.blob) { repl.set(i, r.blob); smokeHits++; }
+                // the eight shaders of the light-map-in-x-z-w family are taken with smokemore alone (patch_smoke.js's note names them)
+                if (r.blob) { repl.set(i, r.blob); smokeHits++; credit(i, 'smoke', ...(r.note && r.note.startsWith('light map in x, z and w') ? ['smokemore'] : [])); }
             });
         }
         // smoke shape and softer edges (module smokeshade): the lit puffs shaded by a pseudo-normal from their alpha and
@@ -481,7 +507,7 @@ function build(orig, modules)
                 if (!set.has(pak.hex8(pak.crc32(own)))) return;
                 shapePlanned++;
                 const r = smokeps.patchSmokePS(repl.get(i) || Buffer.from(own), helper);
-                if (r.blob) { repl.set(i, r.blob); shapeHits++; }
+                if (r.blob) { repl.set(i, r.blob); shapeHits++; credit(i, 'smokeshade'); }
             });
         }
         // the water decals, with the decal build of the puddle helper, on top of whatever the other modules made of
@@ -499,7 +525,7 @@ function build(orig, modules)
                 if (!gi.isDecal(blob)) return;
                 decalPlanned++;
                 const r = puddle.patchPuddle(blob, helper);
-                if (r.blob) { repl.set(i, r.blob); decalHits++; }
+                if (r.blob) { repl.set(i, r.blob); decalHits++; credit(i, 'puddles'); }
             });
         }
         // contact shadows (module contact): the sun shadow receivers (the shadow filter sets' 1269) write the sun's
@@ -516,7 +542,7 @@ function build(orig, modules)
                 if (!set.has(pak.hex8(pak.crc32(own)))) return;
                 contactPlanned++;
                 const r = contact.patchContact(repl.get(i) || Buffer.from(own));
-                if (r.blob) { repl.set(i, r.blob); contactHits++; }
+                if (r.blob) { repl.set(i, r.blob); contactHits++; credit(i, 'contact'); }
                 else console.log('note: shadow receiver ' + i + ' writes no sun visibility: ' + r.reason);
             });
         }
@@ -534,7 +560,7 @@ function build(orig, modules)
                 if (!set.has(pak.hex8(pak.crc32(own)))) return;
                 headPlanned++;
                 const r = head.patchHeadShadow(repl.get(i) || Buffer.from(own), helper);
-                if (r.blob) { repl.set(i, r.blob); headHits++; }
+                if (r.blob) { repl.set(i, r.blob); headHits++; credit(i, 'headshadow'); }
             });
         }
         // no changed shader may read an input component it does not declare (see the top)
@@ -579,7 +605,7 @@ function build(orig, modules)
         if (!changed && !pak.readEntry(orig, e).equals(pak.readEntry(out, e2))) throw new Error('entry changed: ' + e.name);
         if (pak.crc32(pak.readEntry(out, e2)) !== e2.crc) throw new Error('crc check failed: ' + e.name);
     }
-    return { out, mainHits, hdrHits, mainPlanned: main.size, hdrPlanned: hdr.size, waterHits, waterPlanned, lakeHits, lakePlanned, glareHits, glarePlanned, puddleHits, decalHits, decalPlanned, giHits, giPlanned, reflHits, reflPlanned, smokeHits, smokePlanned, shapeHits, shapePlanned, sssrHits, sssrPlanned, sssrGlass, contactHits, contactPlanned, headHits, headPlanned, checked };
+    return { out, who, whoSide, mainHits, hdrHits, mainPlanned: main.size, hdrPlanned: hdr.size, waterHits, waterPlanned, lakeHits, lakePlanned, glareHits, glarePlanned, puddleHits, decalHits, decalPlanned, giHits, giPlanned, reflHits, reflPlanned, smokeHits, smokePlanned, shapeHits, shapePlanned, sssrHits, sssrPlanned, sssrGlass, contactHits, contactPlanned, headHits, headPlanned, checked };
 }
 
 // what a build holds, one line
@@ -601,7 +627,9 @@ function summary(modules, r, gtao)
 }
 
 // the stock twins table, one line
-const twinsNote = (t) => t.count + ' shaders, ' + t.bytes + ' bytes' + (t.shared ? ' (' + t.shared + ' changed shaders share a key with another and have no twin)' : '');
+const twinsNote = (t) => t.count + ' shaders in ' + t.modules.length + ' modules (' + t.ao + ' of the AO pass, ' + t.multi + ' changed by two or more), ' + t.bytes + ' bytes' +
+    (t.unattributed ? ' (' + t.unattributed + ' changed shaders no module claimed: F8 alone switches them)' : '') +
+    (t.shared ? ' (' + t.shared + ' changed shaders share a key with another and have no twin)' : '');
 
 if (require.main === module)
 {
@@ -613,9 +641,9 @@ if (require.main === module)
         if (!fs.existsSync(pak.ORIG)) throw new Error('no original backup at ' + pak.ORIG);
         const orig = fs.readFileSync(pak.ORIG);
         const r = build(orig, modules);
-        // the stock twins for SnowRunner Shadows' dev switches (F8 every effect, F11 the AO pass), next to hid.dll: made
-        // before the first write, so a table that cannot be made stops the install with the game untouched
-        const t = twins.buildTwins(orig, r.out);
+        // the stock twins for SnowRunner Shadows' switches (F8 every effect, the Graphics tab one module at a time), next to
+        // hid.dll: made before the first write, so a table that cannot be made stops the install with the game untouched
+        const t = twins.buildTwins(orig, r.out, whoOf(modules, r));
         const gtao = modules.includes('gtao') ? gtaoBuild(modules) : null, helpers = helperNote(modules) || null;
         const fog = modules.includes('fog') && fogVariant(modules) !== fogDefault(modules) ? fogVariant(modules) : null, rule = hitsNote(modules);
         pak.installBuild(r.out, { variant: 'fidelity: ' + modules.join(',') + (fog ? ' (fog build ' + fog + ')' : '') + (rule ? ' (lake image rule ' + rule + ')' : '') + (helpers ? ' (helpers: ' + helpers + ')' : ''), modules, gtaoVariant: gtao, fogVariant: fog, hitsRule: rule, helpers, patchedSha256: pak.sha256(r.out), date: pak.localStamp() });
@@ -631,7 +659,7 @@ if (require.main === module)
             {
                 // an earlier build's table would name other shaders: better none
                 try { fs.unlinkSync(stock); } catch (e2) { /* there is none, or it cannot be removed */ }
-                console.log('note: the stock twins table for the dev switches was not written (' + e.message + '): F8 and F11 switch nothing until the next install');
+                console.log('note: the stock twins table for the dev switches was not written (' + e.message + '): F8 and the module switches switch nothing until the next install');
             }
         }
         console.log('installed ' + summary(modules, r, gtao));
@@ -646,7 +674,7 @@ if (require.main === module)
         if (path.resolve(arg) === path.resolve(pak.PAK)) throw new Error('build writes a copy; install replaces the game\'s shader.pak');
         const r = build(fs.readFileSync(pak.ORIG), modules);
         fs.writeFileSync(arg, r.out);
-        const t = twins.buildTwins(fs.readFileSync(pak.ORIG), r.out);
+        const t = twins.buildTwins(fs.readFileSync(pak.ORIG), r.out, whoOf(modules, r));
         fs.writeFileSync(arg + '.stock', t.file);
         console.log('built ' + summary(modules, r, modules.includes('gtao') ? gtaoBuild(modules) : null) + '; sha256 ' + pak.sha256(r.out));
         console.log('stock twins for the dev switches: ' + twinsNote(t) + ', in ' + arg + '.stock');
@@ -677,4 +705,4 @@ if (require.main === module)
     }
     else console.log('usage: install [' + ALL.join(',') + '] | build <out file> [modules] | status | modules | gtao');
 }
-module.exports = { build, ALL, normalize, shadowSet };
+module.exports = { build, ALL, TITLES, normalize, shadowSet };

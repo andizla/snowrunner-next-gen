@@ -173,6 +173,17 @@ $r = Apply $everything
 Check 'intro off again: gfx.pak holds the logos alone' ((EntriesDiff (Entries $gfx) (Entries (Join-Path $originals 'gfx.pak.orig'))) -replace ':.*$', '') 'differs in 8'
 Check 'intro off again: the status says so' ([string](Status).logos.intro) ''
 Check 'Bin has hid.dll, its ini and the stock twins' ((Test-Path (Join-Path $bin 'hid.dll')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.ini')) -and (Test-Path (Join-Path $bin 'SnowRunnerShadows.stock'))) 'True'
+# the stock twins table (tools\stock_twins.js, read back by its inspect): version 2, every module of the build named in
+# the bundle's order, every changed shader claimed by a module or the AO pass, the AO pass's two shaders marked, shaders
+# two modules changed carrying both bits (the shared-shader rule), and every named module with a shader of its own
+$twinsJs = Join-Path $(if ($Engine) { Join-Path $Engine 'tools' } else { Join-Path $root 'engine\tools' }) 'stock_twins.js'
+$twins = (& $node $twinsJs inspect (Join-Path $bin 'SnowRunnerShadows.stock')) | ConvertFrom-Json
+Check 'stock twins: a version-2 table' ([string]$twins.version) '2'
+Check 'stock twins: every module of the build is named, in order' (($twins.modules | ForEach-Object { $_.id }) -join ',') ($default -join ',')
+Check 'stock twins: every changed shader is claimed by a module or the AO pass' ([string]$twins.unattributed) '0'
+Check 'stock twins: the AO pass''s two shaders are marked' ([string]$twins.ao) '2'
+Check 'stock twins: shaders two modules changed carry both bits' ([bool]($twins.multi -gt 0)) 'True'
+Check 'stock twins: every named module changed a shader' ((@($twins.modules | Where-Object { $_.shaders -eq 0 }) | ForEach-Object { $_.id }) -join ',') ''
 
 'the skies in, the sky pack not beside the program (a new version unzipped into a new folder): another boot.pak part, then Restore'
 $env:SR_SKIES_DIR = $noPack

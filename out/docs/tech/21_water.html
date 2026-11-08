@@ -84,7 +84,7 @@ wet-ground shaders) reads the previous frame's, which the DLL copies at the AO p
 The ray is marched in world space and projected with the previous frame's camera, so the depth and the colour it meets belong
 together; for a moving truck the reflection lags one frame. Only glossy pixels march: the cube's mip level, &radic;roughness
 &times; 8 + 0.5, must be below a limit. Rough mud takes its colour from the feed's mip chain, blurred like the cubemap would be.
-Without the DLL (or with F9) every pixel keeps the cubemap sample.</p>
+Without the DLL (or with the Graphics tab's Wet ground reflections off, which withholds the scene feed) every pixel keeps the cubemap sample.</p>
 
 <h3>The headlight glare cap</h3>
 <p>The terrain lights every surface with a GGX highlight per headlight. Its distribution term D is capped at 32 by the game:

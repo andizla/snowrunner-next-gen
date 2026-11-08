@@ -62,7 +62,7 @@
 // back at its next OMSetRenderTargets (hook: OMSetBlendState too). Every pixel shader that declares t120 or t121 gets
 // the feed.
 //
-// AO pass at half size (AOHalf=1, the default; 0 = full size; KeyAOHalf = F5 flips it): that AO pass (with its bounce
+// AO pass at half size (AOHalf=1, the default; 0 = full size; the menu's AO at half size flips it): that AO pass (with its bounce
 // light) draws into two half-size targets of this DLL instead, its viewports halved until the game sets new targets
 // (RSSetViewports and RSGetViewports keep the game's own values). When the apply pass is set next on that context, compute
 // passes (src\ao\ao_upsample.hlsl) blur the half-size result 3 x 3 on its own grid (AOHalfBlur=1: the pass's noise cancels
@@ -73,26 +73,32 @@
 // top-left full-size pixel of its block exactly); a depth target bound with the pass or a dump in progress keeps it at
 // full size. On a captured 4K frame: the pass 4.77 -> 1.39 ms, blur and upsample 0.20 ms.
 //
-// Dev switches, for A/B comparisons in game (hotkeys, read while a window of the game is in front and none of Alt,
-// Ctrl, Shift and the Windows keys is held: Alt+F10 belongs to an overlay, Alt+F4 to Windows; every flip is written to
-// the log):
-//   F8   every shader.pak effect off / on: the game draws with the original of every shader the fidelity bundle
-//        changed. The originals come from SnowRunnerShadows.stock next to this DLL (written by the bundle builder,
-//        engine\tools\stock_twins.js, mapped read-only): when the game creates a changed shader, its
-//        original is made beside it, and PSSetShader passes the original on while the switch is off.
-//   F9   puddle reflections (effect E) off / on: the scene colour (t120) is withheld from every reader but the AO pass;
-//        the puddle helper then keeps the stock cubemap sample (the same pixels as the build without E).
-//   F10  bounce light (effect I) off / on: no second target for the AO pass, nothing at t122 (the same pixels as the
-//        build without I).
-//   F11  the AO pass: the game's own SSAO (its stock twin) or GTAO; the bounce light is off with the game's SSAO.
-// Ini: KeyStock=119 KeyPuddles=120 KeyBounce=121 KeyAO=122 (virtual-key codes, 0 = no key) and the states at start:
-// StockAll=0 PuddlesOn=1 BounceOn=1 StockAO=0.
-// The same switches as buttons: the NEXT GEN overlay (the shared menu of the Next Gen mods) draws a Graphics tab from
-// the list this DLL exports, NgGraphicsGetApi(1): each switch whose feature the ini turned on, with its name, a tip,
-// get and set, and status lines (device hooked, shadow map size, stock twins, ReShade). A button and its key flip one
-// flag. While a NEXT GEN menu has that tab the switch keys are silent (other mods use some of F4 to F11 too);
-// KeysWithMenu=1 keeps them, and with Next Gen Graphics alone they work as before. The import slots this DLL writes (D3D11CreateDevice and the diagnostics' imports) go through the mods' shared
-// lock, Local\NextGen.Slots.<pid>, with a compare-exchange, so a mod hooking the same import keeps its hook either way.
+// Dev switches, for A/B comparisons in game. The game draws with the original of a shader the fidelity bundle changed
+// while a switch says so: the originals come from SnowRunnerShadows.stock next to this DLL (written by the bundle
+// builder, engine\tools\stock_twins.js, mapped read-only; version 2 names the shader modules and marks each changed
+// shader with the modules that changed it, version 1 of older installs knows only the AO pass). When the game creates a
+// changed shader it gets a mark (its original's place in the table and the entry's module mask, in one private-data
+// blob with the scene feed's flags); PSSetShader and VSSetShader read the mark once and pass the original on while
+// the stock mask has a bit of the shader's mask set. The stock mask (g_stockMask) has one bit per module of the table
+// (bits 0 to 61), bit 62 for the AO pass (the game's own SSAO instead of GTAO; the bounce light is off with it) and
+// bit 63 for every changed shader. The original is made beside the changed shader the first time a switch asks for
+// it (MakeTwin), so the first flip takes a moment and a start builds none.
+//   F8   every shader.pak effect off / on (bit 63; read while a window of the game is in front and none of Alt, Ctrl,
+//        Shift and the Windows keys is held: Alt+F4 belongs to Windows; every flip is written to the log). It leaves
+//        the module bits as they are, so a module switched off in the menu stays off through F8 twice.
+// Ini: KeyStock=119 (a virtual-key code, 0 = no key) and the states at start: StockAll=0 StockAO=0 PuddlesOn=1
+// BounceOn=1 SSROn=1 ContactOn=1 (the passes' own switches). The other keys of 1.1.2 and before (KeyPuddles, KeyBounce,
+// KeyAO, KeySSR, KeyAOHalf, KeyContact, KeysWithMenu) are no longer read: those switches live in the menu.
+// The menu: the NEXT GEN overlay (the shared menu of the Next Gen mods) draws a Graphics tab from the list this DLL
+// exports, NgGraphicsGetApi(1): "Next Gen shaders" (bit 63, F8's switch), "AO at half size", and one switch per module
+// of the table, named as the installer's card (a module that is a pass of this DLL, GTAO, Bounce light, Wet ground
+// reflections, Object reflections and Contact shadows, flips that pass's own flag or the AO bit instead of a module
+// bit, so each module has one switch); each with a tip, get and set, and status lines (device hooked, shadow map
+// size, stock twins, ReShade). A shader two modules changed draws as the game's own while either is off; its modules'
+// tips say which share. Up to 64 switches (what the overlays take): with more modules the first ones are listed and
+// the log names the rest. F8 works beside the tab too. The import slots this DLL writes (D3D11CreateDevice and the
+// diagnostics' imports) go through the mods' shared lock, Local\NextGen.Slots.<pid>, with a compare-exchange, so a mod
+// hooking the same import keeps its hook either way.
 // Dump (KeyDump=<virtual-key code>, 118 = F7, no key unless the ini names one: a dump is about 150 MB at 4K;
 // DumpAfter=<seconds>: once, that long after the AO pass first runs, 0 = off; DumpDir=<folder>, default this DLL's):
 // one frame's bounce-light chain saved to files for offline measurement. The next AO pass set up
@@ -193,8 +199,7 @@ static const GUID kScaledTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c,
 // trace only: a shader's CRC32 (the name the shader dump uses), and what a command list holds
 static const GUID kHashTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x45 } };
 static const GUID kListTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x46 } };
-// scene feed: what a pixel shader is to it (kFeed* bits), set when the shader is created
-static const GUID kFeedTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x47 } };
+// scene feed: what a pixel shader is to it (kFeed* bits), in the shader's mark (ShaderMark below), set when the shader is created
 enum : uint32_t { kFeedAO = 1, kFeedReads = 2, kFeedGIWrites = 4, kFeedGIReads = 8, kFeedAOApply = 16,
     kFeedWritesO7 = 32, kFeedSSRReads = 64, kFeedVelocity = 128, kFeedTAA = 256, // reflections: output 7, t123/t124, the game's velocity and TAA shaders
     kFeedHiZReads = 512,                                                             // the water: the reflection pass's depth pyramid at t125
@@ -203,10 +208,13 @@ enum : uint32_t { kFeedAO = 1, kFeedReads = 2, kFeedGIWrites = 4, kFeedGIReads =
     kFeedFogComposite = 4096,                                                        // the volumetric fog's composite (g_txFogColor, g_txZMS)
     kFeedFogReads = 8192,                                                            // the water: that composite's inputs at t118/t119, b13
     kFeedWritesO6 = 16384 };                                                         // contact shadows: a material that writes the sun's visibility to o6
-// dev switches: a changed shader's original (private data interface) and its group (1 the AO pass, 2 any other)
+// dev switches: a changed shader's original (private data interface), and a shader's mark: the scene feed's flags (pixel
+// shaders), its original's place in the stock twins table (kNoTwin for none) and that entry's module mask, one blob
+// that PSSetShader and VSSetShader read once per set
 static const GUID kTwinTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x48 } };
-static const GUID kTwinGroupTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x49 } };
-static const GUID kTwinEntryTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x4b } };   // its original's place in the table
+static const GUID kMarkTag = { 0x6a1f0c52, 0x3e8b, 0x4d57, { 0x9b, 0x21, 0x5c, 0x7f, 0x3e, 0x0d, 0x9a, 0x4c } };
+struct ShaderMark { uint32_t feed, twin; uint64_t mask; };
+static const uint32_t kNoTwin = 0xFFFFFFFFu;
 static const UINT kFeedSlot = 120; // t120 the previous frame's scene colour, t121 its linear depth
 static const UINT kGISlot = 122;   // t122 the bounce light the AO pass measured last frame
 static const UINT kSSRSlot = 123;  // t123 the reflections of the last pass, t124 the object motion of the last frame
@@ -258,11 +266,15 @@ static bool g_contact = true;       // ini Contact: contact shadows (render targ
 static UINT g_contactDebug = 0;     // ini ContactDebug: 1 = the mask alone darkens the whole scene, 2 = the sun share as darkness
 static float g_contactStrength = 1.0f, g_contactThickness = 0.005f, g_contactContrast = 4.0f, g_contactBilinear = 0.02f,
              g_contactFadeStart = 30.0f, g_contactMaxDepth = 50.0f, g_contactSky = 3000.0f; // ini ContactStrength etc. (the composite's and the pass's knobs, src\sss)
-// dev switches (see the top): the states the hotkeys flip, and the keys (virtual-key codes, 0 = none); g_aoHalfOn starts
-// as ini AOHalf (the AO pass at half size)
-static std::atomic<bool> g_stockAll{ false }, g_puddlesOn{ true }, g_bounceOn{ true }, g_stockAO{ false }, g_ssrOn{ true }, g_aoHalfOn{ false }, g_contactOn{ true };
-static UINT g_keyStock = VK_F8, g_keyPuddles = VK_F9, g_keyBounce = VK_F10, g_keyAO = VK_F11, g_keySSR = VK_F6, g_keyAOHalf = VK_F5, g_keyContact = VK_F4;
-static bool g_keysWithMenu = false; // ini KeysWithMenu: the switch keys also work while the NEXT GEN menu has the Graphics tab
+// dev switches (see the top): the stock mask (which changed shaders draw as the game's own: a bit per module of the
+// stock twins table, kStockAO the AO pass, kStockAll every one), the passes' own switches, and F8's key (a virtual-key
+// code, 0 = none); g_aoHalfOn starts as ini AOHalf (the AO pass at half size)
+static std::atomic<uint64_t> g_stockMask{ 0 };
+static const uint64_t kStockAO = 1ull << 62, kStockAll = 1ull << 63, kStockModules = kStockAO - 1;
+static bool StockAll() { return (g_stockMask.load(std::memory_order_relaxed) & kStockAll) != 0; }
+static bool StockAO() { return (g_stockMask.load(std::memory_order_relaxed) & kStockAO) != 0; }
+static std::atomic<bool> g_puddlesOn{ true }, g_bounceOn{ true }, g_ssrOn{ true }, g_aoHalfOn{ false }, g_contactOn{ true };
+static UINT g_keyStock = VK_F8;
 // dump (see the top): the key, the timer, the folder, and what the feed needs of it; the machinery follows the bounce light
 static UINT g_keyDump = VK_F7;
 static float g_dumpAfter = 0;
@@ -382,12 +394,20 @@ static void Log(const char *fmt, ...)
 
 // ---- dev switches (see the top)
 
-// the stock twins table (SnowRunnerShadows.stock), mapped read-only: 'SRTW', version 1, count, 0, then count entries
-// { CRC32 of the changed code, group, offset, size } sorted by CRC, then the original code
-struct TwinEntry { uint32_t key, group, offset, size; };
+// the stock twins table (SnowRunnerShadows.stock, engine\tools\stock_twins.js), mapped read-only. Version 2: 'SRTW', 2,
+// count, entriesAt; the module table (its count, then per module the id and the title, each a length byte and printable
+// ASCII); at entriesAt count entries { CRC32 of the changed code, offset, size, 0, u64 mask } sorted by CRC, the mask's
+// bit i = module i changed the shader, bit 62 = the AO pass; then the original code. Version 1 (installs up to 1.1.2):
+// 'SRTW', 1, count, 0, then { CRC32, group (1 the AO pass, 2 any other), offset, size }. Either version is read into
+// g_twinList, with kStockAll on every mask, and the modules into g_twinModules (none for version 1)
+struct TwinEntry { uint32_t key, offset, size; uint64_t mask; };
+struct TwinModule { char id[32], title[64]; uint32_t shaders; uint64_t shares; };   // shares: the other modules' bits on its shaders
+static const uint32_t kTwinModulesMax = 62;
 static const uint8_t *g_twinBase = nullptr;
+static std::vector<TwinEntry> g_twinList;
+static std::vector<TwinModule> g_twinModules;
 static const TwinEntry *g_twins = nullptr;
-static uint32_t g_twinCount = 0, g_twinAO = 0;   // entries; of them the AO pass's (group 1)
+static uint32_t g_twinCount = 0, g_twinAO = 0, g_twinVersion = 0;   // entries; of them the AO pass's; the table's version
 static std::atomic<uint32_t> g_twinsMade{ 0 }, g_twinsFailed{ 0 };
 
 static void LoadTwins()
@@ -405,17 +425,76 @@ static void LoadTwins()
     uint32_t head[4];
     memcpy(head, base, sizeof head);
     const uint64_t bytes = (uint64_t)size.QuadPart, n = head[2];
-    bool ok = memcmp(base, "SRTW", 4) == 0 && head[1] == 1 && 16 + n * sizeof(TwinEntry) <= bytes;
-    const TwinEntry *e = (const TwinEntry *)(base + 16);
+    const uint32_t version = head[1];
+    bool ok = memcmp(base, "SRTW", 4) == 0 && (version == 1 || version == 2);
+    std::vector<TwinEntry> list;
+    std::vector<TwinModule> modules;
     uint32_t ao = 0;
-    for (uint64_t i = 0; ok && i < n; i++)
+    if (ok && version == 1)
     {
-        ok = e[i].size >= 32 && (uint64_t)e[i].offset + e[i].size <= bytes && (i == 0 || e[i - 1].key < e[i].key);
-        ao += e[i].group == 1;
+        ok = 16 + n * 16 <= bytes;
+        for (uint64_t i = 0; ok && i < n; i++)
+        {
+            uint32_t e[4];
+            memcpy(e, base + 16 + i * 16, sizeof e);
+            ok = e[3] >= 32 && (uint64_t)e[2] + e[3] <= bytes && (i == 0 || list.back().key < e[0]);
+            list.push_back({ e[0], e[2], e[3], (e[1] == 1 ? kStockAO : 0) | kStockAll });
+            ao += e[1] == 1;
+        }
+    }
+    else if (ok)
+    {
+        const uint32_t entriesAt = head[3];
+        uint32_t count = 0;
+        if (bytes >= 20) memcpy(&count, base + 16, sizeof count);
+        ok = bytes >= 20 && count <= kTwinModulesMax && entriesAt % 8 == 0 && entriesAt >= 20 && (uint64_t)entriesAt + n * 24 <= bytes;
+        uint64_t at = 20;
+        for (uint32_t i = 0; ok && i < count; i++)
+        {
+            TwinModule md = {};
+            // the id, then the title: a length byte and printable ASCII, into the fixed fields (a longer one is cut short)
+            for (int part = 0; ok && part < 2; part++)
+            {
+                if (at >= entriesAt) { ok = false; break; }
+                const uint32_t len = base[at++];
+                if (len == 0 || at + len > entriesAt) { ok = false; break; }
+                char *out = part ? md.title : md.id;
+                const size_t room = part ? sizeof md.title : sizeof md.id;
+                for (uint32_t k = 0; k < len; k++)
+                {
+                    const char c = (char)base[at + k];
+                    if (c < 32 || c > 126) ok = false;
+                    if (k + 1 < room) out[k] = c;
+                }
+                at += len;
+            }
+            modules.push_back(md);
+        }
+        const uint64_t known = (count ? (1ull << count) - 1 : 0) | kStockAO;   // bits the table names; others are dropped
+        for (uint64_t i = 0; ok && i < n; i++)
+        {
+            const uint8_t *p = base + entriesAt + i * 24;
+            uint32_t e[4];
+            uint64_t mask;
+            memcpy(e, p, sizeof e);
+            memcpy(&mask, p + 16, sizeof mask);
+            ok = e[2] >= 32 && (uint64_t)e[1] + e[2] <= bytes && (i == 0 || list.back().key < e[0]);
+            list.push_back({ e[0], e[1], e[2], (mask & known) | kStockAll });
+            ao += (mask & kStockAO) != 0;
+        }
     }
     if (!ok) { Log("stock twins: SnowRunnerShadows.stock is not a valid table, ignored"); UnmapViewOfFile(base); return; }
-    g_twinBase = base; g_twins = e; g_twinCount = (uint32_t)n; g_twinAO = ao;
-    Log("stock twins: %u shaders (%u of the AO pass) in SnowRunnerShadows.stock", g_twinCount, ao);
+    // each module's shaders, and which other modules changed some of them too (the tab's tips)
+    for (size_t i = 0; i < modules.size(); i++)
+    {
+        const uint64_t bit = 1ull << i;
+        for (const TwinEntry &e : list)
+            if (e.mask & bit) { modules[i].shaders++; modules[i].shares |= e.mask & kStockModules & ~bit; }
+    }
+    g_twinList.swap(list);
+    g_twinModules.swap(modules);
+    g_twinBase = base; g_twins = g_twinList.data(); g_twinCount = (uint32_t)g_twinList.size(); g_twinAO = ao; g_twinVersion = version;
+    Log("stock twins: %u shaders (%u of the AO pass) in SnowRunnerShadows.stock, version %u, %zu modules", g_twinCount, ao, version, g_twinModules.size());
 }
 static const TwinEntry *FindTwin(uint32_t key)
 {
@@ -430,78 +509,32 @@ static void KeyName(UINT vk, char *out, size_t n)
     else if (vk >= VK_F1 && vk <= VK_F24) snprintf(out, n, "F%u", vk - VK_F1 + 1);
     else snprintf(out, n, "key 0x%02X", vk);
 }
-// whether a NEXT GEN menu (the shared menu of the Next Gen mods, from the Gameplay or Tire Inflation mod) has the Graphics
-// tab: its shared block, Local\NextGen.Menu.<pid> at version 3, names the slot of the mod drawing that tab in the 64-bit
-// field at byte 192 (NgShared::graphics in their src/ng_overlay.cpp), 0 while none has it. Looked at once a second, from
-// the hotkey thread alone; the view stays mapped once the block is found. Another version is not read
-static bool MenuHasGraphicsTab()
-{
-    static const uint8_t *block = nullptr;
-    static ULONGLONG last = 0;
-    static bool has = false;
-    const ULONGLONG now = GetTickCount64();
-    if (last && now - last < 1000) return has;
-    last = now;
-    if (!block)
-    {
-        wchar_t name[64];
-        swprintf_s(name, L"Local\\NextGen.Menu.%lu", GetCurrentProcessId());
-        const HANDLE m = OpenFileMappingW(FILE_MAP_READ, FALSE, name);
-        if (!m) return has = false;
-        block = (const uint8_t *)MapViewOfFile(m, FILE_MAP_READ, 0, 0, 200);
-        CloseHandle(m);   // the view keeps the block
-        if (!block) return has = false;
-    }
-    has = *(const volatile LONG *)block == 3 && *(const volatile LONG64 *)(block + 192) != 0;
-    return has;
-}
-// watches the hotkeys while a window of this process is in front; each press flips its switch. The switch keys are silent
-// while a NEXT GEN menu has the Graphics tab, whose buttons flip the same switches (other mods use some of F4 to F11, so
-// a key could do two things), unless the ini says KeysWithMenu=1; the dump key always works
+// watches F8 while a window of this process is in front: a press flips every changed shader to the game's own and back
+// (kStockAll alone, so the menu's module switches keep their states); it works beside the NEXT GEN menu's Graphics tab
+// too, whose "Next Gen shaders" flips the same bit. The dump key always works
 static DWORD WINAPI HotkeyThread(void *)
 {
-    struct Switch { UINT key; std::atomic<bool> *state; const char *what, *whenTrue, *whenFalse; bool down; };
-    Switch sw[] = {
-        { g_keyStock, &g_stockAll, "every shader.pak effect", "off (the game's own shaders)", "on", false },
-        { g_keyPuddles, &g_puddlesOn, "puddle reflections", "on", "off", false },
-        { g_keyBounce, &g_bounceOn, "bounce light", "on", "off", false },
-        { g_keyAO, &g_stockAO, "ambient occlusion", "the game's own SSAO (no bounce light with it)", "GTAO", false },
-        { g_ssr ? g_keySSR : 0, &g_ssrOn, "reflection pass", "on", "off (the materials' own cubemap)", false },
-        { g_gi ? g_keyAOHalf : 0, &g_aoHalfOn, "AO pass", "at half size (upsampled)", "at full size", false },
-        { g_contact ? g_keyContact : 0, &g_contactOn, "contact shadows", "on", "off", false },
-    };
-    bool dumpDown = false, silent = false;
+    bool stockDown = false, dumpDown = false;
     for (;;)
     {
         Sleep(30);
-        const bool quiet = !g_keysWithMenu && MenuHasGraphicsTab();
-        if (quiet != silent)
-        {
-            silent = quiet;
-            Log(silent ? "keys: the switch keys are silent while the NEXT GEN menu has the Graphics tab (KeysWithMenu=1 keeps them)"
-                       : "keys: the switch keys work again (no Graphics tab in a NEXT GEN menu)");
-        }
         DWORD pid = 0;
         const HWND fg = GetForegroundWindow();
         if (fg) GetWindowThreadProcessId(fg, &pid);
         // a press counts when it starts with the game in front and no modifier held; a key that went down otherwise
-        // stays "down" until it is let go, so letting go of Alt first does not turn Alt+F10 into F10
+        // stays "down" until it is let go, so letting go of Alt first does not turn Alt+F8 into F8
         bool mods = false;
         for (int vk : { VK_MENU, VK_CONTROL, VK_SHIFT, VK_LWIN, VK_RWIN }) mods |= (GetAsyncKeyState(vk) & 0x8000) != 0;
         const bool mine = pid == GetCurrentProcessId() && !mods;
-        for (Switch &s : sw)
+        const bool down = g_keyStock && (GetAsyncKeyState((int)g_keyStock) & 0x8000) != 0;
+        if (down && !stockDown && mine)
         {
-            const bool down = s.key && (GetAsyncKeyState((int)s.key) & 0x8000) != 0;
-            if (down && !s.down && mine && !silent)
-            {
-                const bool now = !s.state->load();
-                s.state->store(now);
-                char name[16];
-                KeyName(s.key, name, sizeof name);
-                Log("%s: %s %s", name, s.what, now ? s.whenTrue : s.whenFalse);
-            }
-            s.down = down;
+            const uint64_t was = g_stockMask.fetch_xor(kStockAll);
+            char name[16];
+            KeyName(g_keyStock, name, sizeof name);
+            Log("%s: every shader.pak effect %s", name, (was & kStockAll) ? "on" : "off (the game's own shaders)");
         }
+        stockDown = down;
         // the dump key: one shot per press; and the dump's timer and timeout
         const bool dumpNow = g_keyDump && (GetAsyncKeyState((int)g_keyDump) & 0x8000) != 0;
         if (dumpNow && !dumpDown && mine) { char name[16]; KeyName(g_keyDump, name, sizeof name); DumpRequest(name); }
@@ -514,16 +547,14 @@ static void StartHotkeys()
 {
     static std::once_flag once;
     std::call_once(once, [] {
-        if (!g_keyStock && !g_keyPuddles && !g_keyBounce && !g_keyAO && !g_keyAOHalf && !g_keyDump && g_dumpAfter <= 0 && !(g_ssr && g_ssrProbe) && !(g_contact && g_keyContact)) return;
+        if (!g_keyStock && !g_keyDump && g_dumpAfter <= 0 && !(g_ssr && g_ssrProbe)) return;
         HANDLE t = CreateThread(nullptr, 0, &HotkeyThread, nullptr, 0, nullptr);
         if (t) CloseHandle(t);
-        char a[16], b[16], c[16], d[16];
-        KeyName(g_keyStock, a, sizeof a); KeyName(g_keyPuddles, b, sizeof b); KeyName(g_keyBounce, c, sizeof c); KeyName(g_keyAO, d, sizeof d);
-        Log("dev switches: %s every shader.pak effect%s, %s puddle reflections, %s bounce light, %s AO (GTAO / the game's own)%s", a,
-            g_twinCount ? "" : " (no SnowRunnerShadows.stock: nothing to switch)", b, c, d, t ? "" : "; the hotkey thread could not be started");
-        if (g_ssr) { char k[16]; KeyName(g_keySSR, k, sizeof k); Log("dev switches: %s the reflection pass alone (on: %s)", k, g_ssrOn ? "yes" : "no"); }
-        if (g_gi) { char k[16]; KeyName(g_keyAOHalf, k, sizeof k); Log("dev switches: %s the AO pass at half or full size (now: %s)", k, g_aoHalfOn ? "half" : "full"); }
-        if (g_contact) { char k[16]; KeyName(g_keyContact, k, sizeof k); Log("dev switches: %s contact shadows alone (on: %s)", k, g_contactOn ? "yes" : "no"); }
+        char a[16];
+        KeyName(g_keyStock, a, sizeof a);
+        Log("dev switches: %s every shader.pak effect%s; the module switches and the passes' own are in the NEXT GEN menu's Graphics tab (at start: reflection pass %s, bounce light %s, contact shadows %s, puddle reflections %s, AO at half size %s)%s", a,
+            g_twinCount ? "" : " (no SnowRunnerShadows.stock: nothing to switch)", g_ssrOn ? "on" : "off", g_bounceOn ? "on" : "off", g_contactOn ? "on" : "off", g_puddlesOn ? "on" : "off",
+            g_aoHalfOn ? "on" : "off", t ? "" : "; the hotkey thread could not be started");
         char e[16];
         KeyName(g_keyDump, e, sizeof e);
         if (g_dumpAfter > 0) Log("dump: %s, or DumpAfter %g s after the AO pass first runs, saves one frame's bounce-light chain to %ls", e, g_dumpAfter, g_dumpDir.c_str());
@@ -1625,7 +1656,7 @@ static void FeedCapture(ID3D11DeviceContext *ctx, ContextState *s)
 }
 
 // a shader that reads the feed is set (or the game reset its slots): bind the feed at t120 and t121. With the puddle
-// reflections switched off (F9) the scene colour is withheld from every reader but the AO pass (the bounce light gathers
+// reflections switched off (the menu's Wet ground reflections) the scene colour is withheld from every reader but the AO pass (the bounce light gathers
 // from it); the puddle helper then keeps the stock cubemap sample. Only while the copies go on: 250 ms after the last one
 // (a menu, or the game's targets made anew when a video setting changes and no lit pass matched them yet) every reader
 // gets nothing and keeps the game's own result, never an old picture (a player saw the menu's in the shadows)
@@ -1935,7 +1966,7 @@ static void FeedMipsBuild(ID3D11DeviceContext *ctx)
     RestoreCS(ctx, saved);
 }
 
-// ---- the AO pass at half size (ini AOHalf=1, KeyAOHalf = F5 flips it; see the top): the AO pass with a
+// ---- the AO pass at half size (ini AOHalf=1, the menu's AO at half size flips it; see the top): the AO pass with a
 // bounce-light output draws into two half-size targets of this DLL, its viewports halved while it is set up; when the
 // apply pass is set, compute passes (src\ao\ao_upsample.hlsl) blur that result 3 x 3 on its own grid (AOHalfBlur=1) and
 // bring it back to full size, weighted by depth: the AO into a full-size texture of this DLL, which the apply pass reads
@@ -2286,8 +2317,8 @@ static void ZMipsUnbind(ID3D11DeviceContext *ctx, const ContextOrig *o, ContextS
 // next OMSetRenderTargets takes it off again and puts the game's blend state back)
 static void GIBindTarget(ID3D11DeviceContext *ctx, const ContextOrig *o, ID3D11RenderTargetView *rtv, ID3D11DepthStencilView *dsv)
 {
-    // switched off (F10), or the game's own SSAO drawn instead (F11, F8)
-    if (!g_bounceOn.load(std::memory_order_relaxed) || g_stockAO.load(std::memory_order_relaxed) || g_stockAll.load(std::memory_order_relaxed)) return;
+    // switched off (the menu's Bounce light), or the game's own SSAO drawn instead (the menu's GTAO, F8)
+    if (!g_bounceOn.load(std::memory_order_relaxed) || StockAO() || StockAll()) return;
     D3D11_RENDER_TARGET_VIEW_DESC v = {};
     rtv->GetDesc(&v);
     if (v.ViewDimension != D3D11_RTV_DIMENSION_TEXTURE2D || v.Texture2D.MipSlice != 0) return;
@@ -2295,7 +2326,7 @@ static void GIBindTarget(ID3D11DeviceContext *ctx, const ContextOrig *o, ID3D11R
     rtv->GetResource(&r);
     if (!r) return;
     ContextState *s = State(ctx);
-    // at half size (AOHalf, F5): not with a depth target bound (its size would not match) nor for a dump's frame, and only
+    // at half size (AOHalf, the menu): not with a depth target bound (its size would not match) nor for a dump's frame, and only
     // for the game's one-channel 8-bit AO target (this DLL's half- and full-size AO textures are that format)
     bool half = g_aoHalfOn.load(std::memory_order_relaxed) && !dsv && !s->dumpAwaiting;
     if (half && v.Format != DXGI_FORMAT_R8_UNORM)
@@ -2376,8 +2407,7 @@ static void GIBind(ID3D11DeviceContext *ctx, const ContextOrig *o)
 {
     ID3D11ShaderResourceView *v = g_giView.load(std::memory_order_acquire);
     const ULONGLONG last = g_giLastWrite.load(std::memory_order_relaxed);
-    if (!last || GetTickCount64() - last > 250 || !g_bounceOn.load(std::memory_order_relaxed) || g_stockAO.load(std::memory_order_relaxed) ||
-        g_stockAll.load(std::memory_order_relaxed)) v = nullptr;
+    if (!last || GetTickCount64() - last > 250 || !g_bounceOn.load(std::memory_order_relaxed) || StockAO() || StockAll()) v = nullptr;
     o->psSRV(ctx, kGISlot, 1, &v);
     g_giBinds++;
 }
@@ -2392,24 +2422,24 @@ static std::atomic<ULONGLONG> g_ssrLastRun{ 0 }, g_motionLastRun{ 0 };
 static std::atomic<ID3D11Resource *> g_velocityRes{ nullptr }; // what the TAA reads at t3 (compared, never used)
 static const FLOAT kUpRough[4] = { 0.5f, 1.0f, 0.5f, 1.0f };   // render target 7 between passes: normal up, fully rough
 
-// render target 7 beside the lit pass: on (ini and F6), not the stock switch, and a shader that writes it exists
+// render target 7 beside the lit pass: on (ini and the menu's Object reflections), not the stock switch, and a shader that writes it exists
 static bool RT7Wanted()
 {
-    return g_ssr && g_ssrOn.load(std::memory_order_relaxed) && g_o7Writers.load(std::memory_order_relaxed) > 0 && !g_stockAll.load(std::memory_order_relaxed);
+    return g_ssr && g_ssrOn.load(std::memory_order_relaxed) && g_o7Writers.load(std::memory_order_relaxed) > 0 && !StockAll();
 }
-// the pass: on (ini and F6), its inputs (the splice's writers, or the debug mirror) and someone to read it (a shader, or a dump)
+// the pass: on (ini and the menu), its inputs (the splice's writers, or the debug mirror) and someone to read it (a shader, or a dump)
 static bool SSRPassWanted()
 {
-    if (!g_ssr || !g_ssrOn.load(std::memory_order_relaxed) || g_stockAll.load(std::memory_order_relaxed)) return false;
+    if (!g_ssr || !g_ssrOn.load(std::memory_order_relaxed) || StockAll()) return false;
     const bool inputs = g_o7Writers.load(std::memory_order_relaxed) > 0 || g_ssrMirror;
     const bool outputs = g_ssrReaders.load(std::memory_order_relaxed) > 0 || g_ssrMirror || g_dumpState.load(std::memory_order_relaxed) == kDumpRequested;
     return inputs && outputs;
 }
-// contact shadows (render target 6 beside the lit pass, and the pass with its composite): on (ini and F4), not the stock
-// switch, and a shader that writes the sun's visibility exists
+// contact shadows (render target 6 beside the lit pass, and the pass with its composite): on (ini and the menu's Contact
+// shadows), not the stock switch, and a shader that writes the sun's visibility exists
 static bool ContactWanted()
 {
-    return g_contact && g_contactOn.load(std::memory_order_relaxed) && g_o6Writers.load(std::memory_order_relaxed) > 0 && !g_stockAll.load(std::memory_order_relaxed);
+    return g_contact && g_contactOn.load(std::memory_order_relaxed) && g_o6Writers.load(std::memory_order_relaxed) > 0 && !StockAll();
 }
 
 // under g_feedLock: render target 6 for lit pass p (R8: the sun's visibility), (re)made at the size of its colour
@@ -2544,7 +2574,7 @@ static void LitUnbind(ID3D11DeviceContext *ctx, const ContextOrig *o)
     s->rt6Bound = false;
 }
 
-// ---- contact shadows (ini Contact=1, KeyContact = F4 flips them):
+// ---- contact shadows (ini Contact=1, the menu's Contact shadows flips them):
 // the shadow receivers of shader.pak's module contact write the sun's visibility they found (the shadow map's lit
 // fraction) to render target 6 of the lit pass (LitBind); at the AO pass, Bend Studio's screen-space shadows (src\sss, a
 // modified copy of their Apache-2.0 code) march each pixel towards the sun on the AO pass's linear depth (t80), their
@@ -3268,7 +3298,7 @@ static void SSRBind(ID3D11DeviceContext *ctx, const ContextOrig *o)
 {
     ID3D11ShaderResourceView *v[2] = { g_ssrView.load(std::memory_order_acquire), g_motionView.load(std::memory_order_acquire) };
     const ULONGLONG now = GetTickCount64(), last = g_ssrLastRun.load(std::memory_order_relaxed), lastMotion = g_motionLastRun.load(std::memory_order_relaxed);
-    if (!last || now - last > 250 || g_stockAll.load(std::memory_order_relaxed) || !g_ssrOn.load(std::memory_order_relaxed)) v[0] = v[1] = nullptr;
+    if (!last || now - last > 250 || StockAll() || !g_ssrOn.load(std::memory_order_relaxed)) v[0] = v[1] = nullptr;
     if (!lastMotion || now - lastMotion > 250) v[1] = nullptr;
     o->psSRV(ctx, kSSRSlot, 2, v);
     g_ssrBinds++;
@@ -3280,7 +3310,7 @@ static void HiZBind(ID3D11DeviceContext *ctx, const ContextOrig *o)
 {
     ID3D11ShaderResourceView *v = g_hizView.load(std::memory_order_acquire);
     const ULONGLONG now = GetTickCount64(), last = g_ssrLastRun.load(std::memory_order_relaxed);
-    if (!last || now - last > 250 || g_stockAll.load(std::memory_order_relaxed) || !g_ssrOn.load(std::memory_order_relaxed)) v = nullptr;
+    if (!last || now - last > 250 || StockAll() || !g_ssrOn.load(std::memory_order_relaxed)) v = nullptr;
     o->psSRV(ctx, kHiZSlot, 1, &v);
     g_hizBinds++;
 }
@@ -3971,7 +4001,7 @@ static void DumpInputs(ID3D11DeviceContext *ctx, ContextState *s)
     DumpNote("SnowRunner Shadows dump, %04d-%02d-%02d %02d:%02d:%02d.%03d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, t.wMilliseconds);
     DumpNote("inputs recorded on context %p (%s) as the AO pass was set up: pixel shader flags 0x%X%s; feed copies so far %llu, bounce-light writes %llu; bounce light %s, AO %s, effects %s",
         (void *)ctx, deferred ? "deferred" : "immediate", s->psFlags, (s->psFlags & kFeedGIWrites) ? " (writes the bounce light)" : " (no bounce-light output)",
-        (unsigned long long)g_feedCaptures.load(), (unsigned long long)g_giWrites.load(), g_bounceOn ? "on" : "off (F10)", g_stockAO ? "the game's own" : "GTAO", g_stockAll ? "stock (F8)" : "on");
+        (unsigned long long)g_feedCaptures.load(), (unsigned long long)g_giWrites.load(), g_bounceOn ? "on" : "off", StockAO() ? "the game's own" : "GTAO", StockAll() ? "stock (F8)" : "on");
     for (size_t i = 0; i < s->viewports.size(); i++)
         DumpNote("viewport %zu (as the game set it): %g %g %g %g, depth %g..%g", i, s->viewports[i].TopLeftX, s->viewports[i].TopLeftY, s->viewports[i].Width, s->viewports[i].Height,
             s->viewports[i].MinDepth, s->viewports[i].MaxDepth);
@@ -5011,17 +5041,15 @@ static uint32_t ShaderHash(ID3D11DeviceChild *s)
 // reference for the caller, or null (no entry, or the device would not make it: the changed shader draws, the first
 // four failures are logged, and it is not tried again)
 static std::mutex g_twinLock;
-template <class T> static IUnknown *MakeTwin(T *sh)
+template <class T> static IUnknown *MakeTwin(T *sh, const ShaderMark &mark)
 {
     constexpr bool pixel = std::is_same_v<T, ID3D11PixelShader>;
     std::lock_guard<std::mutex> lock(g_twinLock);
     IUnknown *twin = nullptr;
     UINT size = sizeof twin;
     if (SUCCEEDED(sh->GetPrivateData(kTwinTag, &size, &twin)) && twin) return twin;   // made on another context meanwhile
-    uint32_t index = 0;
-    size = sizeof index;
-    if (FAILED(sh->GetPrivateData(kTwinEntryTag, &size, &index)) || size != sizeof index || index >= g_twinCount) return nullptr;
-    const TwinEntry &t = g_twins[index];
+    if (mark.twin >= g_twinCount) return nullptr;
+    const TwinEntry &t = g_twins[mark.twin];
     const uint8_t *stock = g_twinBase + t.offset;
     ID3D11Device *dev = nullptr;
     sh->GetDevice(&dev);
@@ -5037,36 +5065,43 @@ template <class T> static IUnknown *MakeTwin(T *sh)
     if (FAILED(hr) || !made)
     {
         if (g_twinsFailed++ < 4) Log("stock twins: the original of %s shader %08X could not be made", pixel ? "pixel" : "vertex", t.key);
-        sh->SetPrivateData(kTwinEntryTag, 0, nullptr);
+        // not tried again: the mark keeps the feed's flags and loses the entry, so the hot path stops asking
+        const ShaderMark gone = { mark.feed, kNoTwin, 0 };
+        if (gone.feed) sh->SetPrivateData(kMarkTag, sizeof gone, &gone);
+        else sh->SetPrivateData(kMarkTag, 0, nullptr);
         return nullptr;
     }
-    if constexpr (pixel) { const uint32_t f = g_feed ? FeedFlags(stock, t.size) : 0; if (f) made->SetPrivateData(kFeedTag, sizeof f, &f); }
+    // the original's own mark: what it is to the scene feed (no entry: it is the original)
+    if constexpr (pixel) { const ShaderMark tm = { g_feed ? FeedFlags(stock, t.size) : 0, kNoTwin, 0 }; if (tm.feed) made->SetPrivateData(kMarkTag, sizeof tm, &tm); }
     if (g_trace || g_gpuProfile || g_depthProbe) { const uint32_t th = Crc32(stock, t.size); made->SetPrivateData(kHashTag, sizeof th, &th); }
     sh->SetPrivateDataInterface(kTwinTag, made);
     g_twinsMade++;
     return made;   // the creation's reference, for the caller
 }
 
-// dev switches: the original to draw with instead of sh (a pixel or a vertex shader) while its group is switched to
-// stock (F8 every changed shader, F11 the AO pass), with a reference for the caller to release; null: draw sh itself
-template <class T> static T *StockTwin(T *sh)
+// dev switches: the original to draw with instead of sh (a pixel or a vertex shader), whose mark the caller read and
+// matched against the stock mask, with a reference for the caller to release; null: draw sh itself
+template <class T> static T *StockTwin(T *sh, const ShaderMark &mark)
 {
-    const bool all = g_stockAll.load(std::memory_order_relaxed), ao = g_stockAO.load(std::memory_order_relaxed);
-    if (!sh || !g_twinCount || (!all && !ao)) return nullptr;
-    uint32_t group = 0;
-    UINT size = sizeof group;
-    if (FAILED(sh->GetPrivateData(kTwinGroupTag, &size, &group)) || size != sizeof group || !(all || group == 1)) return nullptr;
     IUnknown *twin = nullptr;
-    size = sizeof twin;
+    UINT size = sizeof twin;
     if (FAILED(sh->GetPrivateData(kTwinTag, &size, &twin)) || !twin)
     {
-        twin = MakeTwin(sh);
+        twin = MakeTwin(sh, mark);
         if (!twin) return nullptr;
     }
     T *out = nullptr;
     twin->QueryInterface(__uuidof(T), (void **)&out);
     twin->Release();
     return out;
+}
+// a shader's mark (the scene feed's flags, its entry in the stock twins table and that entry's mask), or an empty one
+template <class T> static ShaderMark MarkOf(T *sh)
+{
+    ShaderMark m = { 0, kNoTwin, 0 };
+    UINT size = sizeof m;
+    if (!sh || FAILED(sh->GetPrivateData(kMarkTag, &size, &m)) || size != sizeof m) m = { 0, kNoTwin, 0 };
+    return m;
 }
 
 // pass profile: a compute shader the game sets begins a compute pass
@@ -5080,32 +5115,36 @@ static void STDMETHODCALLTYPE Hook_CSSetShader(ID3D11DeviceContext *self, ID3D11
 }
 
 // dev switches: a vertex shader the fidelity bundle changed (the sun glow through smoke lives in the particle vertex
-// shaders) is set as its original while F8 holds
+// shaders) is set as its original while a switch of its modules, or F8, holds. One look at the mark, and only while some
+// switch is off: with every one on there is no lookup at all, as before the module switches
 static void STDMETHODCALLTYPE Hook_VSSetShader(ID3D11DeviceContext *self, ID3D11VertexShader *vs, ID3D11ClassInstance *const *inst, UINT n)
 {
     CpuScope cpu(kCpuVSSetShader);
     const ContextOrig *o = CtxOrig(self);
     HookScope scope;
     if (!scope.outer) { o->vsSet(self, vs, inst, n); return; }
-    ID3D11VertexShader *twin = StockTwin(vs);
+    ID3D11VertexShader *twin = nullptr;
+    const uint64_t stock = g_stockMask.load(std::memory_order_relaxed);
+    if (stock && g_twinCount && vs) { const ShaderMark m = MarkOf(vs); if (m.mask & stock) twin = StockTwin(vs, m); }
     cpu.Orig([&] { o->vsSet(self, twin ? twin : vs, inst, n); });
     if (twin) twin->Release(); // the context holds it now
 }
 
 // scene feed: which pixel shader is set; the AO pass copies the scene, a reader gets the feed bound (dev switches: the
-// shader's original is set in its place while switched to stock)
+// shader's original is set in its place while a switch of its modules, or F8, holds). The shader's mark is read once,
+// for the feed's flags and the switch alike; the original's own flags only while the original draws
 static void STDMETHODCALLTYPE Hook_PSSetShader(ID3D11DeviceContext *self, ID3D11PixelShader *ps, ID3D11ClassInstance *const *inst, UINT n)
 {
     CpuScope cpu(kCpuPSSetShader);
     const ContextOrig *o = CtxOrig(self);
     HookScope scope;
     if (!scope.outer) { o->psSet(self, ps, inst, n); return; }
-    ID3D11PixelShader *twin = StockTwin(ps), *use = twin ? twin : ps;
+    const ShaderMark m = MarkOf(ps);
+    const uint64_t stock = g_stockMask.load(std::memory_order_relaxed);
+    ID3D11PixelShader *twin = (m.mask & stock) && g_twinCount ? StockTwin(ps, m) : nullptr, *use = twin ? twin : ps;
     cpu.Orig([&] { o->psSet(self, use, inst, n); });
     ContextState *s = State(self);
-    uint32_t flags = 0;
-    UINT size = sizeof flags;
-    if (!use || FAILED(use->GetPrivateData(kFeedTag, &size, &flags)) || size != sizeof flags) flags = 0;
+    uint32_t flags = twin ? MarkOf(twin).feed : m.feed;
     if (twin) twin->Release(); // the context holds it now
     if (s->dumpAwaiting && !(flags & kFeedAO)) DumpOutputs(self, s, "the next pixel shader"); // the AO pass is over
     s->psFlags = flags;
@@ -5654,13 +5693,12 @@ static HRESULT STDMETHODCALLTYPE Hook_CreateVertexShader(ID3D11Device *self, con
     if (!scope.outer || FAILED(hr) || !code || !out || !*out) return hr;
     const uint32_t crc = Crc32(code, size);
     if (g_trace || g_depthProbe) (*out)->SetPrivateData(kHashTag, sizeof crc, &crc);
-    // dev switches: a vertex shader the fidelity bundle changed is marked with its original's place in the table, as
-    // the pixel shaders are; the original is made when a switch first wants it (MakeTwin)
+    // dev switches: a vertex shader the fidelity bundle changed is marked with its original's place in the table and the
+    // entry's module mask, as the pixel shaders are; the original is made when a switch first wants it (MakeTwin)
     if (const TwinEntry *t = g_twinCount ? FindTwin(crc) : nullptr)
     {
-        const uint32_t index = (uint32_t)(t - g_twins);
-        (*out)->SetPrivateData(kTwinEntryTag, sizeof index, &index);
-        (*out)->SetPrivateData(kTwinGroupTag, sizeof t->group, &t->group);
+        const ShaderMark m = { 0, (uint32_t)(t - g_twins), t->mask };
+        (*out)->SetPrivateData(kMarkTag, sizeof m, &m);
     }
     return hr;
 }
@@ -5684,20 +5722,17 @@ static HRESULT STDMETHODCALLTYPE Hook_CreatePixelShader(ID3D11Device *self, cons
     if (!scope.outer || FAILED(hr) || !code || !out || !*out) return hr;
     const uint32_t crc = g_trace || g_twinCount || g_ssr || g_gpuProfile ? Crc32(code, size) : 0;
     if (g_trace || g_gpuProfile) (*out)->SetPrivateData(kHashTag, sizeof crc, &crc);
-    // dev switches: a shader the fidelity bundle changed is marked with its original's place in the table; the
-    // original is made when a switch first wants it (MakeTwin)
-    if (const TwinEntry *t = g_twinCount ? FindTwin(crc) : nullptr)
-    {
-        const uint32_t index = (uint32_t)(t - g_twins);
-        (*out)->SetPrivateData(kTwinEntryTag, sizeof index, &index);
-        (*out)->SetPrivateData(kTwinGroupTag, sizeof t->group, &t->group);
-    }
+    // dev switches: a shader the fidelity bundle changed is marked with its original's place in the table and the
+    // entry's module mask; the original is made when a switch first wants it (MakeTwin). The scene feed's flags go in
+    // the same mark, read once per PSSetShader
+    ShaderMark mark = { 0, kNoTwin, 0 };
+    if (const TwinEntry *t = g_twinCount ? FindTwin(crc) : nullptr) { mark.twin = (uint32_t)(t - g_twins); mark.mask = t->mask; }
     if (g_feed)
     {
         uint32_t flags = FeedFlags(code, size);
         if (g_ssr && crc == kVelocityPS) flags |= kFeedVelocity;
         if (!g_ssr) flags &= ~(uint32_t)(kFeedWritesO7 | kFeedSSRReads | kFeedTAA | kFeedHiZReads);
-        if (flags) (*out)->SetPrivateData(kFeedTag, sizeof flags, &flags);
+        mark.feed = flags;
         if (!g_contact) flags &= ~(uint32_t)kFeedWritesO6;
         if ((flags & kFeedWritesO7) && g_o7Writers++ == 0) Log("reflections: the first shader that writes output 7 was created (%p)", (void *)*out);
         if ((flags & kFeedWritesO6) && g_o6Writers++ == 0) Log("contact shadows: the first shader that writes the sun's visibility (output 6) was created (%p)", (void *)*out);
@@ -5711,6 +5746,7 @@ static HRESULT STDMETHODCALLTYPE Hook_CreatePixelShader(ID3D11Device *self, cons
         if ((flags & kFeedReads) && g_feedReaders++ == 0) Log("scene feed: the first shader that reads it was created (%p)", (void *)*out);
         if ((flags & kFeedGIReads) && g_giReaders++ == 0) Log("bounce light: the first shader that reads it was created (%p)", (void *)*out);
     }
+    if (mark.feed || mark.twin != kNoTwin) (*out)->SetPrivateData(kMarkTag, sizeof mark, &mark);
     return hr;
 }
 
@@ -6263,7 +6299,6 @@ static void ReadSettings()
     g_fogRefl = GetPrivateProfileIntW(L"Shadows", L"FogReflections", 1, ini.c_str()) != 0;
     g_texBaseRule = GetPrivateProfileIntW(L"Shadows", L"TextureBaseRule", 1, ini.c_str()) != 0;
     g_crashLog = GetPrivateProfileIntW(L"Shadows", L"CrashLog", 0, ini.c_str()) != 0;
-    g_keyAOHalf = GetPrivateProfileIntW(L"Shadows", L"KeyAOHalf", VK_F5, ini.c_str());
     g_ssrRoughMax = knob(L"SSRRoughMax", 0.85f, 0.05f, 1.0f);
     g_ssrThickness = knob(L"SSRThickness", 0.3f, 0.01f, 10.0f);
     g_ssrTemporal = knob(L"SSRTemporal", 0.9f, 0.0f, 0.98f);
@@ -6284,20 +6319,26 @@ static void ReadSettings()
     g_contactMaxDepth = knob(L"ContactMaxDepth", 50.0f, 1.0f, 3500.0f);
     g_contactFadeStart = knob(L"ContactFadeStart", 30.0f, 0.0f, g_contactMaxDepth);
     g_contactSky = knob(L"ContactSky", 3000.0f, 100.0f, 100000.0f);
-    g_keyContact = GetPrivateProfileIntW(L"Shadows", L"KeyContact", VK_F4, ini.c_str());
     g_contactOn = GetPrivateProfileIntW(L"Shadows", L"ContactOn", 1, ini.c_str()) != 0;
-    // dev switches: keys and the states at start
+    // dev switches: F8's key, and the states at start (the stock mask's two fixed bits, and the passes' own switches)
     g_keyStock = GetPrivateProfileIntW(L"Shadows", L"KeyStock", VK_F8, ini.c_str());
-    g_keyPuddles = GetPrivateProfileIntW(L"Shadows", L"KeyPuddles", VK_F9, ini.c_str());
-    g_keyBounce = GetPrivateProfileIntW(L"Shadows", L"KeyBounce", VK_F10, ini.c_str());
-    g_keyAO = GetPrivateProfileIntW(L"Shadows", L"KeyAO", VK_F11, ini.c_str());
-    g_stockAll = GetPrivateProfileIntW(L"Shadows", L"StockAll", 0, ini.c_str()) != 0;
+    g_stockMask = (GetPrivateProfileIntW(L"Shadows", L"StockAll", 0, ini.c_str()) != 0 ? kStockAll : 0) | (GetPrivateProfileIntW(L"Shadows", L"StockAO", 0, ini.c_str()) != 0 ? kStockAO : 0);
     g_puddlesOn = GetPrivateProfileIntW(L"Shadows", L"PuddlesOn", 1, ini.c_str()) != 0;
     g_bounceOn = GetPrivateProfileIntW(L"Shadows", L"BounceOn", 1, ini.c_str()) != 0;
-    g_stockAO = GetPrivateProfileIntW(L"Shadows", L"StockAO", 0, ini.c_str()) != 0;
-    g_keySSR = GetPrivateProfileIntW(L"Shadows", L"KeySSR", VK_F6, ini.c_str());
-    g_keysWithMenu = GetPrivateProfileIntW(L"Shadows", L"KeysWithMenu", 0, ini.c_str()) != 0;
     g_ssrOn = GetPrivateProfileIntW(L"Shadows", L"SSROn", 1, ini.c_str()) != 0;
+    // the keys of 1.1.2 and before: noted once when an ini still names them, read no further
+    {
+        char named[200] = "";
+        for (const wchar_t *k : { L"KeyPuddles", L"KeyBounce", L"KeyAO", L"KeySSR", L"KeyAOHalf", L"KeyContact", L"KeysWithMenu" })
+        {
+            wchar_t v[16];
+            if (!GetPrivateProfileStringW(L"Shadows", k, L"", v, 16, ini.c_str())) continue;
+            char a[40];
+            snprintf(a, sizeof a, "%s%ls", named[0] ? ", " : "", k);
+            strncat_s(named, a, _TRUNCATE);
+        }
+        if (named[0]) Log("ini: %s no longer read: those switches are in the NEXT GEN menu's Graphics tab, and F8 (KeyStock) is the one key left", named);
+    }
     // dump: the key, the timer (seconds after the AO pass first runs, 0 = none), the folder (default this DLL's; a relative one is under it)
     g_keyDump = GetPrivateProfileIntW(L"Shadows", L"KeyDump", 0, ini.c_str());   // no key unless the ini names one (118 = F7)
     GetPrivateProfileStringW(L"Shadows", L"DumpAfter", L"0", value, 32, ini.c_str());
@@ -6333,42 +6374,108 @@ struct NgGraphicsApi
     int (*statusCount)();
     const char *(*status)(int);
 };
-struct GfxSwitch { const char *name; char help[160]; std::atomic<bool> *state; bool on; };   // on: the state that means "on"
-static GfxSwitch g_gfx[8];
-static int g_gfxCount = 0;
+// a switch: a pass's own flag (state, with the value that means "on"), or a bit of the stock mask (bit; on = the bit clear)
+struct GfxSwitch { const char *name; char help[256]; std::atomic<bool> *state; bool on; uint64_t bit; const char *id; };
+static const int kGfxMax = 64;   // what the overlays take: NgGraphicsFrom in their ng_overlay.cpp refuses a longer list
+static GfxSwitch g_gfx[kGfxMax];
+static int g_gfxCount = 0, g_gfxLeft = 0;   // listed; not listed for want of room
 static std::atomic<bool> g_gfxReady{ false };
 static bool g_importHooked = false;   // the D3D11CreateDevice import
-static char g_gfxStatus[6][128];
-static void GfxAdd(const char *name, const char *tip, UINT key, std::atomic<bool> *state, bool on)
+static char g_gfxStatus[8][160];
+static GfxSwitch *GfxNext(const char *name, const char *tip, const char *id)
 {
+    if (g_gfxCount >= kGfxMax)
+    {
+        if (g_gfxLeft++ == 0) Log("menu: the Graphics tab holds %d switches; not listed:", kGfxMax);
+        Log("menu:   %s (%s)", name, id);
+        return nullptr;
+    }
     GfxSwitch &s = g_gfx[g_gfxCount++];
-    s.name = name; s.state = state; s.on = on;
-    char k[16];
-    KeyName(key, k, sizeof k);
-    if (key && g_keysWithMenu) snprintf(s.help, sizeof s.help, "%s (key %s)", tip, k);   // else the keys are silent beside the tab
-    else snprintf(s.help, sizeof s.help, "%s", tip);
+    s.name = name; s.state = nullptr; s.on = true; s.bit = 0; s.id = id;
+    snprintf(s.help, sizeof s.help, "%s", tip);
+    return &s;
+}
+static void GfxAdd(const char *name, const char *tip, std::atomic<bool> *state, bool on, const char *id)
+{
+    if (GfxSwitch *s = GfxNext(name, tip, id)) { s->state = state; s->on = on; }
+}
+static void GfxAddBit(const char *name, const char *tip, uint64_t bit, const char *id)
+{
+    if (GfxSwitch *s = GfxNext(name, tip, id)) s->bit = bit;
+}
+// the module switches of the table, in its order, each named as the installer's card. A module that is a pass of this
+// DLL takes that pass's own switch (the AO bit for GTAO), so each module has one switch; the others flip the module's
+// bit; a module with no changed shader in this game version gets none
+static void GfxModules()
+{
+    for (size_t i = 0; i < g_twinModules.size(); i++)
+    {
+        const TwinModule &m = g_twinModules[i];
+        std::atomic<bool> *flag = nullptr;
+        const char *tip = nullptr;
+        if (!strcmp(m.id, "gtao") && g_twinAO) { GfxAddBit(m.title, "Ambient occlusion: GTAO; off: the game's own SSAO, which has no bounce light (module gtao)", kStockAO, m.id); continue; }
+        if (!strcmp(m.id, "gi") && g_gi) { flag = &g_bounceOn; tip = "Light bounced off the scene into the shade (module gi: its pass)"; }
+        else if (!strcmp(m.id, "puddles") && g_feed) { flag = &g_puddlesOn; tip = "The scene in the terrain's puddles; off: the sky's cubemap (module puddles: the scene feed to its shaders)"; }
+        else if (!strcmp(m.id, "sssr") && g_ssr) { flag = &g_ssrOn; tip = "Screen-space reflections; off: the materials' own cubemap (module sssr: its pass)"; }
+        else if (!strcmp(m.id, "contact") && g_contact) { flag = &g_contactOn; tip = "Fine sun shadows where objects meet the ground (module contact: its pass)"; }
+        if (flag) { GfxAdd(m.title, tip, flag, true, m.id); continue; }
+        if (!m.shaders) { Log("menu: module %s changed no shader in this table: no switch", m.id); continue; }
+        char text[256];
+        int at = snprintf(text, sizeof text, "Module %s: off draws its %u shader%s as the game's own", m.id, m.shaders, m.shaders == 1 ? "" : "s");
+        if (m.shares && at > 0 && at < (int)sizeof text)
+        {
+            at += snprintf(text + at, sizeof text - at, "; shares shaders with");
+            int n = 0;
+            for (size_t k = 0; k < g_twinModules.size() && at > 0 && at < (int)sizeof text; k++)
+                if (m.shares & (1ull << k)) at += snprintf(text + at, sizeof text - at, "%s %s", n++ ? "," : "", g_twinModules[k].id);
+            if (at > 0 && at < (int)sizeof text) snprintf(text + at, sizeof text - at, " (a shared shader is the game's own while any of them is off)");
+        }
+        GfxAddBit(m.title, text, 1ull << i, m.id);
+    }
 }
 static void GfxBuild()
 {
-    if (g_twinCount || g_gi || g_ssr || g_contact) GfxAdd("Next Gen shaders", "Every shader.pak effect and this DLL's passes; off: the game's own shaders", g_keyStock, &g_stockAll, false);
-    if (g_twinAO) GfxAdd("GTAO", "Ambient occlusion: GTAO; off: the game's own SSAO, which has no bounce light", g_keyAO, &g_stockAO, false);
-    if (g_gi) GfxAdd("Bounce light", "Light bounced off the scene into the shade", g_keyBounce, &g_bounceOn, true);
-    if (g_feed) GfxAdd("Puddle reflections", "The scene in the terrain's puddles; off: the sky's cubemap", g_keyPuddles, &g_puddlesOn, true);
-    if (g_ssr) GfxAdd("Reflections", "Screen-space reflections; off: the materials' own cubemap", g_keySSR, &g_ssrOn, true);
-    if (g_gi) GfxAdd("AO at half size", "The AO pass at half size, upsampled; off: full size (slower)", g_keyAOHalf, &g_aoHalfOn, true);
-    if (g_contact) GfxAdd("Contact shadows", "Fine sun shadows where objects meet the ground", g_keyContact, &g_contactOn, true);
+    if (g_twinCount || g_gi || g_ssr || g_contact) GfxAddBit("Next Gen shaders", "Every shader.pak effect and this DLL's passes; off: the game's own shaders (F8 flips it too, and leaves the module switches as they are)", kStockAll, "all");
+    if (g_gi) GfxAdd("AO at half size", "The AO pass at half size, upsampled; off: full size (slower)", &g_aoHalfOn, true, "aohalf");
+    if (!g_twinModules.empty()) GfxModules();
+    else
+    {
+        // a version-1 table, or none: the passes' switches as 1.1.2 listed them
+        if (g_twinAO) GfxAddBit("GTAO", "Ambient occlusion: GTAO; off: the game's own SSAO, which has no bounce light", kStockAO, "gtao");
+        if (g_gi) GfxAdd("Bounce light", "Light bounced off the scene into the shade", &g_bounceOn, true, "gi");
+        if (g_feed) GfxAdd("Puddle reflections", "The scene in the terrain's puddles; off: the sky's cubemap", &g_puddlesOn, true, "puddles");
+        if (g_ssr) GfxAdd("Reflections", "Screen-space reflections; off: the materials' own cubemap", &g_ssrOn, true, "sssr");
+        if (g_contact) GfxAdd("Contact shadows", "Fine sun shadows where objects meet the ground", &g_contactOn, true, "contact");
+    }
     g_gfxReady.store(true, std::memory_order_release);
-    Log("menu: %d switches for the NEXT GEN overlay's Graphics tab (NgGraphicsGetApi, version 1)", g_gfxCount);
+    Log("menu: %d switches for the NEXT GEN overlay's Graphics tab (NgGraphicsGetApi, version 1)%s", g_gfxCount, g_gfxLeft ? ", and more modules than it holds" : "");
 }
 static bool GfxIn(int i) { return i >= 0 && i < g_gfxCount; }
 static const char *GfxName(int i) { return GfxIn(i) ? g_gfx[i].name : ""; }
 static const char *GfxHelp(int i) { return GfxIn(i) ? g_gfx[i].help : ""; }
-static int GfxGet(int i) { return GfxIn(i) && g_gfx[i].state->load(std::memory_order_relaxed) == g_gfx[i].on ? 1 : 0; }
+static int GfxGet(int i)
+{
+    if (!GfxIn(i)) return 0;
+    const GfxSwitch &s = g_gfx[i];
+    if (s.bit) return (g_stockMask.load(std::memory_order_relaxed) & s.bit) == 0 ? 1 : 0;
+    return s.state->load(std::memory_order_relaxed) == s.on ? 1 : 0;
+}
 static void GfxSet(int i, int value)
 {
     if (!GfxIn(i)) return;
-    const bool want = (value != 0) == g_gfx[i].on;
-    if (g_gfx[i].state->exchange(want) != want) Log("menu: %s %s", g_gfx[i].name, value ? "on" : "off");
+    const GfxSwitch &s = g_gfx[i];
+    bool changed;
+    if (s.bit)
+    {
+        const uint64_t was = value ? g_stockMask.fetch_and(~s.bit) : g_stockMask.fetch_or(s.bit);
+        changed = ((was & s.bit) != 0) == (value != 0);
+    }
+    else
+    {
+        const bool want = (value != 0) == s.on;
+        changed = s.state->exchange(want) != want;
+    }
+    if (changed) Log("menu: %s %s (%s)", s.name, value ? "on" : "off", s.id);
 }
 // ReShade: a loaded module that exports its add-on entry, whatever its file is called; looked for once
 static bool ReShadeLoaded()
@@ -6391,11 +6498,12 @@ static int GfxStatusCount()
         g_importHooked ? "not made yet" : "not hooked (no D3D11CreateDevice import found), nothing is done");
     if (g_scaling) snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Sun shadow map: %g x the game's size", g_factor);
     else snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Sun shadow map: the game's size");
-    if (g_twinCount) snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Stock shaders for the switches: %u (%u of the AO pass)", g_twinCount, g_twinAO);
+    if (g_twinCount) snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Stock shaders for the switches: %u (%u of the AO pass), %zu modules%s", g_twinCount, g_twinAO, g_twinModules.size(),
+        g_twinVersion == 1 ? " (a table from before 1.1.3: no module switches)" : "");
     else snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Stock shaders for the switches: none (no SnowRunnerShadows.stock)");
     snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "ReShade: %s", ReShadeLoaded() ? "loaded" : "not loaded");
-    snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], g_keysWithMenu ? "Keys F4 to F11: they work beside this tab (KeysWithMenu=1)"
-                                                                      : "Keys F4 to F11: silent while this tab is here (KeysWithMenu=1 keeps them)");
+    snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Key F8: every shader effect off and on, here too; the other switches live in this tab alone");
+    if (!g_twinModules.empty()) snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "A shader two modules changed is the game's own while either is off; a module's tip names the modules it shares with");
     snprintf(g_gfxStatus[n++], sizeof g_gfxStatus[0], "Changes here last until the game closes; SnowRunnerShadows.ini sets the start");
     return n;
 }
@@ -6462,12 +6570,8 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
                     g_contactDebug == 1 ? "; ContactDebug 1: the mask alone darkens everything" : g_contactDebug == 2 ? "; ContactDebug 2: the sun share as darkness" : "");
             else Log("contact shadows: off");
             if (g_gi)
-            {
-                char k[16];
-                KeyName(g_keyAOHalf, k, sizeof k);
-                Log("AO pass at half size: %s at start (%s flips it), %s, depth tolerance %g", g_aoHalfOn ? "on" : "off", k,
+                Log("AO pass at half size: %s at start (the NEXT GEN menu's Graphics tab flips it), %s, depth tolerance %g", g_aoHalfOn ? "on" : "off",
                     g_aoHalfBlur ? "blurred 3 x 3 at half size before the upsample" : "upsampled as drawn", g_aoHalfTol);
-            }
             if (g_feed) Log("AO depth mips at t126: %s", g_zMips ? "on (for an AO pass that declares t126)" : "off (ini ZMips=0: the AO pass reads t80 alone)");
         }
         if (g_memLog)
@@ -6516,8 +6620,8 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
             Log("AO at half size: %llu passes, %llu upsamples", (unsigned long long)g_aoHalfPasses.load(), (unsigned long long)g_aoHalfUpsamples.load());
         if (g_zMipsBuilds.load()) Log("AO depth mips: made %llu times", (unsigned long long)g_zMipsBuilds.load());
         if (g_twinCount)
-            Log("stock twins: %u made, %u could not be made; switches at exit: effects %s, puddles %s, bounce light %s, AO %s", g_twinsMade.load(), g_twinsFailed.load(),
-                g_stockAll ? "stock" : "on", g_puddlesOn ? "on" : "off", g_bounceOn ? "on" : "off", g_stockAO ? "the game's own" : "GTAO");
+            Log("stock twins: %u made, %u could not be made; switches at exit: effects %s, puddles %s, bounce light %s, AO %s, stock mask %016llX", g_twinsMade.load(), g_twinsFailed.load(),
+                StockAll() ? "stock" : "on", g_puddlesOn ? "on" : "off", g_bounceOn ? "on" : "off", StockAO() ? "the game's own" : "GTAO", (unsigned long long)g_stockMask.load());
         if (g_ssr)
         {
             Log("reflections: shaders writing output 7 %llu, reading t123 %llu; render target 7 binds %llu, passes %llu, t124 decodes %llu, binds %llu; switch at exit %s",

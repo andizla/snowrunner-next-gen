@@ -85,16 +85,24 @@ DLL's passes reach the material shaders one frame later, so every reader reproje
 <p>Without the DLL every spliced shader still runs: a helper that finds its textures unbound returns exactly what the game's
 own instruction would have returned. F8 in the game switches all of Next Gen's shader work off and on, so a look can be
 compared from one spot. For that the DLL keeps a table of the game's original of every changed shader (SnowRunnerShadows.stock,
-about 5,600 of them) and draws the original in place of the changed one while F8 holds (F11 the same for the AO pass alone). The
-originals are built the first time F8 or F11 asks for them, each shader once, and kept: the first press takes a moment, and a
-start builds none. Until October 2026 they were built while the game started, about 5,600 shader builds before the first
-frame that no comparison needed.</p>
-<p>The same switches are buttons in the NEXT GEN overlay, the menu the Next Gen mods share (F2 opens it; NextGen.ini beside the game's exe can name another key). The DLL exports
-the list (NgGraphicsGetApi, version 1): every switch whose feature the ini turned on, with a name, a tip, its state and a way
-to set it, and a few status lines (device hooked, shadow map size, stock shaders, ReShade). The overlay finds the DLL by its
-full path in the game's folder and draws the Graphics tab from that list on the game's present thread. A button and its key
-flip one flag, so they never disagree; a change lasts until the game closes, and SnowRunnerShadows.ini sets the start. While
-a NEXT GEN menu has the Graphics tab the keys F4 to F11 are silent, because other mods use some of the same keys
-(KeysWithMenu=1 in the ini keeps them); with Next Gen Graphics alone they work as before. Every
+about 5,600 of them) and draws the original in place of the changed one while a switch over it is off. Since 1.1.3 the table
+also names the shader modules and marks every changed shader with the modules that changed it (a mask of up to 62 bits, one
+per module, with one more for the AO pass), so the Graphics tab can switch one module at a time: off, that module's shaders
+are the game's own. A shader two modules changed (a river shader with the water reflections and the bounce light, say) is the
+game's own while either is off; the switch's tip names the modules it shares with. The DLL reads one mark per shader when it is
+set, the same mark that holds the scene feed's flags, so with every module on the cost per draw is what it was: one lookup for a
+pixel shader, none for a vertex shader. The originals are built the first time a switch asks for them, each shader once, and
+kept: the first flip takes a moment, and a start builds none. Until October 2026 they were built while the game started, about
+5,600 shader builds before the first frame that no comparison needed.</p>
+<p>The switches are buttons in the NEXT GEN overlay, the menu the Next Gen mods share (F2 opens it; NextGen.ini beside the game's exe can name another key). The DLL exports
+the list (NgGraphicsGetApi, version 1): Next Gen shaders (every effect, F8's switch), AO at half size, and one switch per module
+of the table, named as the installer's card; a module that is a pass of the DLL (GTAO, Bounce light, Wet ground reflections,
+Object reflections, Contact shadows) flips that pass's own switch, so each module has one. Each has a name, a tip, its state and
+a way to set it, and a few status lines follow (device hooked, shadow map size, stock shaders, ReShade). The overlay finds the
+DLL by its full path in the game's folder and draws the Graphics tab from that list on the game's present thread; the list
+holds up to 64 switches, what the overlays take. A button and F8 flip bits of one mask, so they never disagree; F8 flips its
+own bit alone and leaves the module switches as they are; a change lasts until the game closes, and SnowRunnerShadows.ini sets
+the start. F8 works beside the tab too; the other keys of earlier versions (F4 to F6, F9 to F11) are gone, their switches live
+in the tab. Every
 Next Gen mod writes the game's import slots under one lock (Local\NextGen.Slots.&lt;pid&gt;) with a compare-exchange that keeps
 what was there as the original, so two mods hooking D3D11CreateDevice chain in either order.</p>
