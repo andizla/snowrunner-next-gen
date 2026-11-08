@@ -70,7 +70,7 @@ $oldChoice = [ordered]@{ shader = $shader; shadows = [ordered]@{ factor = '1'; s
 $newChoice = [ordered]@{}; foreach ($k in $oldChoice.Keys) { $newChoice[$k] = $oldChoice[$k] }
 $newChoice.shader = $shader + 'headshadow'; $newChoice.scenery = 'all'; $newChoice.sceneryHide = 'all'; $newChoice.sceneryShadows = 'all'; $newChoice.grass = '2'; $newChoice.fill = '0.55'
 $newChoice.weather = 'shadows,showers,evening,horizon,far,fireflies,pollen,drift,land'; $newChoice.logos = 'intro'; $newChoice.debris = '4'; $newChoice.cubes = '1'; $newChoice.skies = '1'
-$newChoice.maps = 'maineown,bcown,austriaown,washingtonown'
+$newChoice.maps = 'maineown,bcown,austriaown,washingtonown'; $newChoice.exhaust = '150'
 # these copies hold no level files, so Map days is left out with one warning
 $mapsLeftOut = 'the map days were left out'
 $all = 'shader', 'dll', 'grass', 'grade', 'particles', 'stars', 'sky', 'weather', 'logos', 'fill', 'debris', 'cubes', 'skies'

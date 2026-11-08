@@ -282,6 +282,10 @@ namespace SnowRunnerNextGen
                         card.On = s.Stars == "ours";
                         if (card.On) Pick(card, 0, s.StarsFactor);
                         break;
+                    case "exhaust":
+                        card.On = s.Exhaust == "ours";
+                        if (card.On) Pick(card, 0, s.ExhaustPercent);
+                        break;
                     case "debris":
                         card.On = s.Debris == "ours";
                         if (card.On) Pick(card, 0, s.DebrisFactor);
@@ -351,7 +355,7 @@ namespace SnowRunnerNextGen
         {
             List<object> shader = new List<object>();
             object shadows = null, scenery = null, sceneryHide = null, sceneryShadows = null, grass = null, fill = null, grade = null, particles = null, stars = null, sky = null, logos = null,
-                weather = null, debris = null, cubes = null, skies = null, maps = null;
+                weather = null, debris = null, exhaust = null, cubes = null, skies = null, maps = null;
             foreach (Card card in list.Cards)
             {
                 if (!card.On) continue;
@@ -396,6 +400,7 @@ namespace SnowRunnerNextGen
                         if (byId.TryGetValue("objrefl", out refl) && refl.On && Key(refl, 0) == "sssr") shader.Add("headglow");
                         break;
                     case "stars": stars = Key(card, 0); break;
+                    case "exhaust": exhaust = Key(card, 0); break;
                     case "debris": debris = Key(card, 0); break;
                     case "sky": sky = "1"; break;
                     case "cubes": cubes = "1"; break;
@@ -428,6 +433,7 @@ namespace SnowRunnerNextGen
             selection["sky"] = sky;
             selection["weather"] = weather;
             selection["debris"] = debris;
+            selection["exhaust"] = exhaust;
             selection["cubes"] = cubes;
             selection["skies"] = skies;
             selection["logos"] = logos;
@@ -449,18 +455,18 @@ namespace SnowRunnerNextGen
             Dictionary<string, object> dll = sel["shadows"] as Dictionary<string, object>;
             string mine = Signature(shader, dll == null ? null : (string)dll["factor"], dll == null ? null : (string)dll["slopeBias"], dll == null ? null : (string)dll["aoHalf"],
                 Scenery((string)sel["scenery"], (string)sel["sceneryHide"], (string)sel["sceneryShadows"]), (string)sel["grass"], (string)sel["fill"], (string)sel["grade"],
-                (string)sel["particles"], (string)sel["stars"], (string)sel["sky"], (string)sel["logos"], (string)sel["weather"], (string)sel["debris"], (string)sel["cubes"], (string)sel["skies"], (string)sel["maps"]);
+                (string)sel["particles"], (string)sel["stars"], (string)sel["sky"], (string)sel["logos"], (string)sel["weather"], (string)sel["debris"], (string)sel["cubes"], (string)sel["skies"], (string)sel["maps"], (string)sel["exhaust"]);
             GameStatus s = installed;
             string theirs = Signature(s.Shader == "ours" ? s.Modules : new List<string>(), s.Dll == "ours" ? s.Factor : null, s.Dll == "ours" ? s.SlopeBias : null, s.Dll == "ours" ? s.AoHalf : null,
                 s.Scenery == "nature" || s.Scenery == "all" ? Scenery(s.Scenery, s.SceneryHide == "off" ? null : s.SceneryHide, s.SceneryShadows == "off" ? null : s.SceneryShadows) : null,
                 s.Grass == "ours" ? s.GrassFactor : null, s.Fill == "ours" ? s.FillFactor : null,
                 s.Grade == "ours" ? s.GradeStrength : null, s.Particles == "ours" ? "1" : null, s.Stars == "ours" ? s.StarsFactor : null, s.Sky == "ours" ? "1" : null, s.Logos == "ours" ? (s.LogosIntro ? "intro" : "1") : null,
-                s.Weather == "ours" ? s.WeatherParts : null, s.Debris == "ours" ? s.DebrisFactor : null, s.Cubes == "ours" ? "1" : null, s.Skies == "ours" ? "1" : null, s.Maps == "ours" ? s.MapsRows : null);
+                s.Weather == "ours" ? s.WeatherParts : null, s.Debris == "ours" ? s.DebrisFactor : null, s.Cubes == "ours" ? "1" : null, s.Skies == "ours" ? "1" : null, s.Maps == "ours" ? s.MapsRows : null, s.Exhaust == "ours" ? s.ExhaustPercent : null);
             return mine == theirs;
         }
 
         static string Signature(List<string> shader, string factor, string slopeBias, string aoHalf, string scenery, string grass, string fill, string grade, string particles, string stars,
-            string sky, string logos, string weather, string debris, string cubes, string skies, string maps)
+            string sky, string logos, string weather, string debris, string cubes, string skies, string maps, string exhaust)
         {
             List<string> sorted = new List<string>(shader);
             sorted.Sort(StringComparer.Ordinal);
@@ -468,7 +474,7 @@ namespace SnowRunnerNextGen
             parts.Sort(StringComparer.Ordinal);
             return string.Join(",", sorted.ToArray()) + "|" + (factor == null ? "-" : Number(factor) + "/" + slopeBias + "/" + (aoHalf ?? "1")) + "|" + (scenery ?? "-") + "|" + (grass == null ? "-" : Number(grass))
                 + "|" + (fill == null ? "-" : Number(fill)) + "|" + (grade == null ? "-" : Number(grade)) + "|" + (particles ?? "-") + "|" + (stars == null ? "-" : Number(stars))
-                + "|" + (sky ?? "-") + "|" + (logos ?? "-") + "|" + string.Join(",", parts.ToArray()) + "|" + (debris == null ? "-" : Number(debris)) + "|" + (cubes ?? "-") + "|" + (skies ?? "-") + "|" + (maps ?? "-");
+                + "|" + (sky ?? "-") + "|" + (logos ?? "-") + "|" + string.Join(",", parts.ToArray()) + "|" + (debris == null ? "-" : Number(debris)) + "|" + (cubes ?? "-") + "|" + (skies ?? "-") + "|" + (maps ?? "-") + "|" + (exhaust == null ? "-" : Number(exhaust));
         }
 
         // the scenery set with its two extras as one word for the signature
@@ -514,6 +520,7 @@ namespace SnowRunnerNextGen
             if (s.Sky == "ours") parts.Add("night sky");
             if (s.Stars == "ours") parts.Add("stars " + Number(s.StarsFactor) + "x");
             if (s.Weather == "ours") parts.Add("weather " + (s.WeatherParts ?? "").Replace(",", ", "));
+            if (s.Exhaust == "ours") parts.Add("exhaust " + Number(s.ExhaustPercent) + " %");
             if (s.Debris == "ours") parts.Add("debris " + Number(s.DebrisFactor) + "x drops");
             if (s.Cubes == "ours") parts.Add("reflection cubes");
             if (s.Skies == "ours") parts.Add("winter skies");

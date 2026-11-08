@@ -15,7 +15,8 @@ namespace SnowRunnerNextGen
         public string[] Labels;     // the buttons
         public string[] Keys;       // what the engine gets for each
         public int Default;
-        public OptionSet(string name, string[] labels, string[] keys, int def) { Name = name; Labels = labels; Keys = keys; Default = def; }
+        public bool Stepper;        // minus, current label, plus instead of one button per choice
+        public OptionSet(string name, string[] labels, string[] keys, int def, bool stepper = false) { Name = name; Labels = labels; Keys = keys; Default = def; Stepper = stepper; }
     }
 
     class Module
@@ -151,6 +152,16 @@ namespace SnowRunnerNextGen
             // the glow on eight more particle shaders (module smokemore): off unless picked
             smoke.Options.Add(new OptionSet("More kinds of smoke", new[] { "off", "on" }, new[] { "", "smokemore" }, 0));
             list.Add(smoke);
+            Module exhaust = M("exhaust", "ATMOSPHERE", "Exhaust smoke", true,
+                "Adjust the size and opacity of exhaust smoke for every vehicle. 150 % by default; 0 % turns it off, 100 % uses the kept original values.");
+            string[] exhaustLabels = new string[31], exhaustKeys = new string[31];
+            for (int i = 0; i < exhaustKeys.Length; i++)
+            {
+                exhaustKeys[i] = (i * 10).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                exhaustLabels[i] = exhaustKeys[i] + " %";
+            }
+            exhaust.Options.Add(new OptionSet("Strength", exhaustLabels, exhaustKeys, 15, true));
+            list.Add(exhaust);
             list.Add(M("smokeshade", "ATMOSPHERE", "Smoke shape and softer edges", true,
                 "Smoke and dust puffs get a lit side and a shaded side, and sprites fade more softly where they meet the ground."));
             // the particle sprites at twice the size, into boot.pak beside the photo grade

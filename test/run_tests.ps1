@@ -26,7 +26,7 @@ Shot 'narrow' @('--scale', '1', '--size', '560x0')
 Shot 'wide' @('--scale', '1', '--size', '1600x0')
 
 # every (?) pop-up, and the one with pictures at 200 and 225 %
-$ids = 'shadows', 'edges', 'blocker', 'contact', 'headshadow', 'gtao', 'ambient', 'gi', 'objrefl', 'headglow', 'water', 'rivertint', 'glare', 'cubes', 'skies', 'fog', 'weather', 'smoke', 'smokeshade', 'particles', 'debris', 'sky', 'stars', 'tonemap', 'bloom', 'scenery', 'grass', 'logos', 'installer'
+$ids = 'shadows', 'edges', 'blocker', 'contact', 'headshadow', 'gtao', 'ambient', 'gi', 'objrefl', 'headglow', 'water', 'rivertint', 'glare', 'cubes', 'skies', 'fog', 'weather', 'smoke', 'exhaust', 'smokeshade', 'particles', 'debris', 'sky', 'stars', 'tonemap', 'bloom', 'scenery', 'grass', 'logos', 'installer'
 foreach ($id in $ids) { Shot "help-$id" @('--scale', '1', '--help', $id) }
 Shot 'help-gtao-2' @('--scale', '2', '--help', 'gtao')
 Shot 'help-gtao-2.25' @('--scale', '2.25', '--help', 'gtao')
@@ -50,9 +50,9 @@ try {
   function Note { $bar.GetType().GetField('note', $flags).GetValue($bar) }
 
   # on by default: every card but Bounce light, Headlight glare cap and Volumetric fog
-  $defaults = 'shadows edges blocker contact headshadow gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
+  $defaults = 'shadows edges blocker contact headshadow gtao aofar ambient fill objrefl headglow water puddles rivertint crestglow cubes weather maps smoke exhaust smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '31 of 34 selected'
+  Check 'count' (Note) '32 of 35 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
@@ -68,6 +68,44 @@ try {
   Check 'selection: rebuilt edges, the seam dither, AO at full size' ((@($s['shader']) -contains 'revec') -and (@($s['shader']) -contains 'seam') -and ($s['shadows']['aoHalf'] -eq '0')) 'True'
   Check 'selection: the night sky, the stars at 3x and the logos with the Next Gen splash' ('{0} {1} {2}' -f $s['sky'], $s['stars'], $s['logos']) '1 3 intro'
   Check 'selection: the reflection cubes by default, the bounce light not' ('{0} {1}' -f (@($s['shader']) -contains 'gi'), $s['cubes']) 'False 1'
+  # Exhaust: the full range through a compact stepper; zero is selected, null is unticked.
+  $exhaust = $cards['exhaust']
+  Check 'exhaust: enabled at 150 % by default' ("$($exhaust.On) $($s['exhaust'])") 'True 150'
+  Check 'exhaust: not a shader module' (@($s['shader']) -contains 'exhaust') 'False'
+  $exhaust.Width = 420; $exhaust.Height = $exhaust.Arrange(420)
+  $exhaustType = $exhaust.GetType()
+  function Exhaust-Key([System.Windows.Forms.Keys]$key) { $eventArgs = New-Object System.Windows.Forms.KeyEventArgs($key); $arguments = New-Object object[] 1; $arguments[0] = $eventArgs.PSObject.BaseObject; $exhaustType.GetMethod('OnKeyDown', $flags).Invoke($exhaust, $arguments) }
+  function Exhaust-Click([int]$index) {
+    $rect = $exhaustType.GetField('buttons', $flags).GetValue($exhaust)[0][$index]
+    $click = New-Object System.Windows.Forms.MouseEventArgs([System.Windows.Forms.MouseButtons]::Left, 1, ($rect.X + 2), ($rect.Y + 2), 0)
+    $arguments = New-Object object[] 1; $arguments[0] = $click.PSObject.BaseObject
+    $exhaustType.GetMethod('OnMouseDown', $flags).Invoke($exhaust, $arguments)
+    $exhaustType.GetMethod('OnMouseUp', $flags).Invoke($exhaust, $arguments)
+  }
+  Exhaust-Key Right
+  Check 'exhaust: Right moves past the three drawn buttons' (& $keyOf 'exhaust') '160'
+  Exhaust-Click 0
+  Check 'exhaust: minus moves one step' (& $keyOf 'exhaust') '150'
+  Exhaust-Click 2
+  Check 'exhaust: plus moves one step' (& $keyOf 'exhaust') '160'
+  Exhaust-Click 1
+  Check 'exhaust: value is read-only' ("$($exhaust.On) $(& $keyOf 'exhaust')") 'True 160'
+  $exhaust.Choice[0] = 0
+  Exhaust-Key Left; Exhaust-Click 0
+  $s = & $selection
+  Check 'exhaust: zero clamps and remains selected' ("$($exhaust.On) $($s['exhaust'])") 'True 0'
+  Check 'exhaust: accessible current value' ($exhaust.AccessibilityObject.Value) 'Strength 0 %'
+  $exhaust.Choice[0] = 30
+  Exhaust-Key Right; Exhaust-Click 2
+  Check 'exhaust: upper limit clamps' (& $keyOf 'exhaust') '300'
+  $exhaust.On = $false
+  Exhaust-Click 1
+  Check 'exhaust: reading the value does not tick the card' ($exhaust.On) 'False'
+  $s = & $selection
+  Check 'exhaust: unticked sends null' ($null -eq $s['exhaust']) 'True'
+  Exhaust-Key Left
+  Check 'exhaust: changing the value ticks the card' ("$($exhaust.On) $(& $keyOf 'exhaust')") 'True 290'
+  $exhaust.Reset()
   $cards['edges'].Choice[0] = 1
   $s = & $selection
   Check 'selection: the 16-tap filter goes without the seam dither' ((@($s['shader']) -contains 'crisp') -and -not (@($s['shader']) -contains 'seam') -and -not (@($s['shader']) -contains 'revec')) 'True'
@@ -141,18 +179,18 @@ try {
   $cards['shadows'].ToggleByUser()
   # Headlights in reflections goes with Object reflections and Sun glow through waves with Water reflections, which
   # both need SnowRunner Shadows
-  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
+  Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill rivertint cubes weather maps smoke exhaust smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'its note' (Note) 'Contact shadows, Headlight shadows, Object reflections, Headlights in reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
   $cards['gi'].ToggleByUser()
-  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
+  Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi rivertint cubes weather maps smoke exhaust smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'its note' (Note) 'Bounce light needs SnowRunner Shadows: ticked it too.'
   $cards['gtao'].ToggleByUser()
-  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
+  Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill rivertint cubes weather maps smoke exhaust smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'its note' (Note) 'Wide occlusion and Bounce light need GTAO: unticked them too.'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($false))
-  Check 'clear' (Note) '0 of 34 selected'
+  Check 'clear' (Note) '0 of 35 selected'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($true))
-  Check 'select all' (Note) '34 of 34 selected'
+  Check 'select all' (Note) '35 of 35 selected'
   foreach ($c in $list.Cards) { $c.Reset() }
   Check 'defaults again' (Ticked) $defaults
 
@@ -165,6 +203,13 @@ try {
   [void]$installed.Modules.Remove('fogsun')
   $viewType.GetMethod('Mirror', $flags).Invoke($view, @($installed))
   Check 'mirror: the fog alone' ('{0} [{1}]' -f $cards['fog'].On, (& $keyOf 'fog')) 'True []'
+  $installed.Exhaust = 'ours'; $installed.ExhaustPercent = '0'
+  $viewType.GetMethod('Mirror', $flags).Invoke($view, @($installed))
+  Check 'mirror: exhaust at zero is active' ("$($exhaust.On) $(& $keyOf 'exhaust')") 'True 0'
+  Check 'status: active zero exhaust counts as installed' ($installed.AnythingOurs) 'True'
+  $installed.Exhaust = 'vanilla'
+  $viewType.GetMethod('Mirror', $flags).Invoke($view, @($installed))
+  Check 'mirror: an older install leaves the new card unticked' ($exhaust.On) 'False'
   foreach ($c in $list.Cards) { $c.Reset() }
   Check 'defaults once more' (Ticked) $defaults
 
@@ -179,13 +224,14 @@ try {
   $has.Weather = 'ours'; $has.WeatherParts = 'shadows,showers,evening,horizon,fireflies,pollen,drift,land'
   $has.Scenery = 'all'; $has.SceneryHide = 'all'; $has.SceneryShadows = 'all'; $has.Grass = 'ours'; $has.GrassFactor = '2'
   $has.Maps = 'ours'; $has.MapsRows = 'maineown,bcown,austriaown,washingtonown'
+  $has.Exhaust = 'ours'; $has.ExhaustPercent = '150'
   $has.Debris = 'ours'; $has.DebrisFactor = '4'; $has.Cubes = 'ours'; $has.Skies = 'ours'
   $viewType.GetField('installed', $flags).SetValue($view, $has)
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: the default set as installed' (Note) "31 of 34 selected  $([char]0xB7)  as installed"
+  Check 'bar: the default set as installed' (Note) "32 of 35 selected  $([char]0xB7)  as installed"
   $has.Outdated.Add('shader')
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: a newer build of an installed part' (Note) "31 of 34 selected  $([char]0xB7)  Apply to update the game to this version"
+  Check 'bar: a newer build of an installed part' (Note) "32 of 35 selected  $([char]0xB7)  Apply to update the game to this version"
   $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($has))
   Check 'header: says that Apply updates the game' ($said -match 'Note: this installer has a newer build of what is installed: Apply updates the game$') 'True'
   $viewType.GetField('installed', $flags).SetValue($view, $null)
