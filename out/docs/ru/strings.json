@@ -120,12 +120,12 @@
   "ru": "Листья, трава, ветки и грязь из-под колёс полминуты лежат на земле, и шины их толкают, а не исчезают через четыре секунды. Брызги грязи, воды и снега дают больше капель, которые дольше лежат и оставляют больше следов на грузовике. Снежная пыль висит в воздухе. Выхлоп и пыль тоже держатся дольше."
  },
  "card.sky.description": {
-  "en": "NASA's star map in place of the game's star texture: the real sky's stars as fine points, with the glow of the Milky Way.",
-  "ru": "Звёздная карта NASA вместо игровой текстуры звёзд: звёзды настоящего неба тонкими точками и свечение Млечного Пути."
+  "en": "NASA's star map in place of the game's star texture: the real sky's stars as fine points.",
+  "ru": "Звёздная карта NASA вместо игровой текстуры звёзд: звёзды настоящего неба тонкими точками."
  },
  "card.skies.description": {
-  "en": "The painted skies of every region made anew from photographs of real skies: 49 of the game's sky domes, cloud bands and night layers, each at its own size and brightness, the photograph's sun taken out so the game's sun is the only one. The aurora is green, as a real one is. The clouds still drift.",
-  "ru": "Нарисованные небеса всех регионов сделаны заново по фотографиям настоящего неба: 49 игровых небесных куполов, полос облаков и ночных слоёв, каждый со своим размером и яркостью; солнце с фотографий убрано, так что единственное солнце здесь игровое. Северное сияние зелёное, как настоящее. Облака по-прежнему плывут."
+  "en": "The painted skies of every region made anew from photographs of real skies: 47 of the game's sky domes, cloud bands and night layers, each at its own size and brightness, the photograph's sun taken out so the game's sun is the only one. The aurora is green, as a real one is. The clouds still drift.",
+  "ru": "Нарисованные небеса всех регионов сделаны заново по фотографиям настоящего неба: 47 игровых небесных куполов, полос облаков и ночных слоёв, каждый со своим размером и яркостью; солнце с фотографий убрано, так что единственное солнце здесь игровое. Северное сияние зелёное, как настоящее. Облака по-прежнему плывут."
  },
  "card.stars.description": {
   "en": "The stars of the night sky drawn brighter, so they stand out against the dark.",
@@ -708,28 +708,28 @@
   "ru": "Меняет initial.pak вместе с Grass reach, Fill light, Brighter stars и Weather и сохраняет их изменения. Другие моды, которые меняют initial.pak, меняют тот же файл: Apply спрашивает, прежде чем собирать поверх него."
  },
  "card.sky.help.0": {
-  "en": "The game's night sky is a small texture whose stars are one texel each. This puts NASA's star map in its place, with four times the pixels: the real sky's stars as fine points, and the glow of the Milky Way. Scandinavia, Kola and Quebec have a photo for a night sky, with the northern lights in it. There the same stars are painted into the photo.",
-  "ru": "Ночное небо игры это маленькая текстура, где каждая звезда занимает один тексель. Карточка ставит на её место звёздную карту NASA с вчетверо большим числом пикселей: звёзды настоящего неба тонкими точками и свечение Млечного Пути. В Скандинавии, на Кольском полуострове и в Квебеке ночное небо это фотография с северным сиянием. Там те же звёзды нарисованы прямо на фотографии."
+  "en": "The game's night sky is a small texture whose stars are one texel each. This puts NASA's star map in its place, with four times the pixels: the real sky's stars as fine points. Scandinavia, Kola and Quebec have a photo for a night sky, with the northern lights in it. There the same stars are painted into the photo.",
+  "ru": "Ночное небо игры это маленькая текстура, где каждая звезда занимает один тексель. Карточка ставит на её место звёздную карту NASA с вчетверо большим числом пикселей: звёзды настоящего неба тонкими точками. В Скандинавии, на Кольском полуострове и в Квебеке ночное небо это фотография с северным сиянием. Там те же звёзды нарисованы прямо на фотографии."
  },
  "card.sky.help.1": {
-  "en": "A night sky full of fine stars, with the Milky Way across it.",
-  "ru": "Ночное небо, полное тонких звёзд, и Млечный Путь через него."
+  "en": "A night sky full of fine stars.",
+  "ru": "Ночное небо, полное тонких звёзд,."
  },
  "card.sky.help.2": {
   "en": "Video memory for the larger sky textures. The installer is 65 MB larger for the set.",
   "ru": "Видеопамять под увеличенные текстуры неба. Из-за этого набора установщик больше на 65 МБ."
  },
  "card.sky.help.3": {
-  "en": "It changes boot.pak, together with Photo grade and Sharper smoke and particles, which it keeps, and it sets the levels its photo skies need in initial.pak. The new stars are finer than the game's and come out dim at the game's own level. Brighter stars is set for them.",
-  "ru": "Меняет boot.pak вместе с Photo grade и Sharper smoke and particles и сохраняет их изменения, а ещё выставляет в initial.pak уровни, нужные её небу-фотографиям. Новые звёзды тоньше игровых и при игровом уровне выходят тусклыми. Brighter stars настроена под них."
+  "en": "It changes boot.pak, together with Photo grade and Sharper smoke and particles, which it keeps, and it sets the levels its photo skies need in initial.pak. The new stars are finer than the game's and come out dim at the game's own level. Brighter stars is set for them. The Milky Way's glow is left out: its faint light, held in whole steps of an 8-bit texture, showed as bands at dawn and on bright nights.",
+  "ru": "Меняет boot.pak вместе с Photo grade и Sharper smoke and particles и сохраняет их изменения, а ещё выставляет в initial.pak уровни, нужные её небу-фотографиям. Новые звёзды тоньше игровых и при игровом уровне выходят тусклыми. Brighter stars настроена под них. Свечения Млечного Пути нет: его слабый свет, записанный целыми шагами 8-битной текстуры, на рассвете и в светлые ночи выходил полосами."
  },
  "card.sky.help.4": {
   "en": "The star map is made from Deep Star Maps 2020. Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.",
   "ru": "Звёздная карта сделана из Deep Star Maps 2020. Источник: NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC."
  },
  "card.skies.help.0": {
-  "en": "A region's sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 49 of the game's sky domes and cloud bands, across every region, with ones made from photographs of real skies, the Milky Way on two night layers with the real one from NASA's star map, and the aurora's blue and violet with a real aurora's green. Each keeps the size of the texture it replaces and the game's own brightness for it. The photographs' own sun is taken out, so the game's sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency.",
-  "ru": "Небо региона это стопка слоёв: нарисованный купол всего верхнего неба, полосы облаков, плывущие над ним, звёзды, солнце. Карточка заменяет 49 игровых небесных куполов и полос облаков во всех регионах на сделанные по фотографиям настоящего неба, Млечный Путь на двух ночных слоях на настоящий из звёздной карты NASA, а синее и фиолетовое северное сияние на зелёное, как у настоящего. Каждая текстура сохраняет размер той, которую заменяет, и игровую яркость для неё. Солнце с фотографий убрано, так что солнечный диск игры остаётся единственным солнцем; полосы облаков вырезаны из фотографий с их собственной прозрачностью."
+  "en": "A region's sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 47 of the game's sky domes and cloud bands, across every region, with ones made from photographs of real skies, and the aurora's blue and violet with a real aurora's green. Each keeps the size of the texture it replaces and the game's own brightness for it. The photographs' own sun is taken out, so the game's sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency.",
+  "ru": "Небо региона это стопка слоёв: нарисованный купол всего верхнего неба, полосы облаков, плывущие над ним, звёзды, солнце. Карточка заменяет 47 игровых небесных куполов и полос облаков во всех регионах на сделанные по фотографиям настоящего неба, а синее и фиолетовое северное сияние на зелёное, как у настоящего. Каждая текстура сохраняет размер той, которую заменяет, и игровую яркость для неё. Солнце с фотографий убрано, так что солнечный диск игры остаётся единственным солнцем; полосы облаков вырезаны из фотографий с их собственной прозрачностью."
  },
  "card.skies.help.1": {
   "en": "Real clouds and skies by day, still drifting; at dusk, dawn and night the game's tint over them.",
@@ -740,8 +740,8 @@
   "ru": "В игре ничего. Текстуры идут отдельной загрузкой, набором неба (SnowRunnerNextGen_Skies.zip, около 100 МБ, 300 МБ в распакованном виде), который распаковывается в папку этой программы; без него Apply пропускает небо и сообщает об этом."
  },
  "card.skies.help.3": {
-  "en": "The rainbow, the comet, the sun's and the moon's discs and glows stay the game's. It changes boot.pak, together with Photo grade, Sharper smoke and particles, Night sky and Reflection cubes, which it keeps. The skies are made with engine\\tools\\make_cube.js and make_clouds.js from 23 CC0 panoramas by Poly Haven, the Milky Way from NASA's Deep Star Maps 2020.",
-  "ru": "Радуга, комета, диски и ореолы солнца и луны остаются игровыми. Меняет boot.pak вместе с Photo grade, Sharper smoke and particles, Night sky и Reflection cubes и сохраняет их изменения. Небо сделано с помощью engine\\tools\\make_cube.js и make_clouds.js из 23 панорам CC0 от Poly Haven, Млечный Путь из Deep Star Maps 2020 от NASA."
+  "en": "The rainbow, the comet, the sun's and the moon's discs and glows stay the game's. It changes boot.pak, together with Photo grade, Sharper smoke and particles, Night sky and Reflection cubes, which it keeps. The skies are made with engine\\tools\\make_cube.js and make_clouds.js from 23 CC0 panoramas by Poly Haven.",
+  "ru": "Радуга, комета, диски и ореолы солнца и луны остаются игровыми. Меняет boot.pak вместе с Photo grade, Sharper smoke and particles, Night sky и Reflection cubes и сохраняет их изменения. Небо сделано с помощью engine\\tools\\make_cube.js и make_clouds.js из 23 панорам CC0 от Poly Haven."
  },
  "card.stars.help.0": {
   "en": "The night sky draws its stars as one layer, at a low level set per region. This raises that level at night in every region where the stars are their own layer, so they stand out against the dark sky. Dusk and dawn keep the game's level.",

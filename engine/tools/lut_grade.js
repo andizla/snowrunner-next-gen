@@ -18,7 +18,7 @@
 // stored over their entries. The grade and the particles go on and off independently; both are built from the
 // original each time.
 // A third part is the night sky: the star map (env_skysphere_stars__d_a, from NASA's Deep Star Maps
-// 2020: point stars and the Milky Way's glow, 8192 x 2048) and the two photo night skies of Scandinavia, Kola and
+// 2020: point stars, without the Milky Way's glow, 8192 x 2048) and the two photo night skies of Scandinavia, Kola and
 // Quebec (env_cloud_01_us_11s__s_d_a, env_cloud_01_ru_03s__s_d_a) with the same star points painted in and their share
 // in the picture's alpha; each .pct with its .pct_header (the stock ones are 4096 x 1024), SR_SKY_DIR, default
 // replacements\sky\pct, written the way the particle set is. The photo skies need their sky alpha raised in

@@ -48,19 +48,15 @@ cubes.</p>
 
 <h3>Night sky: a real star map</h3>
 <p>The game's stars are one texture (4096 &times; 1024) wrapped around the sky, with stars a texel wide. Next Gen's is NASA's
-Deep Star Maps 2020 at 8192 &times; 2048: point stars at their catalogued brightness and the Milky Way's glow. The two photo
-night skies of Scandinavia, Kola and Quebec (one picture each, an aurora photograph) get the same star points painted in.</p>
-<p>The glow is faint: at the galaxy's edge its light is 1 to 3 in the alpha's 255 steps, each step half again or more, which the
-layer's multiplier (up to &times; 5) showed as flat islands with hard edges along the band (seen in the game on Washington's
-night sky). Since the shader weights the colour by the alpha, the faint glow is stored as both: the alpha rounded up and
-the grey carrying the rest, so its light steps by alpha / 255 of a step. The glow under that is found again smooth from the
-texture itself (the smallest alpha in 5 &times; 5, which leaves the stars out, then a 17 &times; 17 box where it is faint and 5 &times; 5
-where it is bright); the stars and the bright glow are as they were.</p>
-<p>The BC7 encoder then undid part of that (seen in the game, 2026-10-31): its shared low bit left the empty sky at
-alpha 1 with white colour, a little brighter than the glow's faint edge, so a dark rim ran along the Milky Way, and it
-weighed an alpha step like a step of grey, so inside the glow the light snapped to whole alpha steps in contours. The
-star map is encoded again (out\skies_build\encode_raw.js with an alpha weight of 256, mips that average the light):
-the empty sky is 0, and the faint glow's light is off by 0.003 on average where it was off by 0.9.</p>
+Deep Star Maps 2020 at 8192 &times; 2048: point stars at their catalogued brightness. The two photo night skies of
+Scandinavia, Kola and Quebec (one picture each, an aurora photograph) get the same star points painted in.</p>
+<p>The star map has no Milky Way glow. Its faint light sat in the alpha's lowest dozen of 255 steps, and once a night state
+drew the star layer brightly (up to &times; 5, &times; 3 more on the photo skies) the steps showed as contour bands, seen in the
+game on Taymyr's night and at Kola's dawn. Both pictures keep only what stands above the 7 &times; 7 median of its neighbours,
+by one step where that median is 0 and by three inside the old glow, less the median: the stars without the light under
+them. The star map is encoded by out\skies_build\encode_raw.js with an alpha weight of 256 and mips that average the
+light, so the empty sky is exactly 0. The photo skies are built on the game's own photograph, its star dots taken out and
+enlarged to 8192 &times; 2048, with the points screened over it.</p>
 
 <h3>Brighter stars: why the level must rise</h3>
 <p>A sky layer's brightness is "g(r; g; b; a) &times; N": N scales the colour, the alpha is a / 255, and the sky shader
@@ -76,13 +72,10 @@ points come out three times as bright.</p>
 
 <h3>Skies: domes and cloud bands from photographs</h3>
 <p>A SnowRunner sky is layers on a sphere: a sky dome (sphere_sky) and up to three cloud bands (clouds_rear, clouds_mid,
-clouds_near) that turn around the map, each tinted per daytime state. The card (on by default since 1.1.0) replaces 49 of
-those textures, every region's, with ones made from 25 photographs of real skies: domes by make_cube.js at the stock
-texture's size and mean colour with the photograph's sun taken out, and cloud bands. Two night layers that are black but
-for a patch of the Milky Way get the real one: a strip around the galactic centre sampled from NASA's Deep Star Maps
-2020 through the galactic to equatorial rotation, laid along the stock patch's long axis (its moments give the centre,
-tilt and spread), faded by an ellipse of that spread, and its light mapped onto the stock patch's own distribution of
-brightness, quantile for quantile. The cloud bands are cut from panoramas by
+clouds_near) that turn around the map, each tinted per daytime state. The card (on by default since 1.1.0) replaces 47 of
+those textures, every region's, with ones made from photographs of real skies: domes by make_cube.js at the stock
+texture's size and mean colour with the photograph's sun taken out, and cloud bands. The two night layers that hold the
+game's own patch of the Milky Way stay the game's. The cloud bands are cut from panoramas by
 make_clouds.js: a band is a texture 8 (or 4) times as wide as high whose alpha is the clouds' shape and whose colour is their
 shading in grey. What is cloud and what is sky is told by colour, since a clear sky is blue and a cloud is not:</p>
 <div class="eq">b = (B &minus; R) / (B + R),&nbsp;&nbsp; b<sub>sky</sub> = 85th percentile of b in the row,&nbsp;&nbsp; cloudiness = b<sub>sky</sub> &minus; b</div>
