@@ -34,7 +34,7 @@ const TWILIGHT = /^(?:day_to_night|night_to_day)_/i;   // dusk and dawn states: 
 const STARS_FACTOR = 3;   // the default: stars three times as bright
 const PHOTO_FACTOR = 3;   // fixed: photo_star_alpha.py's K (the pictures' alpha floor is 255 / 3)
 // the builds of the photo skies with the stars' share in their alpha: boot.pak [textures]/pct/env_<name>.pct, CRC-32
-const PHOTO_PCT = { cloud_01_us_11s__s_d_a: ['4977bc62'], cloud_01_ru_03s__s_d_a: ['516ff855'] };
+const PHOTO_PCT = { cloud_01_us_11s__s_d_a: ['4977bc62', 'c840ece6'], cloud_01_ru_03s__s_d_a: ['516ff855', '243ae204'] };
 
 const isSkyEntry = (entryName) => SKY_ENTRY.test(entryName);
 const fmt = (v) => v.toFixed(3).replace(/\.?0+$/, '');

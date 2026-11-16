@@ -1,6 +1,6 @@
 {
     "exe":  "SnowRunnerNextGen.exe",
-    "built":  "2026-11-08 23:47",
+    "built":  "2026-11-16 18:33",
     "modules":  [
                     {
                         "id":  "shadows",
@@ -1135,7 +1135,7 @@
                         "title":  "Night sky",
                         "category":  "ATMOSPHERE",
                         "group":  "Atmosphere and image",
-                        "description":  "NASA\u0027s star map in place of the game\u0027s star texture: the real sky\u0027s stars as fine points, with the glow of the Milky Way.",
+                        "description":  "NASA\u0027s star map in place of the game\u0027s star texture: the real sky\u0027s stars as fine points.",
                         "on":  true,
                         "requires":  [
 
@@ -1146,11 +1146,11 @@
                         "help":  [
                                      {
                                          "heading":  "What it does",
-                                         "text":  "The game\u0027s night sky is a small texture whose stars are one texel each. This puts NASA\u0027s star map in its place, with four times the pixels: the real sky\u0027s stars as fine points, and the glow of the Milky Way. Scandinavia, Kola and Quebec have a photo for a night sky, with the northern lights in it. There the same stars are painted into the photo."
+                                         "text":  "The game\u0027s night sky is a small texture whose stars are one texel each. This puts NASA\u0027s star map in its place, with four times the pixels: the real sky\u0027s stars as fine points. Scandinavia, Kola and Quebec have a photo for a night sky, with the northern lights in it. There the same stars are painted into the photo."
                                      },
                                      {
                                          "heading":  "What you will notice",
-                                         "text":  "A night sky full of fine stars, with the Milky Way across it."
+                                         "text":  "A night sky full of fine stars."
                                      },
                                      {
                                          "heading":  "What it costs",
@@ -1158,7 +1158,7 @@
                                      },
                                      {
                                          "heading":  "Good to know",
-                                         "text":  "It changes boot.pak, together with Photo grade and Sharper smoke and particles, which it keeps, and it sets the levels its photo skies need in initial.pak. The new stars are finer than the game\u0027s and come out dim at the game\u0027s own level. Brighter stars is set for them."
+                                         "text":  "It changes boot.pak, together with Photo grade and Sharper smoke and particles, which it keeps, and it sets the levels its photo skies need in initial.pak. The new stars are finer than the game\u0027s and come out dim at the game\u0027s own level. Brighter stars is set for them. The Milky Way\u0027s glow is left out: its faint light, held in whole steps of an 8-bit texture, showed as bands at dawn and on bright nights."
                                      },
                                      {
                                          "heading":  "Credits",
@@ -1171,7 +1171,7 @@
                         "title":  "Skies",
                         "category":  "ATMOSPHERE",
                         "group":  "Atmosphere and image",
-                        "description":  "The painted skies of every region made anew from photographs of real skies: 49 of the game\u0027s sky domes, cloud bands and night layers, each at its own size and brightness, the photograph\u0027s sun taken out so the game\u0027s sun is the only one. The aurora is green, as a real one is. The clouds still drift.",
+                        "description":  "The painted skies of every region made anew from photographs of real skies: 47 of the game\u0027s sky domes, cloud bands and night layers, each at its own size and brightness, the photograph\u0027s sun taken out so the game\u0027s sun is the only one. The aurora is green, as a real one is. The clouds still drift.",
                         "on":  true,
                         "requires":  [
 
@@ -1182,7 +1182,7 @@
                         "help":  [
                                      {
                                          "heading":  "What it does",
-                                         "text":  "A region\u0027s sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 49 of the game\u0027s sky domes and cloud bands, across every region, with ones made from photographs of real skies, the Milky Way on two night layers with the real one from NASA\u0027s star map, and the aurora\u0027s blue and violet with a real aurora\u0027s green. Each keeps the size of the texture it replaces and the game\u0027s own brightness for it. The photographs\u0027 own sun is taken out, so the game\u0027s sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency."
+                                         "text":  "A region\u0027s sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 47 of the game\u0027s sky domes and cloud bands, across every region, with ones made from photographs of real skies, and the aurora\u0027s blue and violet with a real aurora\u0027s green. Each keeps the size of the texture it replaces and the game\u0027s own brightness for it. The photographs\u0027 own sun is taken out, so the game\u0027s sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency."
                                      },
                                      {
                                          "heading":  "What you will notice",
@@ -1194,7 +1194,7 @@
                                      },
                                      {
                                          "heading":  "Good to know",
-                                         "text":  "The rainbow, the comet, the sun\u0027s and the moon\u0027s discs and glows stay the game\u0027s. It changes boot.pak, together with Photo grade, Sharper smoke and particles, Night sky and Reflection cubes, which it keeps. The skies are made with engine\\tools\\make_cube.js and make_clouds.js from 23 CC0 panoramas by Poly Haven, the Milky Way from NASA\u0027s Deep Star Maps 2020."
+                                         "text":  "The rainbow, the comet, the sun\u0027s and the moon\u0027s discs and glows stay the game\u0027s. It changes boot.pak, together with Photo grade, Sharper smoke and particles, Night sky and Reflection cubes, which it keeps. The skies are made with engine\\tools\\make_cube.js and make_clouds.js from 23 CC0 panoramas by Poly Haven."
                                      }
                                  ]
                     },
