@@ -147,8 +147,8 @@ modded state back. <b>Leave it out</b>: that file and its cards stay as they are
 <p>Every Apply and Restore is written to <b>install.log</b> in <b>%LOCALAPPDATA%\\SnowRunnerNextGen</b>: what the program
 found and each step it took. In the result window, <b>Show the log</b> opens that folder. Send the file along when you
 report a problem.</p>
-<p>Support, questions and talk about the mod: the channel on <a href="https://discord.com/invite/MssDb2Pvcj">EnthusiastRunner's
-Discord</a>, with thanks to EnthusiastRunner for it.</p>`));
+<p>Support, questions and talk about the mod: the <a href="https://discord.gg/ARVYnkdpzK">Next Gen Discord</a>, with
+thanks to EnthusiastRunner, whose Discord hosted the channel first.</p>`));
 
 // ---- part 2: the window, from the program's own "How it works"
 const installer = '<p class="lead">' + esc(T('installer.summary', cat.installer.summary)) + '</p>' + cat.installer.sections.map((s, i) => '<h3>' + esc(T('installer.' + i + '.heading', s.heading)) + '</h3><p>' + esc(T('installer.' + i + '.text', s.text)) + '</p>').join('');
