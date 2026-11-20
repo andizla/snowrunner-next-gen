@@ -184,6 +184,12 @@ namespace SnowRunnerNextGen
                 Costs, "None while the lamps are off. With two lamps on, at most 0.15 ms per frame at 4K if glossy paint filled the whole screen (measured on an RTX 4080), so far less in a real frame.",
                 Know, "Needs Object reflections with the reflection pass.");
 
+            d["glass"] = E(
+                Does, "The game draws a window pane in two layers: a reflection, and the glass's own colour lit by the light around it. Only dirt should show that colour, but the game adds it on clean glass too, so the cab behind every window sits under an even grey veil. This scales the glass's own colour by how dirty the pane is.",
+                Notice, "Cab interiors seen through the windows are as dark and as coloured as they really are, not white or grey. Reflections on the glass are unchanged, and dirty or muddy windows keep their film.",
+                Costs, "None: one multiplication in the window shaders.",
+                Know, "Works on its own, without SnowRunner Shadows. In the game, the Graphics tab's Clear glass switch shows the game's own glass for comparison.");
+
             d["water"] = E(
                 Does, "Rivers, mud, lakes, seas and the puddles on the roads reflect what is on screen: banks, trees and trucks, not just the sky. The water's own colour gives way to the reflection at shallow angles, as with real water.",
                 Notice, "Mirrored banks and trees in calm water, trucks in the road puddles.",

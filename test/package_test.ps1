@@ -14,7 +14,8 @@ $pkg = Join-Path $root 'out\package\SnowRunnerNextGen'
 if (-not (Test-Path -LiteralPath (Join-Path $pkg 'engine\ngen.js'))) { throw 'out\package is missing: run package.ps1 first' }
 $suffix = if ($Part -eq 'all') { '' } else { '_' + ($Part -replace ',', '') }
 $base = Join-Path ([IO.Path]::GetTempPath()) ('ngen-package-test' + $suffix)
-$work = Join-Path $root ('out\enginetest' + $(if ($suffix) { '_p' + $suffix.TrimStart('_') } else { '' }))
+# NGEN_TEST_SCRATCH: another folder for the game copy (test\chain.ps1 -Scratch, when the repo's drive is short of room)
+$work = Join-Path $(if ($env:NGEN_TEST_SCRATCH) { $env:NGEN_TEST_SCRATCH } else { Join-Path $root 'out' }) ('enginetest' + $(if ($suffix) { '_p' + $suffix.TrimStart('_') } else { '' }))
 $last = $Part -eq 'all' -or (@($Part -split ',') -contains '4')
 if (Test-Path -LiteralPath $base) { [IO.Directory]::Delete($base, $true) }
 $copy = Join-Path $base 'SnowRunnerNextGen'

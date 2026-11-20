@@ -25,7 +25,7 @@
 // Settings: SnowRunnerShadows.ini next to this DLL, [Shadows] Factor=2 (the default: 3.5 costs 7 ms more at 4K; 1 = off;
 // steps of 0.5; 3.5 is the largest that fits 4608 into Direct3D 11's 16384, a larger value falls back to it). If the
 // ReShade add-on ShadowScale.addon64 is in the same folder, this DLL leaves the scaling to it. Log:
-// SnowRunnerShadows.log, rewritten each start.
+// SnowRunnerShadows_<date>_<time>.log, a new one each start (the newest 20 are kept).
 // SlopeBias=1 (default): while the scaled texture is drawn, the rasterizer states the game sets are swapped for copies with
 // the slope-scaled depth bias multiplied by the factor. That bias is per shadow map texel (the depth slope across one
 // texel), so without this a texture Factor times finer gets Factor times less bias, while the game's shadow filters still
@@ -587,7 +587,17 @@ static void LoadRealHid()
         if (!p) { missing++; p = kHidNames[i][3] == 'D' ? (void *)&HidDMissing : length ? (void *)&HidPNoLength : (void *)&HidPMissing; }
         g_hidReal[i] = p;
     }
-    Log("hid.dll functions from %ls%s, %d missing", real.c_str(), m ? "" : " (NOT LOADED)", missing);
+    // pinned for the life of the process: the stubs jump into it, and a free by anyone else (two modules are called
+    // hid.dll in this process, so a free by name can land on this one) must never unmap it. By address, not by name
+    bool pinned = false;
+    if (m)
+    {
+        HMODULE same = nullptr;
+        void *inside = (void *)m;
+        for (int i = 0; i < kHidCount; i++) { void *p = (void *)GetProcAddress(m, kHidNames[i]); if (p) { inside = p; break; } }
+        pinned = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)inside, &same) != 0;
+    }
+    Log("hid.dll functions from %ls%s, %d missing%s", real.c_str(), m ? "" : " (NOT LOADED)", missing, m ? (pinned ? ", pinned" : ", NOT pinned") : "");
 }
 
 // ---- method table patching
@@ -6516,6 +6526,28 @@ extern "C" __declspec(dllexport) const NgGraphicsApi *NgGraphicsGetApi(int versi
     return &api;
 }
 
+// a log per start, named by its date and time (SnowRunnerShadows_2026-11-19_232309.log), so a run's log outlives the
+// next start; the newest kLogsKept stay, older ones and the single SnowRunnerShadows.log of earlier versions are deleted
+static const size_t kLogsKept = 20;
+static FILE *OpenLog()
+{
+    SYSTEMTIME t; GetLocalTime(&t);
+    wchar_t name[64];
+    swprintf(name, 64, L"SnowRunnerShadows_%04d-%02d-%02d_%02d%02d%02d.log", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+    std::vector<std::wstring> old;
+    WIN32_FIND_DATAW fd;
+    const HANDLE find = FindFirstFileW((g_dir + L"SnowRunnerShadows_????-??-??_??????.log").c_str(), &fd);
+    if (find != INVALID_HANDLE_VALUE)
+    {
+        do if (wcscmp(fd.cFileName, name)) old.push_back(fd.cFileName); while (FindNextFileW(find, &fd));
+        FindClose(find);
+    }
+    std::sort(old.begin(), old.end());   // the names sort by time
+    for (size_t i = 0; i + (kLogsKept - 1) < old.size(); i++) DeleteFileW((g_dir + old[i]).c_str());
+    DeleteFileW((g_dir + L"SnowRunnerShadows.log").c_str());
+    return _wfsopen((g_dir + name).c_str(), L"w", _SH_DENYWR); // others may read it while the game runs
+}
+
 BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
@@ -6525,7 +6557,7 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
         GetModuleFileNameW(self, path, MAX_PATH);
         g_dir = path;
         g_dir.resize(g_dir.find_last_of(L'\\') + 1);
-        g_log = _wfsopen((g_dir + L"SnowRunnerShadows.log").c_str(), L"w", _SH_DENYWR); // others may read it while the game runs
+        g_log = OpenLog();
         Log("SnowRunner Shadows loaded as %ls", path);
         LoadRealHid();
         ReadSettings();

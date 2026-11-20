@@ -931,7 +931,16 @@ static int SsrReplay(ID3D11Device *dev, ID3D11DeviceContext *ctx, const char *fo
 static std::string ReadDllLog()
 {
     std::string text;
-    FILE *f = _wfsopen((ExeDir() + L"SnowRunnerShadows.log").c_str(), L"rb", _SH_DENYNO);
+    // a log per start, named by date and time: the newest by name is this run's
+    std::wstring newest;
+    WIN32_FIND_DATAW fd;
+    const HANDLE find = FindFirstFileW((ExeDir() + L"SnowRunnerShadows_????-??-??_??????.log").c_str(), &fd);
+    if (find != INVALID_HANDLE_VALUE)
+    {
+        do if (newest < fd.cFileName) newest = fd.cFileName; while (FindNextFileW(find, &fd));
+        FindClose(find);
+    }
+    FILE *f = newest.empty() ? nullptr : _wfsopen((ExeDir() + newest).c_str(), L"rb", _SH_DENYNO);
     if (!f) return text;
     char buf[4096];
     for (size_t n; (n = fread(buf, 1, sizeof buf, f)) > 0;) text.append(buf, n);
