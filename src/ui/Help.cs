@@ -190,6 +190,12 @@ namespace SnowRunnerNextGen
                 Costs, "None: one multiplication in the window shaders.",
                 Know, "Works on its own, without SnowRunner Shadows. In the game, the Graphics tab's Clear glass switch shows the game's own glass for comparison.");
 
+            d["cabshade"] = E(
+                Does, "The game lights the inside of a cab like open ground: nothing shades the seats, the dashboard and the roof liner from the sky, so at dusk and under clouds the interior stands grey behind the glass. This darkens what lies just behind a window pane, as a roof would.",
+                Notice, "Seen from outside, cab interiors are darker and keep their colours, most at dusk, at night and in rain. Reflections, dirt and mud on the glass are unchanged, and the open ground seen through two windows keeps its light.",
+                Costs, "Next to none: one depth read per window pixel.",
+                Know, "Needs SnowRunner Shadows. It works from outside cameras; the view from the driver's seat is unchanged. It dims everything behind the pane by the same share, sunlit seats included. An open cab without glass gets no shade. In the game, the Graphics tab's Cab shade switch turns it off for comparison.");
+
             d["water"] = E(
                 Does, "Rivers, mud, lakes, seas and the puddles on the roads reflect what is on screen: banks, trees and trucks, not just the sky. The water's own colour gives way to the reflection at shallow angles, as with real water.",
                 Notice, "Mirrored banks and trees in calm water, trucks in the road puddles.",

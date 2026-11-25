@@ -117,7 +117,8 @@ nothing crosses an edge:</p>
 <p>where s is the grid step (2 with SSRHalf). From the weighted samples come the mean &mu; and the spread &sigma;
 (standard deviation) per channel.</p>
 <p>Then the history. The pixel is found where it was last frame: by the camera's reprojection, or, on a moving truck, by the
-object motion decoded from the game's own velocity buffer. Last frame's result there is used only if last frame's depth
+object motion decoded from the game's own velocity buffer (SSRMotion = 1; off by default, since decoded motion made the
+reflections on objects flicker in the game, so every pixel is reprojected by the camera). Last frame's result there is used only if last frame's depth
 agrees: within 2 % + 5 cm for still things, 10 % + 30 cm along a moving object. The history is then pulled toward this
 frame's mean until it lies within the samples' spread (variance clipping, Salvi 2016). All channels move by the same factor,
 so the result stays a blend of colours that are actually there:</p>

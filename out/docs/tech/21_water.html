@@ -120,3 +120,34 @@ and the mirror term, the lamps' highlights and the wet pane are untouched. The p
 shader's output back to the albedo, not by matching text, so it holds after the shadow edges, Sky ambient, Bounce light, the
 reflection pass, Contact shadows and Headlight shadows have changed the same shaders: it is patched last, and was checked
 after all 64 combinations of those modules. Cost: one multiplication per glass pixel.</p>
+<h2 id="t-cabshade">Cab shade</h2>
+<p class="lead">Card: Cab shade. Cab interiors seen through the windows sit in shade, as under a roof.</p>
+<p>The game lights every solid surface with the sky's ambient light as if it stood on open ground. Inside a cab nothing
+takes that light away: the roof that should shade the seats is off screen or behind the camera, and the glass is not in the
+depth the ambient occlusion works from. So at dusk, at night and under clouds the seats, the dashboard and the roof liner
+stand grey behind the glass. It is the game's own picture; it shows with the game's original shaders.</p>
+<p>The game's shaders name nothing that marks a pixel as the inside of a cab, so the module takes the panes themselves as
+the mark. A pane is drawn after the lit scene and blended over it: the result is the pane's colour plus the scene times one
+minus the pane's alpha. The same 14 window shaders as Clear glass get a small helper behind their last instruction. It
+reads the scene's depth at the pixel (SnowRunner Shadows' copy of the previous frame's linear depth, in metres) and the
+pane's own depth, and where the scene lies a short way behind the pane, between 5 cm and 3 m, fading out to 4.5 m, it raises
+the alpha so the scene behind loses 60 % of its light. The pane's colour is not touched, so its reflection, its dirt and its
+mud stay as they are.</p>
+<p>What follows from the method:</p>
+<ul>
+<li>The open ground seen through two panes, in one window and out the other, lies far behind the first pane and keeps its
+light. So does the sky.</li>
+<li>From the driver's seat the camera is inside, and what lies behind a pane is the bonnet and the road. A pane nearer than
+1.2 m to the camera gets no shade, growing to the full share at 2.2 m, so the cockpit view is unchanged.</li>
+<li>The shade takes the same share of all the light behind the pane, the sun's and the lamps' with the sky's, since the lit
+colour is already mixed when the pane is drawn.</li>
+<li>The depth is the previous frame's, so on a fast camera move the shade can trail the cab's edge by one frame.</li>
+<li>A cab with no glass gets no shade, and without SnowRunner Shadows no depth is bound and the panes draw as before.</li>
+<li>The game draws its panes with an additive blend (ONE, ONE, as logged in the game), which ignores the alpha. While a
+Cab shade pane draws, SnowRunner Shadows sets a copy of that state that lays the pane over what is behind it (ONE,
+INV_SRC_ALPHA), and puts the game's own back at the next shader. The pane's colour is still added in full; its alpha now
+covers what lies behind, so dirt and mud cover a little more than before.</li>
+</ul>
+<p>An offline test (test\glass_scene\cabshade.ps1) draws the game's pane shader with the helper on the GPU: a cab 1 m behind
+a pane 5 m away loses its share, and the ground 60 m behind, a pane 0.8 m from the camera and a frame without the depth come
+out unchanged.</p>

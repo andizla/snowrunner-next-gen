@@ -58,13 +58,17 @@ static ID3D11ShaderResourceView *Cube(ID3D11Device *dev, float r, float g, float
 
 int wmain(int argc, wchar_t **argv)
 {
-    if (argc < 3) { std::fprintf(stderr, "usage: glass <pane.cso> <out.bmp> [--size W H] [--no-pane]\n"); return 2; }
-    UINT W = 640, H = 400; bool pane = true;
+    if (argc < 3) { std::fprintf(stderr, "usage: glass <pane.cso> <out.bmp> [--size W H] [--no-pane] [--pane-w M] [--scene-z M] [--back]\n"); return 2; }
+    UINT W = 640, H = 400; bool pane = true, back = false;   // back: the pane seen from its inner side (SV_IsFrontFace 0)
+    float paneW = 1.0f, sceneZ = 0.0f;   // the pane's view depth (SV_Position.w); the depth behind it bound at t121 (0: none, as without SnowRunner Shadows)
     for (int i = 3; i < argc; i++)
     {
         std::wstring a = argv[i];
         if (a == L"--size" && i + 2 < argc) { W = (UINT)_wtoi(argv[i + 1]); H = (UINT)_wtoi(argv[i + 2]); i += 2; }
         else if (a == L"--no-pane") pane = false;
+        else if (a == L"--back") back = true;
+        else if (a == L"--pane-w" && i + 1 < argc) paneW = (float)_wtof(argv[++i]);
+        else if (a == L"--scene-z" && i + 1 < argc) sceneZ = (float)_wtof(argv[++i]);
         else { std::fwprintf(stderr, L"unknown option %s\n", argv[i]); return 2; }
     }
     std::vector<char> ps;
@@ -82,7 +86,7 @@ int wmain(int argc, wchar_t **argv)
     // a full-screen triangle with the pane shader's inputs, in its register order (v0..v6, then SV_Position)
     const char *vsSrc =
         "struct O { float4 uv : TEXCOORD0; float3 pos : TEXCOORD1; float3 view : TEXCOORD2; float3 t0 : TEXCOORD4; float3 t1 : TEXCOORD5; float3 t2 : TEXCOORD6; float4 col : COLOR0; float4 p : SV_Position; };\n"
-        "O main(uint id : SV_VertexID) { O o; float2 q = float2((id << 1) & 2, id & 2); o.p = float4(q * float2(2, -2) + float2(-1, 1), 0.5, 1);\n"
+        "O main(uint id : SV_VertexID) { O o; float2 q = float2((id << 1) & 2, id & 2); o.p = float4(q * float2(2, -2) + float2(-1, 1), 0.5, 1) * %PW%;\n"
         "  o.uv = float4(q, 0.5, 0.5); o.pos = float3(q * 2 - 1, 3); o.view = normalize(float3(0.15, -0.25, 1));\n"
         "  o.t0 = float3(1, 0, 0); o.t1 = float3(0, 1, 0); o.t2 = float3(0, 0, -1);\n"   // the pane's normal (t0.z, t1.z, t2.z) = (0, 0, -1): facing the camera
         "  o.col = float4(0.3, 0, 0, 0); return o; }\n";   // x: the mud amount (mud where the decal's alpha is low), y: no wet
@@ -97,7 +101,8 @@ int wmain(int argc, wchar_t **argv)
         "  return float4(c, 1); }\n";
     std::string cab = cabSrc;
     for (auto [k, v] : { std::pair<std::string, UINT>{ "%W%", W }, { "%H%", H } }) cab.replace(cab.find(k), k.size(), std::to_string(v) + ".0");
-    ID3DBlob *vsb = Compile(vsSrc, "vs_5_0"), *cabb = Compile(cab.c_str(), "ps_5_0");
+    std::string vsText = vsSrc; { char t[32]; std::snprintf(t, sizeof t, "%.4f", paneW); vsText.replace(vsText.find("%PW%"), 4, t); }
+    ID3DBlob *vsb = Compile(vsText.c_str(), "vs_5_0"), *cabb = Compile(cab.c_str(), "ps_5_0");
     ID3D11VertexShader *vs = nullptr; ID3D11PixelShader *cabPs = nullptr, *panePs = nullptr;
     dev->CreateVertexShader(vsb->GetBufferPointer(), vsb->GetBufferSize(), nullptr, &vs);
     dev->CreatePixelShader(cabb->GetBufferPointer(), cabb->GetBufferSize(), nullptr, &cabPs);
@@ -150,6 +155,8 @@ int wmain(int argc, wchar_t **argv)
         ctx->PSSetShaderResources(30, 1, &detail); ctx->PSSetShaderResources(32, 1, &wet); ctx->PSSetShaderResources(57, 1, &light);
         ctx->PSSetShaderResources(59, 1, &mud); ctx->PSSetShaderResources(86, 1, &sky); ctx->PSSetShaderResources(88, 1, &brdf);
         ctx->PSSetShaderResources(90, 1, &diffuse); ctx->PSSetShaderResources(94, 1, &pbr);
+        // t121: the scene's linear depth, as SnowRunner Shadows binds it for a shader that declares it (Cab shade)
+        if (sceneZ > 0) { const float z = sceneZ; ID3D11ShaderResourceView *depth = Tex(dev, W, H, [z](float, float, float *o) { o[0] = o[1] = o[2] = o[3] = z; }); ctx->PSSetShaderResources(121, 1, &depth); }
         D3D11_SAMPLER_DESC sd = {}; sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR; sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_WRAP; sd.MaxLOD = D3D11_FLOAT32_MAX;
         ID3D11SamplerState *smp = nullptr; dev->CreateSamplerState(&sd, &smp);
         for (UINT s = 0; s < 16; s++) ctx->PSSetSamplers(s, 1, &smp);
@@ -161,6 +168,9 @@ int wmain(int argc, wchar_t **argv)
         t.SrcBlendAlpha = D3D11_BLEND_ONE; t.DestBlendAlpha = D3D11_BLEND_ZERO; t.BlendOpAlpha = D3D11_BLEND_OP_ADD; t.RenderTargetWriteMask = 0xF;
         ID3D11BlendState *blend = nullptr; dev->CreateBlendState(&bd, &blend);
         ctx->OMSetBlendState(blend, nullptr, 0xFFFFFFFF);
+        // the pane is drawn unculled, as a two-sided mesh is; --back turns its winding into the back face's
+        D3D11_RASTERIZER_DESC rd = {}; rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.FrontCounterClockwise = back ? TRUE : FALSE; rd.DepthClipEnable = TRUE;
+        ID3D11RasterizerState *rs = nullptr; dev->CreateRasterizerState(&rd, &rs); ctx->RSSetState(rs);
         ctx->PSSetShader(panePs, nullptr, 0); ctx->Draw(3, 0);
     }
 

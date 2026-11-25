@@ -283,7 +283,7 @@ $r = Apply $everything
 Check 'water sun off again: the default build byte for byte' ((Hash (Join-Path $paks 'shader.pak')) -eq $shaderDefault) 'True'
 
 'clear window glass, with headlight shadows (the window glass''s other module), both off in this default set'
-$withGlass = @($default + 'headshadow' + 'glass')
+$withGlass = @($default + 'headshadow' + 'glass' + 'cabshade')
 $glass = [ordered]@{}
 foreach ($k in $everything.Keys) { $glass[$k] = $everything[$k] }
 $glass['shader'] = $withGlass
@@ -294,6 +294,7 @@ $twinsJs2 = Join-Path $(if ($Engine) { Join-Path $Engine 'tools' } else { Join-P
 $glassTwins = (& $node $twinsJs2 inspect (Join-Path $bin 'SnowRunnerShadows.stock')) | ConvertFrom-Json
 # all 14 panes, after the shadow edges, sky ambient, bounce light, the reflection pass, contact and headlight shadows
 Check 'clear glass: the 14 window glass shaders in its switch' ([string](@($glassTwins.modules | Where-Object { $_.id -eq 'glass' })[0].shaders)) '14'
+Check 'cab shade: the same 14 shaders in its switch' ([string](@($glassTwins.modules | Where-Object { $_.id -eq 'cabshade' })[0].shaders)) '14'
 $r = Apply $everything
 Check 'clear glass off again: the default build byte for byte' ((Hash (Join-Path $paks 'shader.pak')) -eq $shaderDefault) 'True'
 

@@ -26,7 +26,7 @@ Shot 'narrow' @('--scale', '1', '--size', '560x0')
 Shot 'wide' @('--scale', '1', '--size', '1600x0')
 
 # every (?) pop-up, and the one with pictures at 200 and 225 %
-$ids = 'shadows', 'edges', 'blocker', 'contact', 'headshadow', 'gtao', 'ambient', 'gi', 'objrefl', 'headglow', 'glass', 'water', 'rivertint', 'glare', 'cubes', 'skies', 'fog', 'weather', 'smoke', 'smokeshade', 'particles', 'debris', 'sky', 'stars', 'tonemap', 'bloom', 'scenery', 'grass', 'logos', 'installer'
+$ids = 'shadows', 'edges', 'blocker', 'contact', 'headshadow', 'gtao', 'ambient', 'gi', 'objrefl', 'headglow', 'glass', 'cabshade', 'water', 'rivertint', 'glare', 'cubes', 'skies', 'fog', 'weather', 'smoke', 'smokeshade', 'particles', 'debris', 'sky', 'stars', 'tonemap', 'bloom', 'scenery', 'grass', 'logos', 'installer'
 foreach ($id in $ids) { Shot "help-$id" @('--scale', '1', '--help', $id) }
 Shot 'help-gtao-2' @('--scale', '2', '--help', 'gtao')
 Shot 'help-gtao-2.25' @('--scale', '2.25', '--help', 'gtao')
@@ -50,9 +50,9 @@ try {
   function Note { $bar.GetType().GetField('note', $flags).GetValue($bar) }
 
   # on by default: every card but Bounce light, Headlight glare cap and Volumetric fog
-  $defaults = 'shadows edges blocker contact headshadow gtao aofar ambient fill objrefl headglow glass water puddles rivertint crestglow cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
+  $defaults = 'shadows edges blocker contact headshadow gtao aofar ambient fill objrefl headglow glass cabshade water puddles rivertint crestglow cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'defaults' (Ticked) $defaults
-  Check 'count' (Note) '32 of 35 selected'
+  Check 'count' (Note) '33 of 36 selected'
   # the options' defaults: the rebuilt shadow edges and the game's own shadow size
   $keyOf = { param($id) $c = $cards[$id]; $c.Module.Options[0].Keys[$c.Choice[0]] }
   Check 'shadow edges: rebuilt by default' (& $keyOf 'edges') 'revec'
@@ -142,7 +142,7 @@ try {
   # Headlights in reflections goes with Object reflections and Sun glow through waves with Water reflections, which
   # both need SnowRunner Shadows
   Check 'untick SnowRunner Shadows' (Ticked) 'edges blocker gtao aofar ambient fill glass rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
-  Check 'its note' (Note) 'Contact shadows, Headlight shadows, Object reflections, Headlights in reflections, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
+  Check 'its note' (Note) 'Contact shadows, Headlight shadows, Object reflections, Headlights in reflections, Cab shade, Water reflections, Sun glow through waves and Wet ground reflections need SnowRunner Shadows: unticked them too.'
   $cards['gi'].ToggleByUser()
   Check 'tick Bounce light' (Ticked) 'shadows edges blocker gtao aofar ambient fill gi glass rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'its note' (Note) 'Bounce light needs SnowRunner Shadows: ticked it too.'
@@ -150,9 +150,9 @@ try {
   Check 'untick GTAO' (Ticked) 'shadows edges blocker ambient fill glass rivertint cubes weather maps smoke smokeshade particles debris sky skies stars tonemap bloom grade scenery grass logos'
   Check 'its note' (Note) 'Wide occlusion and Bounce light need GTAO: unticked them too.'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($false))
-  Check 'clear' (Note) '0 of 35 selected'
+  Check 'clear' (Note) '0 of 36 selected'
   $viewType.GetMethod('SetAll', $flags).Invoke($view, @($true))
-  Check 'select all' (Note) '35 of 35 selected'
+  Check 'select all' (Note) '36 of 36 selected'
   foreach ($c in $list.Cards) { $c.Reset() }
   Check 'defaults again' (Ticked) $defaults
 
@@ -182,10 +182,10 @@ try {
   $has.Debris = 'ours'; $has.DebrisFactor = '4'; $has.Cubes = 'ours'; $has.Skies = 'ours'
   $viewType.GetField('installed', $flags).SetValue($view, $has)
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: the default set as installed' (Note) "32 of 35 selected  $([char]0xB7)  as installed"
+  Check 'bar: the default set as installed' (Note) "33 of 36 selected  $([char]0xB7)  as installed"
   $has.Outdated.Add('shader')
   $viewType.GetMethod('ShowCount', $flags).Invoke($view, @())
-  Check 'bar: a newer build of an installed part' (Note) "32 of 35 selected  $([char]0xB7)  Apply to update the game to this version"
+  Check 'bar: a newer build of an installed part' (Note) "33 of 36 selected  $([char]0xB7)  Apply to update the game to this version"
   $said = $viewType.GetMethod('Describe', [Reflection.BindingFlags]'NonPublic,Static').Invoke($null, @($has))
   Check 'header: says that Apply updates the game' ($said -match 'Note: this installer has a newer build of what is installed: Apply updates the game$') 'True'
   $viewType.GetField('installed', $flags).SetValue($view, $null)

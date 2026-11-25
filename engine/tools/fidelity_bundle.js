@@ -76,6 +76,9 @@
 //            albedo by the pane's alpha (its dirt), so a clean pane adds only its reflection and no ambient-lit grey veil
 //            over the cab, while dirt and mud keep their film; one instruction, its place found by data flow; patched
 //            last of all, on top of whatever the other modules made of each pane; no helper, no DLL needed
+//   cabshade tools\patch_cabshade.js + glass\cabshade.cso: the same 14 panes raise their alpha where what lies a
+//            short way behind them (the previous frame's depth, t121) is the cab, so the cab's inside loses a share of
+//            the open-ground light the game gives it; after glass; needs SnowRunner Shadows (t121); not in DEFAULT
 //   sssr    tools\patch_gbuffer.js + sssr\gbuffer.cso, then tools\patch_object_ssr.js + sssr\object_sssr.cso: the 3229
 //            object materials write the reflection pass's G-buffer (render target 7: normal, sqrt roughness) and read
 //            the pass's result (SnowRunner Shadows SSR=1: t123 reflections, t124 motion) at their cubemap sample;
@@ -132,7 +135,7 @@ const R = (...p) => path.join(W, 'replacements', ...p);
 // builds them from the player's shader.pak (same folder names), else replacements\; our own helpers always come from R()
 const SETS = process.env.SR_SETS_DIR || path.join(W, 'replacements');
 const S = (...p) => path.join(SETS, ...p);
-const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'watersun', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokemore', 'smokeshade', 'sssr', 'headglow', 'contact', 'headshadow', 'glass'];
+const ALL = ['gtao', 'aofar', 'crisp', 'revec', 'blocker', 'seam', 'ambient', 'fog', 'fogsun', 'tonemap', 'bloom', 'water', 'rivertint', 'crestglow', 'watersun', 'glare', 'puddles', 'gi', 'reflections', 'smoke', 'smokemore', 'smokeshade', 'sssr', 'headglow', 'contact', 'headshadow', 'glass', 'cabshade'];
 // each module's name in the NEXT GEN menu's Graphics tab, where SnowRunner Shadows lists one switch per module: the
 // installer's card title, or the card and its row for a module that is a row of a card; carried in the stock twins
 // table (tools\stock_twins.js), so the DLL keeps no list of its own. The test run_tests.ps1 holds them to the catalog
@@ -141,7 +144,7 @@ const TITLES = { gtao: 'GTAO', aofar: 'Wide occlusion', crisp: 'Shadow edges: 16
     water: 'Water reflections', rivertint: 'River depth colour', crestglow: 'Sun glow through waves', watersun: 'Water reflections: sun glitter off in shade',
     glare: 'Headlight glare cap', puddles: 'Wet ground reflections', gi: 'Bounce light', reflections: 'Object reflections: march only', smoke: 'Smoke glow',
     smokemore: 'Smoke glow: more kinds of smoke', smokeshade: 'Smoke shape and softer edges', sssr: 'Object reflections', headglow: 'Headlights in reflections',
-    contact: 'Contact shadows', headshadow: 'Headlight shadows', glass: 'Clear glass' };
+    contact: 'Contact shadows', headshadow: 'Headlight shadows', glass: 'Clear glass', cabshade: 'Cab shade' };
 const SHADOW_MODULES = ['crisp', 'revec', 'blocker', 'seam'];   // the modules the sun shadow filter set is built from
 const shadowModules = (modules) => modules.filter((m) => SHADOW_MODULES.includes(m));
 // the module table and who changed what, for stock_twins.js's buildTwins: build()'s who (a main cache slot -> the modules
@@ -158,7 +161,7 @@ const whoOf = (modules, r) => ({ modules: modules.map((id) => ({ id, title: TITL
 //   watersun     the sun's highlight out in the sun's shadow on water: never seen to change anything in the game
 //   headshadow   the headlights' shadows: not looked at in the game yet
 // The fill light and the photo grade, defaults too, live in initial.pak and boot.pak (the installer's cards)
-const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun' && m !== 'smokemore' && m !== 'watersun' && m !== 'headshadow');
+const DEFAULT = ALL.filter((m) => m !== 'reflections' && m !== 'glare' && m !== 'crisp' && m !== 'fogsun' && m !== 'smokemore' && m !== 'watersun' && m !== 'headshadow' && m !== 'cabshade');
 
 // known names in ALL's order, "shadows" (older notes and commands) as crisp + blocker, gtao with gi (the bounce light is
 // measured by the GTAO pass); throws on an unknown name
@@ -297,11 +300,11 @@ function build(orig, modules)
     const who = new Map(), whoSide = new Map([...hdr.keys()].map((h) => [h, planWho.get(h)]));
     const credit = (i, ...ids) => { if (!who.has(i)) who.set(i, new Set()); for (const id of ids) who.get(i).add(id); };
     const water = modules.includes('water'), tint = modules.includes('rivertint'), river = water || tint;
-    const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), glowWide = modules.includes('smokemore'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact'), headShadow = modules.includes('headshadow'), clearGlass = modules.includes('glass');
-    let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, lakeHits = 0, lakePlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, headHits = 0, headPlanned = 0, glassHits = 0, glassPlanned = 0, checked = 0;
+    const cap = modules.includes('glare'), puddles = modules.includes('puddles'), wet = cap || puddles, bounce = modules.includes('gi'), refl = modules.includes('reflections'), glow = modules.includes('smoke'), glowWide = modules.includes('smokemore'), shape = modules.includes('smokeshade'), sssr = modules.includes('sssr'), cont = modules.includes('contact'), headShadow = modules.includes('headshadow'), clearGlass = modules.includes('glass'), cabShade = modules.includes('cabshade');
+    let out = orig, mainHits = 0, hdrHits = 0, waterHits = 0, waterPlanned = 0, lakeHits = 0, lakePlanned = 0, glareHits = 0, glarePlanned = 0, puddleHits = 0, decalHits = 0, decalPlanned = 0, giHits = 0, giPlanned = 0, reflHits = 0, reflPlanned = 0, smokeHits = 0, smokePlanned = 0, shapeHits = 0, shapePlanned = 0, sssrHits = 0, sssrPlanned = 0, sssrGlass = 0, contactHits = 0, contactPlanned = 0, headHits = 0, headPlanned = 0, glassHits = 0, glassPlanned = 0, cabHits = 0, cabPlanned = 0, checked = 0;
     const z = pak.parseZip(orig);
     // whether any module touches the main cache (the check of the untouched entries at the end asks the same)
-    const mainRebuilt = !!(main.size || river || wet || bounce || refl || glow || shape || sssr || cont || headShadow || clearGlass);
+    const mainRebuilt = !!(main.size || river || wet || bounce || refl || glow || shape || sssr || cont || headShadow || clearGlass || cabShade);
     if (mainRebuilt)
     {
         const ent = z.entries.find((x) => x.name.endsWith(pak.ENTRY_TAIL));
@@ -583,6 +586,23 @@ function build(orig, modules)
                 else console.log('note: window glass ' + pak.hex8(pak.crc32(own)) + ' left as it was: ' + r.reason);
             });
         }
+        // cab shade (module cabshade): the same panes' alpha raised over the cab behind them (tools\patch_cabshade.js),
+        // after clear glass, on top of whatever each pane is by now
+        if (cabShade)
+        {
+            const shade = require('./patch_cabshade.js'); // here, not at the top: a package without it still builds every other module
+            const set = new Set(shade.targets());
+            const helper = fs.readFileSync(R('glass', 'cabshade.cso'));
+            parsed.blobs.forEach((bl, i) =>
+            {
+                const own = inflated.subarray(bl.off, bl.off + bl.size);
+                if (!set.has(pak.hex8(pak.crc32(own)))) return;
+                cabPlanned++;
+                const r = shade.patchCabShade(repl.get(i) || Buffer.from(own), helper);
+                if (r.blob) { repl.set(i, r.blob); cabHits++; credit(i, 'cabshade'); }
+                else console.log('note: window glass ' + pak.hex8(pak.crc32(own)) + ' gets no cab shade: ' + r.reason);
+            });
+        }
         // no changed shader may read an input component it does not declare (see the top)
         for (const [i, blob] of repl)
         {
@@ -625,7 +645,7 @@ function build(orig, modules)
         if (!changed && !pak.readEntry(orig, e).equals(pak.readEntry(out, e2))) throw new Error('entry changed: ' + e.name);
         if (pak.crc32(pak.readEntry(out, e2)) !== e2.crc) throw new Error('crc check failed: ' + e.name);
     }
-    return { out, who, whoSide, mainHits, hdrHits, mainPlanned: main.size, hdrPlanned: hdr.size, waterHits, waterPlanned, lakeHits, lakePlanned, glareHits, glarePlanned, puddleHits, decalHits, decalPlanned, giHits, giPlanned, reflHits, reflPlanned, smokeHits, smokePlanned, shapeHits, shapePlanned, sssrHits, sssrPlanned, sssrGlass, contactHits, contactPlanned, headHits, headPlanned, glassHits, glassPlanned, checked };
+    return { out, who, whoSide, mainHits, hdrHits, mainPlanned: main.size, hdrPlanned: hdr.size, waterHits, waterPlanned, lakeHits, lakePlanned, glareHits, glarePlanned, puddleHits, decalHits, decalPlanned, giHits, giPlanned, reflHits, reflPlanned, smokeHits, smokePlanned, shapeHits, shapePlanned, sssrHits, sssrPlanned, sssrGlass, contactHits, contactPlanned, headHits, headPlanned, glassHits, glassPlanned, cabHits, cabPlanned, checked };
 }
 
 // what a build holds, one line
@@ -643,6 +663,7 @@ function summary(modules, r, gtao)
         (r.contactPlanned ? ', contact shadow receivers ' + r.contactHits + ' of ' + r.contactPlanned : '') +
         (r.headPlanned ? ', headlight shadow receivers ' + r.headHits + ' of ' + r.headPlanned : '') +
         (r.glassPlanned ? ', clear window glass ' + r.glassHits + ' of ' + r.glassPlanned : '') +
+        (r.cabPlanned ? ', cab shade ' + r.cabHits + ' of ' + r.cabPlanned : '') +
         (r.checked ? '; ' + r.checked + ' changed shaders checked' : '') +
         '; shader.pak ' + r.out.length + ' bytes';
 }
