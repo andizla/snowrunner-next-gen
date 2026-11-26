@@ -4,13 +4,16 @@
 # package test's four parts together (a game copy is about 8 GB, so the two sets of four do not overlap); then the
 # parts' folders are deleted when every step passed. A step fails by throwing, not by the exit code of its last
 # command (the package test's last one exits 1 on purpose).
-# usage: powershell -NoProfile -ExecutionPolicy Bypass -File test\chain.ps1 [-Old <last release's zip>]
-param([string]$Old = (Join-Path $env:USERPROFILE 'Downloads\SnowRunnerNextGen.zip'), [string]$Originals = $env:SR_ORIGINALS)
+# usage: powershell -NoProfile -ExecutionPolicy Bypass -File test\chain.ps1 [-Old <last release's zip>] [-Scratch <folder>]
+param([string]$Old = (Join-Path $env:USERPROFILE 'Downloads\SnowRunnerNextGen.zip'), [string]$Originals = $env:SR_ORIGINALS, [string]$Scratch = '')
 $ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $root
 if (-not $Originals) { $Originals = Join-Path $env:LOCALAPPDATA 'SnowRunnerNextGen\games\349e21402e31' }
 $env:SR_ORIGINALS = $Originals
+# -Scratch: a folder on another drive for the game copies and %TEMP% (eight copies of about 8 GB in two sets of four)
+$work = Join-Path $root 'out'
+if ($Scratch) { $work = $Scratch; $env:NGEN_TEST_SCRATCH = $Scratch; $tmp = Join-Path $Scratch 'temp'; New-Item -ItemType Directory -Force -Path $tmp | Out-Null; $env:TEMP = $tmp; $env:TMP = $tmp }
 $dir = Join-Path $root 'out\chain'
 if (Test-Path -LiteralPath $dir) { [IO.Directory]::Delete($dir, $true) }
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -40,14 +43,14 @@ if ($script:bad) { Note 'chain stopped'; exit 1 }
 Wait-Step (Start-Step 'package' '.\package.ps1 -Zip')
 if ($script:bad) { Note 'chain stopped'; exit 1 }
 $first = @(Start-Step 'run_tests' '.\test\run_tests.ps1'; Start-Step 'release_test' (".\test\release_test.ps1 -Old '" + $Old + "'"))
-$engine = @(foreach ($n in 1..4) { Start-Step "engine_test_$n" (".\test\engine_test.ps1 -Part $n -Work '" + (Join-Path $root "out\enginetest_e$n") + "'") })
+$engine = @(foreach ($n in 1..4) { Start-Step "engine_test_$n" (".\test\engine_test.ps1 -Part $n -Work '" + (Join-Path $work "enginetest_e$n") + "'") })
 foreach ($s in $engine) { Wait-Step $s }
-foreach ($n in 1..4) { $w = Join-Path $root "out\enginetest_e$n"; if (Test-Path -LiteralPath $w) { [IO.Directory]::Delete($w, $true) } }
+foreach ($n in 1..4) { $w = Join-Path $work "enginetest_e$n"; if (Test-Path -LiteralPath $w) { [IO.Directory]::Delete($w, $true) } }
 $package = @(foreach ($n in 1..4) { Start-Step "package_test_$n" ".\test\package_test.ps1 -Part $n" })
 foreach ($s in $first + $package) { Wait-Step $s }
 if (-not $script:bad) {
     foreach ($n in 1..4) {
-        foreach ($w in (Join-Path $root "out\enginetest_p$n"), (Join-Path ([IO.Path]::GetTempPath()) "ngen-package-test_$n")) { if (Test-Path -LiteralPath $w) { [IO.Directory]::Delete($w, $true) } }
+        foreach ($w in (Join-Path $work "enginetest_p$n"), (Join-Path ([IO.Path]::GetTempPath()) "ngen-package-test_$n")) { if (Test-Path -LiteralPath $w) { [IO.Directory]::Delete($w, $true) } }
     }
 }
 Note $(if ($script:bad) { 'chain FAILED: ' + ($script:bad -join ', ') } else { 'chain passed' })

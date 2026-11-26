@@ -25,7 +25,7 @@
 // Settings: SnowRunnerShadows.ini next to this DLL, [Shadows] Factor=2 (the default: 3.5 costs 7 ms more at 4K; 1 = off;
 // steps of 0.5; 3.5 is the largest that fits 4608 into Direct3D 11's 16384, a larger value falls back to it). If the
 // ReShade add-on ShadowScale.addon64 is in the same folder, this DLL leaves the scaling to it. Log:
-// SnowRunnerShadows.log, rewritten each start.
+// SnowRunnerShadows_<date>_<time>.log, a new one each start (the newest 20 are kept).
 // SlopeBias=1 (default): while the scaled texture is drawn, the rasterizer states the game sets are swapped for copies with
 // the slope-scaled depth bias multiplied by the factor. That bias is per shadow map texel (the depth slope across one
 // texel), so without this a texture Factor times finer gets Factor times less bias, while the game's shadow filters still
@@ -250,6 +250,9 @@ static bool g_ssrProbe = false;     // ini SSRProbe: the order of a few frames' 
 static bool g_ssrTiming = false;    // ini SSRTiming: the reflection pass's GPU time and ray counts, a log line every 10 s (0 = not timed)
 static UINT g_depthProbe = 0;       // ini DepthProbe (dev): 1 = with the probe's first recording, N >= 2 = N s after the AO pass first ran (see DPArm)
 static bool g_ssrLobe = false;      // ini SSRLobe: rays drawn from the GGX lobe (0: the mirror direction, roughness only blurs the hit)
+static bool g_ssrMotion = false;    // ini SSRMotion: t124 decoded at the game's TAA (0, the default: nothing decoded, every
+                                    // reprojection by the camera, as in every release up to 1.1.1, when the TAA on the
+                                    // immediate context went unseen; decoded, object reflections flickered in the game)
 static float g_ssrRoughMax = 0.85f, g_ssrThickness = 0.3f, g_ssrTemporal = 0.9f, g_ssrCone = 0.5f; // ini SSRRoughMax etc. (0.85: the paint reaches ~0.8; the composite's gate ends at 0.81)
 static float g_ssrUnder = 2.5f, g_ssrUnderShade = 0.5f, g_ssrUnderNear = 25.0f, g_ssrUnderFar = 50.0f; // ini SSRUnder etc.: a ray deeper behind a surface than
                                     // the thickness went under that object and takes its colour, darkened (ssr_trace.hlsl);
@@ -312,6 +315,8 @@ static void ProfResume(ID3D11DeviceContext *ctx, ContextState *s);
 static void DumpRequest(const char *why);
 static void DumpTick(ULONGLONG now);
 static void ProbeTick(ULONGLONG now);
+static void DlStart(const char *key);
+static void DlTick(ULONGLONG now);
 static void DumpInputs(ID3D11DeviceContext *ctx, ContextState *s);
 static void DumpOutputs(ID3D11DeviceContext *ctx, ContextState *s, const char *when);
 static std::atomic<uint64_t> g_atlasBinds{ 0 }, g_restores{ 0 }, g_resets{ 0 };
@@ -320,6 +325,11 @@ static std::atomic<int> g_bindLines{ 0 };
 // ---- trace (ini Trace=1): what happens around the shadow texture, in bursts of 0.4 s every 30 s, into
 // SnowRunnerShadows.trace.log. Watches only; the extra hooks are not installed without Trace=1.
 static bool g_trace = false;
+// draw list (ini DrawList=1, dev): F9 records every draw of the next 0.15 s, one line per distinct pixel shader and
+// state set (blend, depth and stencil, rasterizer, render targets) in the order first seen per context, into
+// SnowRunnerShadows_drawlist_<time>.txt next to the log. For looking at how the game draws a thing a frame capture
+// cannot reach (RenderDoc does not run this game). Off by default: it hooks every draw while on
+static bool g_drawList = false;
 static FILE *g_traceFile = nullptr;
 static std::mutex g_traceLock;
 static std::atomic<ULONGLONG> g_burstUntil{ 0 };    // read without the lock on the hot paths
@@ -409,6 +419,86 @@ static std::vector<TwinModule> g_twinModules;
 static const TwinEntry *g_twins = nullptr;
 static uint32_t g_twinCount = 0, g_twinAO = 0, g_twinVersion = 0;   // entries; of them the AO pass's; the table's version
 static std::atomic<uint32_t> g_twinsMade{ 0 }, g_twinsFailed{ 0 };
+// which changed shaders the game uses: per entry of the table, how often the game made it and how often it set it to
+// draw with. The log's last lines sum them per module, so a module whose shaders the game never sets shows as such
+static std::atomic<uint32_t> *g_twinCreated = nullptr, *g_twinSets = nullptr;
+// which contexts the PSSetShader hook is called on: a pass the game draws on a context whose slot the runtime
+// rewrote is never seen (its module counts 0 sets)
+static std::atomic<unsigned long long> g_psSetImmediate{ 0 }, g_psSetDeferred{ 0 };
+// on the immediate context, at each command list it runs: does its table still hold the PSSetShader hook
+static std::atomic<unsigned long long> g_execCalls{ 0 }, g_execHookKept{ 0 }, g_execHookLost{ 0 };
+static std::atomic<void *> g_execSlotSeen{ nullptr };
+static inline void TwinSet(uint32_t entry) { if (g_twinSets && entry < g_twinCount) g_twinSets[entry].fetch_add(1, std::memory_order_relaxed); }
+// window glass: how the game draws its panes. Each new set of states a pane shader (module glass) is drawn with is
+// logged once: the blend of target 0, the culling and which winding is the front, the depth test. Read twice, as the
+// pane shader is set and as the next shader replaces it (the states may be set on either side of the shader), with the
+// count of pane shader sets, so the two readings can be told apart; 32 sets of states at most
+static uint64_t g_glassBit = 0;
+static std::atomic<unsigned long long> g_glassSets{ 0 };
+// cab shade: the game draws its window panes adding their colour (blend ONE, ONE, as logged in the game on 2026-11-26),
+// so the alpha the cab shade module raises over the cab could darken nothing. While a pane shader of that module draws
+// (its switch on, F8 not holding), a blend state of the game that adds (ONE, ONE on target 0) is replaced by a copy
+// that lays the pane over what is behind it (ONE, INV_SRC_ALPHA): the pane's colour is still added in full, and its
+// alpha now covers the cab. Clean glass, alpha near 0, keeps the view through it; the game's state goes back when the
+// shader changes. See PaneBlend
+static uint64_t g_cabBit = 0;
+static std::atomic<unsigned long long> g_paneSwaps{ 0 }, g_paneKept{ 0 };
+static void GlassProbe(ID3D11DeviceContext *ctx, const char *when)
+{
+    static std::mutex lock;
+    static uint64_t seen[32];
+    static int count = 0;
+    ID3D11BlendState *bs = nullptr; FLOAT bf[4]; UINT bm = 0;
+    ID3D11RasterizerState *rs = nullptr;
+    ID3D11DepthStencilState *ds = nullptr; UINT ref = 0;
+    ctx->OMGetBlendState(&bs, bf, &bm);
+    ctx->RSGetState(&rs);
+    ctx->OMGetDepthStencilState(&ds, &ref);
+    const uint64_t key = ((uint64_t)(uintptr_t)bs * 0x9E3779B97F4A7C15ull) ^ ((uint64_t)(uintptr_t)rs * 0xC2B2AE3D27D4EB4Full) ^ ((uint64_t)(uintptr_t)ds * 0x165667B19E3779F9ull) ^ (uint64_t)when[0];
+    bool fresh = false;
+    {
+        std::lock_guard<std::mutex> g(lock);
+        if (count < 32) { fresh = true; for (int i = 0; i < count; i++) if (seen[i] == key) { fresh = false; break; } if (fresh) seen[count++] = key; }
+    }
+    if (fresh)
+    {
+        D3D11_BLEND_DESC b = {}; D3D11_RASTERIZER_DESC r = {}; D3D11_DEPTH_STENCIL_DESC d = {};
+        if (bs) bs->GetDesc(&b);
+        if (rs) rs->GetDesc(&r);
+        if (ds) ds->GetDesc(&d);
+        Log("window glass, %s (pane shader set %llu, %s context): blend %s enable %d src %d dest %d op %d, alpha src %d dest %d, mask 0x%X; raster %s cull %d front ccw %d; depth %s test %d write %d func %d",
+            when, g_glassSets.load(), ctx->GetType() == D3D11_DEVICE_CONTEXT_IMMEDIATE ? "immediate" : "deferred",
+            bs ? "set" : "default", b.RenderTarget[0].BlendEnable, b.RenderTarget[0].SrcBlend, b.RenderTarget[0].DestBlend, b.RenderTarget[0].BlendOp,
+            b.RenderTarget[0].SrcBlendAlpha, b.RenderTarget[0].DestBlendAlpha, b.RenderTarget[0].RenderTargetWriteMask,
+            rs ? "set" : "default", r.CullMode, r.FrontCounterClockwise, ds ? "set" : "default", d.DepthEnable, d.DepthWriteMask, d.DepthFunc);
+    }
+    if (bs) bs->Release();
+    if (rs) rs->Release();
+    if (ds) ds->Release();
+}
+static void LogModuleUse()
+{
+    if (!g_twinSets || g_twinModules.empty()) return;
+    Log("modules in use (changed shaders of each: in the table, made by the game, set to draw with; times set):");
+    for (size_t i = 0; i < g_twinModules.size(); i++)
+    {
+        const uint64_t bit = 1ull << i;
+        uint32_t made = 0, used = 0; unsigned long long sets = 0;
+        for (uint32_t e = 0; e < g_twinCount; e++)
+        {
+            if (!(g_twins[e].mask & bit)) continue;
+            if (g_twinCreated[e].load(std::memory_order_relaxed)) made++;
+            const uint32_t n = g_twinSets[e].load(std::memory_order_relaxed);
+            if (n) { used++; sets += n; }
+        }
+        Log("modules in use:   %-12s %5u in the table, %5u made, %5u set; %llu sets%s", g_twinModules[i].id, g_twinModules[i].shaders, made, used, sets,
+            used ? "" : made ? "  <- never drawn with this session" : "  <- the game made none of them this session");
+    }
+    if (g_cabBit)
+    {
+        Log("cab shade: pane blend laid over %llu times, left as the game had it %llu times (its state did not add)", g_paneSwaps.load(), g_paneKept.load());
+    }
+}
 
 static void LoadTwins()
 {
@@ -494,6 +584,12 @@ static void LoadTwins()
     g_twinList.swap(list);
     g_twinModules.swap(modules);
     g_twinBase = base; g_twins = g_twinList.data(); g_twinCount = (uint32_t)g_twinList.size(); g_twinAO = ao; g_twinVersion = version;
+    for (size_t i = 0; i < g_twinModules.size(); i++)
+    {
+        if (!strcmp(g_twinModules[i].id, "glass")) g_glassBit = 1ull << i;
+        if (!strcmp(g_twinModules[i].id, "cabshade")) g_cabBit = 1ull << i;
+    }
+    g_twinCreated = new std::atomic<uint32_t>[g_twinCount](); g_twinSets = new std::atomic<uint32_t>[g_twinCount]();   // kept for the process's life
     Log("stock twins: %u shaders (%u of the AO pass) in SnowRunnerShadows.stock, version %u, %zu modules", g_twinCount, ao, version, g_twinModules.size());
 }
 static const TwinEntry *FindTwin(uint32_t key)
@@ -539,6 +635,11 @@ static DWORD WINAPI HotkeyThread(void *)
         const bool dumpNow = g_keyDump && (GetAsyncKeyState((int)g_keyDump) & 0x8000) != 0;
         if (dumpNow && !dumpDown && mine) { char name[16]; KeyName(g_keyDump, name, sizeof name); DumpRequest(name); }
         dumpDown = dumpNow;
+        static bool listDown = false;
+        const bool listNow = g_drawList && (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
+        if (listNow && !listDown && mine) DlStart("F9");
+        listDown = listNow;
+        DlTick(GetTickCount64());
         DumpTick(GetTickCount64());
         ProbeTick(GetTickCount64());
     }
@@ -547,7 +648,7 @@ static void StartHotkeys()
 {
     static std::once_flag once;
     std::call_once(once, [] {
-        if (!g_keyStock && !g_keyDump && g_dumpAfter <= 0 && !(g_ssr && g_ssrProbe)) return;
+        if (!g_keyStock && !g_keyDump && g_dumpAfter <= 0 && !(g_ssr && g_ssrProbe) && !g_drawList) return;
         HANDLE t = CreateThread(nullptr, 0, &HotkeyThread, nullptr, 0, nullptr);
         if (t) CloseHandle(t);
         char a[16];
@@ -587,7 +688,17 @@ static void LoadRealHid()
         if (!p) { missing++; p = kHidNames[i][3] == 'D' ? (void *)&HidDMissing : length ? (void *)&HidPNoLength : (void *)&HidPMissing; }
         g_hidReal[i] = p;
     }
-    Log("hid.dll functions from %ls%s, %d missing", real.c_str(), m ? "" : " (NOT LOADED)", missing);
+    // pinned for the life of the process: the stubs jump into it, and a free by anyone else (two modules are called
+    // hid.dll in this process, so a free by name can land on this one) must never unmap it. By address, not by name
+    bool pinned = false;
+    if (m)
+    {
+        HMODULE same = nullptr;
+        void *inside = (void *)m;
+        for (int i = 0; i < kHidCount; i++) { void *p = (void *)GetProcAddress(m, kHidNames[i]); if (p) { inside = p; break; } }
+        pinned = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)inside, &same) != 0;
+    }
+    Log("hid.dll functions from %ls%s, %d missing%s", real.c_str(), m ? "" : " (NOT LOADED)", missing, m ? (pinned ? ", pinned" : ", NOT pinned") : "");
 }
 
 // ---- method table patching
@@ -805,6 +916,7 @@ struct ContextState
     bool rsScaled = false;               // the context holds its copy with the scaled slope bias
     // scene feed
     uint32_t psFlags = 0;                                           // the bound pixel shader's kFeed* bits
+    bool glassSet = false;                                          // the bound pixel shader is one of the window glass module's
     ID3D11ShaderResourceView *aoFactor = nullptr, *aoZ = nullptr;   // bound at t2 and t80 (the context holds them)
     bool captured = false;                                          // the scene was copied for this setting of the AO pass
     bool giBound = false;                                           // the bounce-light texture is render target 1 now
@@ -816,6 +928,11 @@ struct ContextState
     bool rt7Bound = false;                                          // this DLL's render target 7 sits beside the lit pass's targets now
     bool rt6Bound = false;                                          // contact shadows: render target 6 likewise
     bool motionDone = false;                                        // t124 was decoded for this setting of the TAA pass
+    // cab shade: a pane shader of the module is set (paneOn); the context holds the over-blend copy of paneGame (paneSwapped)
+    bool paneOn = false, paneSwapped = false;
+    ID3D11BlendState *paneGame = nullptr;                           // held by g_paneCopies
+    FLOAT paneFactor[4] = {};
+    UINT paneMask = 0xffffffff;
     // the AO pass at half size (ini AOHalf, see AOHalfEnd and AOHalfApply)
     bool aoHalf = false;                                            // the AO pass draws into this DLL's half-size targets now (viewports halved)
     bool aoHalfReady = false;                                       // it was upsampled when it ended: the next apply pass reads the result
@@ -894,6 +1011,7 @@ static void ResetState(void *ctx)
     s->rs = nullptr; s->rsScaled = false;
     s->psFlags = 0; s->aoFactor = s->aoZ = nullptr; s->captured = false; s->giBound = false; s->blendSwapped = false; s->gameBlend = nullptr;
     s->rt7Bound = false; s->rt6Bound = false; s->motionDone = false;
+    s->paneOn = false; s->paneSwapped = false; s->paneGame = nullptr;
     s->aoHalf = false; s->aoHalfReady = false; s->aoHalfSubst = false;
     s->zMipsBound = false; s->zMipsFrom = nullptr;
     s->profHaveTargets = false; s->profHavePaused = false; s->profCurPs = 0; // (a pass timed here was ended by the caller: ProfClose)
@@ -3265,7 +3383,7 @@ static void SSRMotionAtTAA(ID3D11DeviceContext *ctx, ContextState *s)
     s->motionDone = true;
     ProbeTAA(ctx);
     const ULONGLONG now = GetTickCount64(), last = g_ssrLastRun.load(std::memory_order_relaxed);
-    if (last && now - last < 250 && SSRPassWanted())
+    if (g_ssrMotion && last && now - last < 250 && SSRPassWanted())
     {
         std::lock_guard<std::mutex> lock(g_ssrLock);
         SSRResources &r = g_ssrRes;
@@ -4792,6 +4910,62 @@ static void STDMETHODCALLTYPE Hook_OMSetRenderTargetsAndUAVs(ID3D11DeviceContext
     TargetsChanged(self, o, n, rtvs, dsv, uavs && uavCount && uavCount != D3D11_KEEP_UNORDERED_ACCESS_VIEWS);
 }
 
+// cab shade (see g_cabBit): the over-blend copy of a game state that adds its colour, made once per state and held with
+// it; nullptr for a state that does not add (left as the game has it)
+static std::mutex g_paneLock;
+static std::unordered_map<ID3D11BlendState *, ID3D11BlendState *> g_paneCopies;
+static ID3D11BlendState *PaneCopy(ID3D11DeviceContext *ctx, ID3D11BlendState *bs)
+{
+    std::lock_guard<std::mutex> lock(g_paneLock);
+    const auto it = g_paneCopies.find(bs);
+    if (it != g_paneCopies.end()) return it->second;
+    D3D11_BLEND_DESC d = {};
+    bs->GetDesc(&d);
+    D3D11_RENDER_TARGET_BLEND_DESC &t = d.RenderTarget[0];
+    ID3D11BlendState *copy = nullptr;
+    if (t.BlendEnable && t.SrcBlend == D3D11_BLEND_ONE && t.DestBlend == D3D11_BLEND_ONE && t.BlendOp == D3D11_BLEND_OP_ADD)
+    {
+        t.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+        ID3D11Device *dev = nullptr;
+        ctx->GetDevice(&dev);
+        if (dev) { dev->CreateBlendState(&d, &copy); dev->Release(); }
+        static std::atomic<int> lines{ 0 };
+        if (lines++ < 4) Log("cab shade: the panes' blend state %p (ONE, ONE) drawn with a copy %p (ONE, INV_SRC_ALPHA)%s", (void *)bs, (void *)copy, copy ? "" : ", which could not be made");
+    }
+    bs->AddRef();
+    g_paneCopies[bs] = copy;
+    return copy;
+}
+// the pane shader draws: the game's state in place laid over, if it adds
+static void PaneBlend(ID3D11DeviceContext *ctx, const ContextOrig *o, ContextState *s)
+{
+    if (s->paneSwapped) return;
+    ID3D11BlendState *bs = nullptr;
+    FLOAT factor[4] = {};
+    UINT mask = 0xffffffff;
+    ctx->OMGetBlendState(&bs, factor, &mask);
+    if (!bs) return;
+    if (ID3D11BlendState *copy = PaneCopy(ctx, bs))
+    {
+        o->omSetBlend(ctx, copy, factor, mask);
+        s->paneSwapped = true;
+        s->paneGame = bs;   // held by g_paneCopies
+        memcpy(s->paneFactor, factor, sizeof factor);
+        s->paneMask = mask;
+        g_paneSwaps++;
+    }
+    else g_paneKept++;
+    bs->Release();
+}
+// the pane shader is replaced: the game's state back, as it set it
+static void PaneRestore(ID3D11DeviceContext *ctx, const ContextOrig *o, ContextState *s)
+{
+    if (!s->paneSwapped) return;
+    o->omSetBlend(ctx, s->paneGame, s->paneFactor, s->paneMask);
+    s->paneSwapped = false;
+    s->paneGame = nullptr;
+}
+
 // bounce light, reflections: the game sets a blend state (it replaces any copy the context held); while a target of this
 // DLL is bound, the new state gets its copy if it would not write that target as needed (no copy: the target goes)
 static void STDMETHODCALLTYPE Hook_OMSetBlendState(ID3D11DeviceContext *self, ID3D11BlendState *bs, const FLOAT factor[4], UINT mask)
@@ -4800,7 +4974,14 @@ static void STDMETHODCALLTYPE Hook_OMSetBlendState(ID3D11DeviceContext *self, ID
     const ContextOrig *o = CtxOrig(self);
     HookScope scope;
     cpu.Orig([&] { o->omSetBlend(self, bs, factor, mask); });
-    if (!scope.outer || (!g_gi && !g_ssr && !g_contact)) return;
+    if (!scope.outer) return;
+    if (g_cabBit)
+    {
+        ContextState *p = State(self);
+        p->paneSwapped = false;   // the game's new state replaced any copy
+        if (p->paneOn) PaneBlend(self, o, p);
+    }
+    if (!g_gi && !g_ssr && !g_contact) return;
     ContextState *s = State(self);
     s->blendSwapped = false;
     if (s->giBound && !PlainBlend(self, o, s, 1u << 1)) GIUnbindTarget(self, o);
@@ -4928,6 +5109,7 @@ static void STDMETHODCALLTYPE Hook_ClearState(ID3D11DeviceContext *self)
 struct ListInfo { uint32_t id, shadowDraws, otherDraws, binds; };
 static void CheckHooks(ID3D11DeviceContext *ctx);
 
+static void STDMETHODCALLTYPE Hook_PSSetShader(ID3D11DeviceContext *self, ID3D11PixelShader *ps, ID3D11ClassInstance *const *inst, UINT n);
 static void STDMETHODCALLTYPE Hook_ExecuteCommandList(ID3D11DeviceContext *self, ID3D11CommandList *list, BOOL restore)
 {
     CpuScope cpu(kCpuExecute);
@@ -4943,6 +5125,13 @@ static void STDMETHODCALLTYPE Hook_ExecuteCommandList(ID3D11DeviceContext *self,
         if (!list || FAILED(list->GetPrivateData(kDumpListTag, &size, &dumpList)) || size != sizeof dumpList) dumpList = 0;
     }
     if (g_trace && scope.outer) CheckHooks(self);
+    if (scope.outer)
+    {
+        g_execCalls++;
+        void *slot = (*(void ***)self)[kSlotPSSetShader];
+        if (slot == (void *)&Hook_PSSetShader) g_execHookKept++;
+        else { g_execHookLost++; void *none = nullptr; if (g_execSlotSeen.compare_exchange_strong(none, slot)) Log("PSSetShader hook: the immediate context's table points elsewhere (%p) at command list %llu", slot, g_execCalls.load()); }
+    }
     if (g_trace && scope.outer && list && InBurst())
     {
         ListInfo li = {};
@@ -4966,6 +5155,60 @@ static void STDMETHODCALLTYPE Hook_ExecuteCommandList(ID3D11DeviceContext *self,
     if (dumping) DumpExecuted(self, dumpList);
 }
 
+// the immediate context: its method table lives in the object, and the runtime may point the object at another table
+// after start, which leaves every hook on the first one unseen (14 shader sets in a whole session, no command list run);
+// each finished command list checks the object's table and hooks a new one
+static void HookContext(ID3D11DeviceContext *ctx);
+static std::atomic<ID3D11DeviceContext *> g_immCtx{ nullptr };
+static std::atomic<void **> g_immVt{ nullptr };
+static std::atomic<int> g_immRehooks{ 0 };
+// a context interface pointer whose table is not hooked yet (another interface of the immediate context, or one handed
+// out by another route): hooked and logged
+static void HookIfNew(ID3D11DeviceContext *ctx, const char *how)
+{
+    if (!ctx) return;
+    void **vt = *(void ***)ctx;
+    const bool psWanted = g_feed || g_trace || g_twinCount || g_gpuProfile;
+    if (vt[kSlotRSSetViewports] == (void *)&Hook_RSSetViewports && vt[kSlotExecuteCommandList] == (void *)&Hook_ExecuteCommandList
+        && (!psWanted || vt[kSlotPSSetShader] == (void *)&Hook_PSSetShader)) return;
+    const int n = ++g_immRehooks;
+    if (n <= 6) Log("immediate context: %s %p has a table not hooked yet (%p), hooking it", how, (void *)ctx, (void *)vt);
+    HookContext(ctx);
+}
+static std::atomic<ULONGLONG> g_immNext{ 0 };
+static std::atomic<ID3D11DeviceContext *> g_immLive{ nullptr };   // the device's immediate context as GetImmediateContext gives it
+static void CheckImmediateTable(ID3D11DeviceContext *deferred)
+{
+    if (ID3D11DeviceContext *live = g_immLive.load(std::memory_order_relaxed)) HookIfNew(live, "the live");
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG next = g_immNext.load(std::memory_order_relaxed);
+    if (now < next || !g_immNext.compare_exchange_strong(next, now + 2000)) return;
+    ID3D11DeviceContext *imm = g_immCtx.load(std::memory_order_relaxed);
+    if (imm)
+    {
+        void **vt = *(void ***)imm;
+        void **seen = g_immVt.load(std::memory_order_relaxed);
+        if (vt != seen && g_immVt.compare_exchange_strong(seen, vt)) HookIfNew(imm, "the first pointer, its table moved,");
+    }
+    ID3D11Device *dev = nullptr;
+    deferred->GetDevice(&dev);
+    if (!dev) return;
+    ID3D11DeviceContext *cur = nullptr;
+    dev->GetImmediateContext(&cur);
+    if (cur)
+    {
+        HookIfNew(cur, "GetImmediateContext's");
+        g_immLive.store(cur, std::memory_order_relaxed);   // the device keeps it alive; kept without a reference
+        static const IID iids[] = { __uuidof(ID3D11DeviceContext1), __uuidof(ID3D11DeviceContext2), __uuidof(ID3D11DeviceContext3), __uuidof(ID3D11DeviceContext4) };
+        for (const IID &iid : iids)
+        {
+            ID3D11DeviceContext *q = nullptr;
+            if (SUCCEEDED(cur->QueryInterface(iid, (void **)&q)) && q) { HookIfNew(q, "a newer interface's"); q->Release(); }
+        }
+        cur->Release();
+    }
+    dev->Release();
+}
 static HRESULT STDMETHODCALLTYPE Hook_FinishCommandList(ID3D11DeviceContext *self, BOOL restore, ID3D11CommandList **list)
 {
     CpuScope cpu(kCpuFinish);
@@ -4978,6 +5221,7 @@ static HRESULT STDMETHODCALLTYPE Hook_FinishCommandList(ID3D11DeviceContext *sel
     if (ds && g_depthProbe) DPFlush(self, ds); // (into the list's events, before they are handed over below)
     HRESULT hr = S_OK;
     cpu.Orig([&] { hr = CtxOrig(self)->finish(self, restore, list); });
+    if (ds) CheckImmediateTable(self);
     if (ds && g_depthProbe) DPListFinished(ds, SUCCEEDED(hr) && list ? *list : nullptr);
     if (ds && ds->dumpRecorded) DumpListFinished(ds, hr, list ? *list : nullptr);
     if (ds && !ds->probe.empty()) ProbeFinished(ds, SUCCEEDED(hr) && list ? *list : nullptr);
@@ -5073,7 +5317,7 @@ template <class T> static IUnknown *MakeTwin(T *sh, const ShaderMark &mark)
     }
     // the original's own mark: what it is to the scene feed (no entry: it is the original)
     if constexpr (pixel) { const ShaderMark tm = { g_feed ? FeedFlags(stock, t.size) : 0, kNoTwin, 0 }; if (tm.feed) made->SetPrivateData(kMarkTag, sizeof tm, &tm); }
-    if (g_trace || g_gpuProfile || g_depthProbe) { const uint32_t th = Crc32(stock, t.size); made->SetPrivateData(kHashTag, sizeof th, &th); }
+    if (g_trace || g_gpuProfile || g_depthProbe || g_drawList) { const uint32_t th = Crc32(stock, t.size); made->SetPrivateData(kHashTag, sizeof th, &th); }
     sh->SetPrivateDataInterface(kTwinTag, made);
     g_twinsMade++;
     return made;   // the creation's reference, for the caller
@@ -5125,7 +5369,12 @@ static void STDMETHODCALLTYPE Hook_VSSetShader(ID3D11DeviceContext *self, ID3D11
     if (!scope.outer) { o->vsSet(self, vs, inst, n); return; }
     ID3D11VertexShader *twin = nullptr;
     const uint64_t stock = g_stockMask.load(std::memory_order_relaxed);
-    if (stock && g_twinCount && vs) { const ShaderMark m = MarkOf(vs); if (m.mask & stock) twin = StockTwin(vs, m); }
+    if (g_twinCount && vs)
+    {
+        const ShaderMark m = MarkOf(vs);
+        if (m.twin != kNoTwin) TwinSet(m.twin);
+        if (m.mask & stock) twin = StockTwin(vs, m);
+    }
     cpu.Orig([&] { o->vsSet(self, twin ? twin : vs, inst, n); });
     if (twin) twin->Release(); // the context holds it now
 }
@@ -5140,10 +5389,24 @@ static void STDMETHODCALLTYPE Hook_PSSetShader(ID3D11DeviceContext *self, ID3D11
     HookScope scope;
     if (!scope.outer) { o->psSet(self, ps, inst, n); return; }
     const ShaderMark m = MarkOf(ps);
+    if (m.twin != kNoTwin) TwinSet(m.twin);
+    (self->GetType() == D3D11_DEVICE_CONTEXT_IMMEDIATE ? g_psSetImmediate : g_psSetDeferred).fetch_add(1, std::memory_order_relaxed);
     const uint64_t stock = g_stockMask.load(std::memory_order_relaxed);
     ID3D11PixelShader *twin = (m.mask & stock) && g_twinCount ? StockTwin(ps, m) : nullptr, *use = twin ? twin : ps;
     cpu.Orig([&] { o->psSet(self, use, inst, n); });
     ContextState *s = State(self);
+    if (g_glassBit)
+    {
+        if (s->glassSet) GlassProbe(self, "as the next shader replaces it");
+        s->glassSet = (m.mask & g_glassBit) != 0;
+        if (s->glassSet) { g_glassSets++; GlassProbe(self, "as the pane shader is set"); }
+    }
+    if (g_cabBit)
+    {
+        PaneRestore(self, o, s);
+        s->paneOn = (m.mask & g_cabBit) && !twin;   // the module's own pane shader draws (its switch on, F8 not holding)
+        if (s->paneOn) PaneBlend(self, o, s);
+    }
     uint32_t flags = twin ? MarkOf(twin).feed : m.feed;
     if (twin) twin->Release(); // the context holds it now
     if (s->dumpAwaiting && !(flags & kFeedAO)) DumpOutputs(self, s, "the next pixel shader"); // the AO pass is over
@@ -5333,6 +5596,101 @@ static void CheckDraw(ID3D11DeviceContext *self, const ContextOrig *o, const cha
 // values only then); installed for that alone when there is no trace (ini FogReflections), else they also trace
 // (on the immediate context the runtime rewrites its own Draw slot after the first call, so only the game's deferred
 // contexts, where it records its frame, are seen here; FogCapture logs which kind the composite came on)
+struct DlRow { void *ctx; uint32_t ps, vs, orig; void *bs, *ds, *rs; UINT ref, nrt, w, h; DXGI_FORMAT fmt; bool dsv; uint64_t first, last, count; std::string desc; };
+static std::atomic<ULONGLONG> g_dlUntil{ 0 };
+static std::atomic<bool> g_dlPending{ false };
+static std::mutex g_dlLock;
+static std::vector<DlRow> g_dlRows;
+static uint64_t g_dlSeq = 0;
+static void DlDraw(ID3D11DeviceContext *self, const char *kind)
+{
+    if (GetTickCount64() >= g_dlUntil.load(std::memory_order_relaxed)) return;
+    ID3D11PixelShader *ps = nullptr; ID3D11VertexShader *vs = nullptr;
+    ID3D11BlendState *bs = nullptr; FLOAT bf[4]; UINT bm = 0;
+    ID3D11DepthStencilState *ds = nullptr; UINT ref = 0;
+    ID3D11RasterizerState *rs = nullptr;
+    ID3D11RenderTargetView *rtv[8] = {}; ID3D11DepthStencilView *dsv = nullptr;
+    self->PSGetShader(&ps, nullptr, nullptr);
+    self->VSGetShader(&vs, nullptr, nullptr);
+    self->OMGetBlendState(&bs, bf, &bm);
+    self->OMGetDepthStencilState(&ds, &ref);
+    self->RSGetState(&rs);
+    self->OMGetRenderTargets(8, rtv, &dsv);
+    DlRow r = {};
+    r.ctx = self; r.ps = ShaderHash(ps); r.vs = ShaderHash(vs); r.bs = bs; r.ds = ds; r.rs = rs; r.ref = ref; r.dsv = dsv != nullptr;
+    const ShaderMark m = MarkOf(ps);
+    if (m.twin != kNoTwin && m.twin < g_twinCount) r.orig = Crc32(g_twinBase + g_twins[m.twin].offset, g_twins[m.twin].size);
+    for (UINT i = 0; i < 8; i++) if (rtv[i]) r.nrt = i + 1;
+    if (rtv[0])
+    {
+        D3D11_RENDER_TARGET_VIEW_DESC vd = {}; rtv[0]->GetDesc(&vd); r.fmt = vd.Format;
+        ID3D11Resource *res = nullptr; rtv[0]->GetResource(&res);
+        ID3D11Texture2D *tex = nullptr;
+        if (res && SUCCEEDED(res->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&tex)) && tex) { D3D11_TEXTURE2D_DESC td = {}; tex->GetDesc(&td); r.w = td.Width; r.h = td.Height; tex->Release(); }
+        if (res) res->Release();
+    }
+    {
+        std::lock_guard<std::mutex> g(g_dlLock);
+        const uint64_t seq = g_dlSeq++;
+        bool found = false;
+        for (DlRow &x : g_dlRows)
+            if (x.ctx == r.ctx && x.ps == r.ps && x.vs == r.vs && x.bs == r.bs && x.ds == r.ds && x.rs == r.rs && x.ref == r.ref && x.fmt == r.fmt && x.nrt == r.nrt && x.dsv == r.dsv)
+            { x.last = seq; x.count++; found = true; break; }
+        if (!found && g_dlRows.size() < 4000)
+        {
+            D3D11_BLEND_DESC b = {}; D3D11_DEPTH_STENCIL_DESC d = {}; D3D11_RASTERIZER_DESC q = {};
+            if (bs) bs->GetDesc(&b);
+            if (ds) ds->GetDesc(&d); else { d.DepthEnable = TRUE; d.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL; d.DepthFunc = D3D11_COMPARISON_LESS; }
+            if (rs) rs->GetDesc(&q); else { q.FillMode = D3D11_FILL_SOLID; q.CullMode = D3D11_CULL_BACK; q.DepthClipEnable = TRUE; }
+            const auto &t0 = b.RenderTarget[0];
+            char text[512];
+            snprintf(text, sizeof text, "%s | blend %s%d src %d dst %d op %d, a src %d dst %d op %d, mask %X%s | depth %d write %d func %d, stencil %d r %02X w %02X ref %u front %d/%d/%d/%d back %d/%d/%d/%d | raster fill %d cull %d ccw %d bias %d slope %g clip %d",
+                kind, bs ? "" : "default ", t0.BlendEnable, t0.SrcBlend, t0.DestBlend, t0.BlendOp, t0.SrcBlendAlpha, t0.DestBlendAlpha, t0.BlendOpAlpha, t0.RenderTargetWriteMask,
+                b.IndependentBlendEnable ? " (per target)" : "", d.DepthEnable, d.DepthWriteMask, d.DepthFunc, d.StencilEnable, d.StencilReadMask, d.StencilWriteMask, ref,
+                d.FrontFace.StencilFailOp, d.FrontFace.StencilDepthFailOp, d.FrontFace.StencilPassOp, d.FrontFace.StencilFunc,
+                d.BackFace.StencilFailOp, d.BackFace.StencilDepthFailOp, d.BackFace.StencilPassOp, d.BackFace.StencilFunc,
+                q.FillMode, q.CullMode, q.FrontCounterClockwise, q.DepthBias, q.SlopeScaledDepthBias, q.DepthClipEnable);
+            r.desc = text; r.first = r.last = seq; r.count = 1;
+            g_dlRows.push_back(std::move(r));
+        }
+    }
+    if (ps) ps->Release();
+    if (vs) vs->Release();
+    if (bs) bs->Release();
+    if (ds) ds->Release();
+    if (rs) rs->Release();
+    for (ID3D11RenderTargetView *v : rtv) if (v) v->Release();
+    if (dsv) dsv->Release();
+}
+static void DlStart(const char *key)
+{
+    { std::lock_guard<std::mutex> g(g_dlLock); g_dlRows.clear(); g_dlSeq = 0; }
+    g_dlUntil.store(GetTickCount64() + 150, std::memory_order_relaxed);
+    g_dlPending = true;
+    Log("draw list: %s, recording every draw for 0.15 s", key);
+}
+static void DlTick(ULONGLONG now)
+{
+    if (!g_dlPending || now < g_dlUntil.load(std::memory_order_relaxed) + 200) return;
+    g_dlPending = false;
+    std::vector<DlRow> rows;
+    uint64_t draws;
+    { std::lock_guard<std::mutex> g(g_dlLock); rows.swap(g_dlRows); draws = g_dlSeq; }
+    SYSTEMTIME st; GetLocalTime(&st);
+    wchar_t name[96];
+    swprintf(name, 96, L"SnowRunnerShadows_drawlist_%02u%02u%02u.txt", st.wHour, st.wMinute, st.wSecond);
+    const std::wstring path = g_dumpDir + name;
+    FILE *f = _wfopen(path.c_str(), L"w");
+    if (!f) { Log("draw list: %ls could not be written", path.c_str()); return; }
+    fprintf(f, "# %llu draws in 0.15 s, %zu distinct (context, shaders, states, targets); sorted by context, then the first draw\n", (unsigned long long)draws, rows.size());
+    fprintf(f, "# first-last count ctx ps (orig: the game's own when ps is a changed one) vs targets(n fmt WxH dsv) | states\n");
+    std::stable_sort(rows.begin(), rows.end(), [](const DlRow &a, const DlRow &b) { return a.ctx != b.ctx ? a.ctx < b.ctx : a.first < b.first; });
+    for (const DlRow &r : rows)
+        fprintf(f, "%6llu-%-6llu x%-5llu %p ps %08X%s%08X vs %08X rt %u fmt %d %ux%u dsv %d | %s\n", (unsigned long long)r.first, (unsigned long long)r.last, (unsigned long long)r.count, r.ctx, r.ps,
+            r.orig ? " orig " : "      ", r.orig, r.vs, r.nrt, (int)r.fmt, r.w, r.h, r.dsv ? 1 : 0, r.desc.c_str());
+    fclose(f);
+    Log("draw list: %llu draws, %zu distinct, written to %ls", (unsigned long long)draws, rows.size(), path.c_str());
+}
 static void FogAtDraw(ID3D11DeviceContext *self)
 {
     if (g_fogRefl && (State(self)->psFlags & kFeedFogComposite)) FogCapture(self);
@@ -5341,28 +5699,28 @@ static void STDMETHODCALLTYPE Hook_Draw(ID3D11DeviceContext *self, UINT count, U
 {
     const ContextOrig *o = CtxOrig(self);
     HookScope scope;
-    if (scope.outer) { FogAtDraw(self); if (g_depthProbe) DPDraw(self, State(self)); if (g_trace) CheckDraw(self, o, "DRAW", count, start); }
+    if (scope.outer) { FogAtDraw(self); if (g_drawList) DlDraw(self, "draw"); if (g_depthProbe) DPDraw(self, State(self)); if (g_trace) CheckDraw(self, o, "DRAW", count, start); }
     o->draw(self, count, start);
 }
 static void STDMETHODCALLTYPE Hook_DrawIndexed(ID3D11DeviceContext *self, UINT count, UINT start, INT base)
 {
     const ContextOrig *o = CtxOrig(self);
     HookScope scope;
-    if (scope.outer) { FogAtDraw(self); if (g_depthProbe) DPDraw(self, State(self)); if (g_trace) CheckDraw(self, o, "DRAWIDX", count, start); }
+    if (scope.outer) { FogAtDraw(self); if (g_drawList) DlDraw(self, "idx"); if (g_depthProbe) DPDraw(self, State(self)); if (g_trace) CheckDraw(self, o, "DRAWIDX", count, start); }
     o->drawIndexed(self, count, start, base);
 }
 static void STDMETHODCALLTYPE Hook_DrawInstanced(ID3D11DeviceContext *self, UINT perInstance, UINT instances, UINT start, UINT startInstance)
 {
     const ContextOrig *o = CtxOrig(self);
     HookScope scope;
-    if (scope.outer) { if (g_depthProbe) DPDraw(self, State(self)); if (g_trace) CheckDraw(self, o, "DRAWINST", perInstance, instances); }
+    if (scope.outer) { if (g_drawList) DlDraw(self, "inst"); if (g_depthProbe) DPDraw(self, State(self)); if (g_trace) CheckDraw(self, o, "DRAWINST", perInstance, instances); }
     o->drawInstanced(self, perInstance, instances, start, startInstance);
 }
 static void STDMETHODCALLTYPE Hook_DrawIndexedInstanced(ID3D11DeviceContext *self, UINT perInstance, UINT instances, UINT start, INT base, UINT startInstance)
 {
     const ContextOrig *o = CtxOrig(self);
     HookScope scope;
-    if (scope.outer) { if (g_depthProbe) DPDraw(self, State(self)); if (g_trace) CheckDraw(self, o, "DRAWIDXINST", perInstance, instances); }
+    if (scope.outer) { if (g_drawList) DlDraw(self, "idxinst"); if (g_depthProbe) DPDraw(self, State(self)); if (g_trace) CheckDraw(self, o, "DRAWIDXINST", perInstance, instances); }
     o->drawIndexedInstanced(self, perInstance, instances, start, base, startInstance);
 }
 static void STDMETHODCALLTYPE Hook_DrawIndexedInstancedIndirect(ID3D11DeviceContext *self, ID3D11Buffer *args, UINT offset)
@@ -5471,56 +5829,71 @@ static void CheckHooks(ID3D11DeviceContext *ctx)
 
 static std::atomic<int> g_contextLines{ 0 };
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+// a slot's original: its value, unless that is code of this DLL (a hook left in a table reset only in part), then the one kept
+static void *OrigOf(void **vt, int slot, void *kept)
+{
+    const uintptr_t base = (uintptr_t)&__ImageBase;
+    const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)(base + __ImageBase.e_lfanew);
+    const uintptr_t v = (uintptr_t)vt[slot];
+    if (v >= base && v < base + nt->OptionalHeader.SizeOfImage) return kept;
+    return vt[slot];
+}
 static void HookContext(ID3D11DeviceContext *ctx)
 {
     if (!ctx) return;
     std::lock_guard<std::mutex> lock(g_patchLock);
     void **vt = *(void ***)ctx;
-    if (vt[kSlotRSSetViewports] == (void *)&Hook_RSSetViewports) return; // this table is hooked already
+    // hooked already: every slot this engine writes that a reset would show first (the immediate context's table is
+    // put back by the runtime while the game runs, in whole or in part; CheckImmediateTable calls this again then)
+    const bool psWanted = g_feed || g_trace || g_twinCount || g_gpuProfile;
+    if (vt[kSlotRSSetViewports] == (void *)&Hook_RSSetViewports && vt[kSlotExecuteCommandList] == (void *)&Hook_ExecuteCommandList
+        && (!psWanted || vt[kSlotPSSetShader] == (void *)&Hook_PSSetShader)) return;
+    const ContextOrig *old = CtxOrigListed(vt);   // a table hooked before: a slot still holding a hook keeps its original
     ContextOrig e = {};
     e.vt = vt;
     for (int k = 0; k < 8; k++) e.sig[k] = vt[kContextSig[k]];
-    e.omSet = (PFN_OMSetRenderTargets)vt[kSlotOMSetRenderTargets];
-    e.omSetUAV = (PFN_OMSetRenderTargetsAndUAVs)vt[kSlotOMSetRenderTargetsAndUAVs];
-    e.setViewports = (PFN_RSSetViewports)vt[kSlotRSSetViewports];
-    e.setScissors = (PFN_RSSetScissorRects)vt[kSlotRSSetScissorRects];
-    e.getViewports = (PFN_RSGetViewports)vt[kSlotRSGetViewports];
-    e.getScissors = (PFN_RSGetScissorRects)vt[kSlotRSGetScissorRects];
-    e.clearState = (PFN_ClearState)vt[kSlotClearState];
-    e.execute = (PFN_ExecuteCommandList)vt[kSlotExecuteCommandList];
-    e.finish = (PFN_FinishCommandList)vt[kSlotFinishCommandList];
-    e.setRS = (PFN_RSSetState)vt[kSlotRSSetState];
-    e.getRS = (PFN_RSGetState)vt[kSlotRSGetState];
+    e.omSet = (PFN_OMSetRenderTargets)OrigOf(vt, kSlotOMSetRenderTargets, old ? (void *)old->omSet : nullptr);
+    e.omSetUAV = (PFN_OMSetRenderTargetsAndUAVs)OrigOf(vt, kSlotOMSetRenderTargetsAndUAVs, old ? (void *)old->omSetUAV : nullptr);
+    e.setViewports = (PFN_RSSetViewports)OrigOf(vt, kSlotRSSetViewports, old ? (void *)old->setViewports : nullptr);
+    e.setScissors = (PFN_RSSetScissorRects)OrigOf(vt, kSlotRSSetScissorRects, old ? (void *)old->setScissors : nullptr);
+    e.getViewports = (PFN_RSGetViewports)OrigOf(vt, kSlotRSGetViewports, old ? (void *)old->getViewports : nullptr);
+    e.getScissors = (PFN_RSGetScissorRects)OrigOf(vt, kSlotRSGetScissorRects, old ? (void *)old->getScissors : nullptr);
+    e.clearState = (PFN_ClearState)OrigOf(vt, kSlotClearState, old ? (void *)old->clearState : nullptr);
+    e.execute = (PFN_ExecuteCommandList)OrigOf(vt, kSlotExecuteCommandList, old ? (void *)old->execute : nullptr);
+    e.finish = (PFN_FinishCommandList)OrigOf(vt, kSlotFinishCommandList, old ? (void *)old->finish : nullptr);
+    e.setRS = (PFN_RSSetState)OrigOf(vt, kSlotRSSetState, old ? (void *)old->setRS : nullptr);
+    e.getRS = (PFN_RSGetState)OrigOf(vt, kSlotRSGetState, old ? (void *)old->getRS : nullptr);
     if (g_feed || g_trace || g_twinCount || g_gpuProfile)
     {
-        e.psSRV = (PFN_PSSetShaderResources)vt[kSlotPSSetShaderResources];
-        e.psSet = (PFN_PSSetShader)vt[kSlotPSSetShader];
+        e.psSRV = (PFN_PSSetShaderResources)OrigOf(vt, kSlotPSSetShaderResources, old ? (void *)old->psSRV : nullptr);
+        e.psSet = (PFN_PSSetShader)OrigOf(vt, kSlotPSSetShader, old ? (void *)old->psSet : nullptr);
     }
-    if (g_twinCount) e.vsSet = (PFN_VSSetShader)vt[kSlotVSSetShader];
-    if (g_gpuProfile) e.csSet = (PFN_CSSetShader)vt[kSlotCSSetShader];
-    if (g_gi || g_ssr || g_contact) e.omSetBlend = (PFN_OMSetBlendState)vt[kSlotOMSetBlendState];   // each of the three plains a target's blend (PlainBlend)
+    if (g_twinCount) e.vsSet = (PFN_VSSetShader)OrigOf(vt, kSlotVSSetShader, old ? (void *)old->vsSet : nullptr);
+    if (g_gpuProfile) e.csSet = (PFN_CSSetShader)OrigOf(vt, kSlotCSSetShader, old ? (void *)old->csSet : nullptr);
+    if (g_gi || g_ssr || g_contact) e.omSetBlend = (PFN_OMSetBlendState)OrigOf(vt, kSlotOMSetBlendState, old ? (void *)old->omSetBlend : nullptr);   // each of the three plains a target's blend (PlainBlend)
     if (g_trace || (g_feed && g_fogRefl) || g_depthProbe)
     {
-        e.draw = (PFN_Draw)vt[kSlotDraw];               // also hooked for the fog composite's draw (FogAtDraw)
-        e.drawIndexed = (PFN_DrawIndexed)vt[kSlotDrawIndexed];
+        e.draw = (PFN_Draw)OrigOf(vt, kSlotDraw, old ? (void *)old->draw : nullptr);               // also hooked for the fog composite's draw (FogAtDraw)
+        e.drawIndexed = (PFN_DrawIndexed)OrigOf(vt, kSlotDrawIndexed, old ? (void *)old->drawIndexed : nullptr);
     }
     if (g_depthProbe)
     {
-        e.drawInstanced = (PFN_DrawInstanced)vt[kSlotDrawInstanced];
-        e.drawIndexedInstanced = (PFN_DrawIndexedInstanced)vt[kSlotDrawIndexedInstanced];
+        e.drawInstanced = (PFN_DrawInstanced)OrigOf(vt, kSlotDrawInstanced, old ? (void *)old->drawInstanced : nullptr);
+        e.drawIndexedInstanced = (PFN_DrawIndexedInstanced)OrigOf(vt, kSlotDrawIndexedInstanced, old ? (void *)old->drawIndexedInstanced : nullptr);
     }
     if (g_trace)
     {
-        e.draw = (PFN_Draw)vt[kSlotDraw];
-        e.drawIndexed = (PFN_DrawIndexed)vt[kSlotDrawIndexed];
-        e.drawInstanced = (PFN_DrawInstanced)vt[kSlotDrawInstanced];
-        e.drawIndexedInstanced = (PFN_DrawIndexedInstanced)vt[kSlotDrawIndexedInstanced];
-        e.copyResource = (PFN_CopyResource)vt[kSlotCopyResource];
-        e.copyRegion = (PFN_CopySubresourceRegion)vt[kSlotCopySubresourceRegion];
-        e.clearDSV = (PFN_ClearDepthStencilView)vt[kSlotClearDepthStencilView];
-        e.drawIndexedInstancedIndirect = (PFN_DrawIndirect)vt[kSlotDrawIndexedInstancedIndirect];
-        e.drawInstancedIndirect = (PFN_DrawIndirect)vt[kSlotDrawInstancedIndirect];
-        e.drawAuto = (PFN_DrawAuto)vt[kSlotDrawAuto];
+        e.draw = (PFN_Draw)OrigOf(vt, kSlotDraw, old ? (void *)old->draw : nullptr);
+        e.drawIndexed = (PFN_DrawIndexed)OrigOf(vt, kSlotDrawIndexed, old ? (void *)old->drawIndexed : nullptr);
+        e.drawInstanced = (PFN_DrawInstanced)OrigOf(vt, kSlotDrawInstanced, old ? (void *)old->drawInstanced : nullptr);
+        e.drawIndexedInstanced = (PFN_DrawIndexedInstanced)OrigOf(vt, kSlotDrawIndexedInstanced, old ? (void *)old->drawIndexedInstanced : nullptr);
+        e.copyResource = (PFN_CopyResource)OrigOf(vt, kSlotCopyResource, old ? (void *)old->copyResource : nullptr);
+        e.copyRegion = (PFN_CopySubresourceRegion)OrigOf(vt, kSlotCopySubresourceRegion, old ? (void *)old->copyRegion : nullptr);
+        e.clearDSV = (PFN_ClearDepthStencilView)OrigOf(vt, kSlotClearDepthStencilView, old ? (void *)old->clearDSV : nullptr);
+        e.drawIndexedInstancedIndirect = (PFN_DrawIndirect)OrigOf(vt, kSlotDrawIndexedInstancedIndirect, old ? (void *)old->drawIndexedInstancedIndirect : nullptr);
+        e.drawInstancedIndirect = (PFN_DrawIndirect)OrigOf(vt, kSlotDrawInstancedIndirect, old ? (void *)old->drawInstancedIndirect : nullptr);
+        e.drawAuto = (PFN_DrawAuto)OrigOf(vt, kSlotDrawAuto, old ? (void *)old->drawAuto : nullptr);
     }
     if (!PublishContext(vt, e)) { Log("context table list full, context %p left alone", (void *)ctx); return; }
     bool ok = PatchSlot(vt, kSlotOMSetRenderTargets, (void *)&Hook_OMSetRenderTargets);
@@ -5541,16 +5914,16 @@ static void HookContext(ID3D11DeviceContext *ctx)
     }
     if (g_twinCount) ok &= PatchSlot(vt, kSlotVSSetShader, (void *)&Hook_VSSetShader);
     if (g_gpuProfile) ok &= PatchSlot(vt, kSlotCSSetShader, (void *)&Hook_CSSetShader);
-    if (g_gi || g_ssr || g_contact) ok &= PatchSlot(vt, kSlotOMSetBlendState, (void *)&Hook_OMSetBlendState);
-    if (!g_trace && ((g_feed && g_fogRefl) || g_depthProbe))
+    if (g_gi || g_ssr || g_contact || g_cabBit) ok &= PatchSlot(vt, kSlotOMSetBlendState, (void *)&Hook_OMSetBlendState);
+    if (!g_trace && ((g_feed && g_fogRefl) || g_depthProbe || g_drawList))
     {
         // the fog composite's draw (the water's reflections, see FogCapture): these two alone
         ok &= PatchSlot(vt, kSlotDraw, (void *)&Hook_Draw);
         ok &= PatchSlot(vt, kSlotDrawIndexed, (void *)&Hook_DrawIndexed);
     }
-    if (!g_trace && g_depthProbe)
+    if (!g_trace && (g_depthProbe || g_drawList))
     {
-        // the depth probe counts every draw (see DPDraw)
+        // the depth probe counts every draw (see DPDraw); the draw list records them (DlDraw)
         ok &= PatchSlot(vt, kSlotDrawInstanced, (void *)&Hook_DrawInstanced);
         ok &= PatchSlot(vt, kSlotDrawIndexedInstanced, (void *)&Hook_DrawIndexedInstanced);
     }
@@ -5692,13 +6065,14 @@ static HRESULT STDMETHODCALLTYPE Hook_CreateVertexShader(ID3D11Device *self, con
     const HRESULT hr = d->createVS(self, code, size, link, out);
     if (!scope.outer || FAILED(hr) || !code || !out || !*out) return hr;
     const uint32_t crc = Crc32(code, size);
-    if (g_trace || g_depthProbe) (*out)->SetPrivateData(kHashTag, sizeof crc, &crc);
+    if (g_trace || g_depthProbe || g_drawList) (*out)->SetPrivateData(kHashTag, sizeof crc, &crc);
     // dev switches: a vertex shader the fidelity bundle changed is marked with its original's place in the table and the
     // entry's module mask, as the pixel shaders are; the original is made when a switch first wants it (MakeTwin)
     if (const TwinEntry *t = g_twinCount ? FindTwin(crc) : nullptr)
     {
         const ShaderMark m = { 0, (uint32_t)(t - g_twins), t->mask };
         (*out)->SetPrivateData(kMarkTag, sizeof m, &m);
+        if (g_twinCreated) g_twinCreated[m.twin].fetch_add(1, std::memory_order_relaxed);
     }
     return hr;
 }
@@ -5720,13 +6094,13 @@ static HRESULT STDMETHODCALLTYPE Hook_CreatePixelShader(ID3D11Device *self, cons
     const DeviceOrig *d = DevOrig(self);
     const HRESULT hr = d->createPS(self, code, size, link, out);
     if (!scope.outer || FAILED(hr) || !code || !out || !*out) return hr;
-    const uint32_t crc = g_trace || g_twinCount || g_ssr || g_gpuProfile ? Crc32(code, size) : 0;
-    if (g_trace || g_gpuProfile) (*out)->SetPrivateData(kHashTag, sizeof crc, &crc);
+    const uint32_t crc = g_trace || g_twinCount || g_ssr || g_gpuProfile || g_drawList ? Crc32(code, size) : 0;
+    if (g_trace || g_gpuProfile || g_drawList) (*out)->SetPrivateData(kHashTag, sizeof crc, &crc);
     // dev switches: a shader the fidelity bundle changed is marked with its original's place in the table and the
     // entry's module mask; the original is made when a switch first wants it (MakeTwin). The scene feed's flags go in
     // the same mark, read once per PSSetShader
     ShaderMark mark = { 0, kNoTwin, 0 };
-    if (const TwinEntry *t = g_twinCount ? FindTwin(crc) : nullptr) { mark.twin = (uint32_t)(t - g_twins); mark.mask = t->mask; }
+    if (const TwinEntry *t = g_twinCount ? FindTwin(crc) : nullptr) { mark.twin = (uint32_t)(t - g_twins); mark.mask = t->mask; if (g_twinCreated) g_twinCreated[mark.twin].fetch_add(1, std::memory_order_relaxed); }
     if (g_feed)
     {
         uint32_t flags = FeedFlags(code, size);
@@ -5828,7 +6202,7 @@ static void HookDevice(ID3D11Device *dev)
     }
     ID3D11DeviceContext *ctx = nullptr;
     dev->GetImmediateContext(&ctx);
-    if (ctx) { HookContext(ctx); ResetState(ctx); ctx->Release(); }
+    if (ctx) { HookContext(ctx); ResetState(ctx); g_immVt.store(*(void ***)ctx); g_immCtx.store(ctx); ctx->Release(); }
     if (g_feed || g_twinCount) StartHotkeys();
 }
 
@@ -6178,6 +6552,7 @@ static HRESULT WINAPI Hook_D3D11CreateDevice(IDXGIAdapter *adapter, D3D_DRIVER_T
     TextureBaseCheck();
     const HRESULT hr = g_realCreateDevice(adapter, type, sw, flags, levels, count, sdk, device, level, context);
     if (SUCCEEDED(hr) && device && *device && g_deviceWork) HookDevice(*device);
+    if (SUCCEEDED(hr) && context && *context && g_deviceWork) HookIfNew(*context, "D3D11CreateDevice's");
     return hr;
 }
 
@@ -6255,6 +6630,8 @@ static void ReadSettings()
     g_factor = f < 1 ? 1 : f > 4 ? 4 : f;
     g_scaling = g_factor > 1;
     g_trace = GetPrivateProfileIntW(L"Shadows", L"Trace", 0, ini.c_str()) != 0;
+    g_drawList = GetPrivateProfileIntW(L"Shadows", L"DrawList", 0, ini.c_str()) != 0;
+    if (g_drawList) Log("draw list: on (ini DrawList): F9 records every draw for 0.15 s");
     g_slopeBias = GetPrivateProfileIntW(L"Shadows", L"SlopeBias", 1, ini.c_str()) != 0;
     g_feed = GetPrivateProfileIntW(L"Shadows", L"Feed", 1, ini.c_str()) != 0;
     g_gi = g_feed && GetPrivateProfileIntW(L"Shadows", L"GI", 1, ini.c_str()) != 0;
@@ -6282,6 +6659,7 @@ static void ReadSettings()
     g_ssrProbe = GetPrivateProfileIntW(L"Shadows", L"SSRProbe", 0, ini.c_str()) != 0;   // off unless asked (review 3, N-D5: a hid.dll put in by hand wrote the probe log)
     g_ssrTiming = GetPrivateProfileIntW(L"Shadows", L"SSRTiming", 0, ini.c_str()) != 0;
     g_ssrLobe = GetPrivateProfileIntW(L"Shadows", L"SSRLobe", 0, ini.c_str()) != 0;
+    g_ssrMotion = GetPrivateProfileIntW(L"Shadows", L"SSRMotion", 0, ini.c_str()) != 0;
     const UINT steps = GetPrivateProfileIntW(L"Shadows", L"SSRSteps", 80, ini.c_str());
     g_ssrSteps = steps < 8 ? 8 : steps > 512 ? 512 : steps;
     auto knob = [&](const wchar_t *key, float def, float lo, float hi) {
@@ -6516,6 +6894,28 @@ extern "C" __declspec(dllexport) const NgGraphicsApi *NgGraphicsGetApi(int versi
     return &api;
 }
 
+// a log per start, named by its date and time (SnowRunnerShadows_2026-11-19_232309.log), so a run's log outlives the
+// next start; the newest kLogsKept stay, older ones and the single SnowRunnerShadows.log of earlier versions are deleted
+static const size_t kLogsKept = 20;
+static FILE *OpenLog()
+{
+    SYSTEMTIME t; GetLocalTime(&t);
+    wchar_t name[64];
+    swprintf(name, 64, L"SnowRunnerShadows_%04d-%02d-%02d_%02d%02d%02d.log", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+    std::vector<std::wstring> old;
+    WIN32_FIND_DATAW fd;
+    const HANDLE find = FindFirstFileW((g_dir + L"SnowRunnerShadows_????-??-??_??????.log").c_str(), &fd);
+    if (find != INVALID_HANDLE_VALUE)
+    {
+        do if (wcscmp(fd.cFileName, name)) old.push_back(fd.cFileName); while (FindNextFileW(find, &fd));
+        FindClose(find);
+    }
+    std::sort(old.begin(), old.end());   // the names sort by time
+    for (size_t i = 0; i + (kLogsKept - 1) < old.size(); i++) DeleteFileW((g_dir + old[i]).c_str());
+    DeleteFileW((g_dir + L"SnowRunnerShadows.log").c_str());
+    return _wfsopen((g_dir + name).c_str(), L"w", _SH_DENYWR); // others may read it while the game runs
+}
+
 BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
@@ -6525,7 +6925,7 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
         GetModuleFileNameW(self, path, MAX_PATH);
         g_dir = path;
         g_dir.resize(g_dir.find_last_of(L'\\') + 1);
-        g_log = _wfsopen((g_dir + L"SnowRunnerShadows.log").c_str(), L"w", _SH_DENYWR); // others may read it while the game runs
+        g_log = OpenLog();
         Log("SnowRunner Shadows loaded as %ls", path);
         LoadRealHid();
         ReadSettings();
@@ -6555,9 +6955,9 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
             Log("factor %g%s, slope bias %s, scene feed %s, bounce light %s; D3D11CreateDevice import %s", g_factor, g_scaling ? "" : " (not scaling)",
                 g_slopeBias ? "scaled with it" : "as the game sets it", g_feed ? "on" : "off", g_gi ? "on" : "off", ok ? "hooked" : "NOT FOUND, nothing will be done");
             if (g_ssr)
-                Log("reflections: on (a ray per %s, %s, roughness up to %g, thickness %g m, history %g, cone %g, %u steps; waits for shaders writing output 7 and reading t123)%s%s",
+                Log("reflections: on (a ray per %s, %s, roughness up to %g, thickness %g m, history %g, cone %g, %u steps, %s; waits for shaders writing output 7 and reading t123)%s%s",
                     g_ssrHalf ? "2 x 2 block" : "pixel", g_ssrLobe ? "rays from the GGX lobe" : "mirror rays blurred by roughness", g_ssrRoughMax, g_ssrThickness, g_ssrTemporal, g_ssrCone,
-                    g_ssrSteps, g_ssrMirror ? "; SSRMirror (debug): every pixel a mirror" : "",
+                    g_ssrSteps, g_ssrMotion ? "object motion from the TAA's velocity (SSRMotion=1)" : "reprojected by the camera alone", g_ssrMirror ? "; SSRMirror (debug): every pixel a mirror" : "",
                     g_ssrProbe ? "; probe 20 s after the AO pass first runs" : "");
             else Log("reflections: off");
             if (g_ssr && g_ssrUnder > 0)
@@ -6622,6 +7022,9 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved)
         if (g_twinCount)
             Log("stock twins: %u made, %u could not be made; switches at exit: effects %s, puddles %s, bounce light %s, AO %s, stock mask %016llX", g_twinsMade.load(), g_twinsFailed.load(),
                 StockAll() ? "stock" : "on", g_puddlesOn ? "on" : "off", g_bounceOn ? "on" : "off", StockAO() ? "the game's own" : "GTAO", (unsigned long long)g_stockMask.load());
+        LogModuleUse();
+        Log("PSSetShader hook: %llu calls on the immediate context, %llu on deferred ones; at the immediate context's %llu command lists the hook was in its table %llu times, gone %llu times; %d context tables hooked late",
+            g_psSetImmediate.load(), g_psSetDeferred.load(), g_execCalls.load(), g_execHookKept.load(), g_execHookLost.load(), g_immRehooks.load());
         if (g_ssr)
         {
             Log("reflections: shaders writing output 7 %llu, reading t123 %llu; render target 7 binds %llu, passes %llu, t124 decodes %llu, binds %llu; switch at exit %s",

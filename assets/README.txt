@@ -25,8 +25,8 @@ file. Or leave it out: the file and its modules stay as they are.
 When something goes wrong: every Apply and Restore is written to %LOCALAPPDATA%\SnowRunnerNextGen\install.log.
 Send that file along when you report a problem.
 
-Support, questions and talk about the mod: the channel on EnthusiastRunner's Discord,
-https://discord.com/invite/MssDb2Pvcj (thanks to EnthusiastRunner for it).
+Support, questions and talk about the mod: the Next Gen Discord,
+https://discord.gg/ARVYnkdpzK (thanks to EnthusiastRunner, whose Discord hosted the channel first).
 
 A big thank you to Milos_Mk6, who gave their time to the early builds. Their runs, feedback and patience shaped
 this release, and it would not be what it is without them.

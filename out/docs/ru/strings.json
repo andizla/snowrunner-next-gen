@@ -67,6 +67,14 @@
   "en": "At night, paint that finds nothing on screen to reflect shows the warm light of the headlights.",
   "ru": "Ночью краска, которой на экране нечего отразить, показывает тёплый свет фар."
  },
+ "card.glass.description": {
+  "en": "A clean window shows the cab behind it and its reflection, without a grey veil; dirt and mud keep their film.",
+  "ru": "Чистое стекло показывает кабину за ним и своё отражение, без серой пелены; грязь и налёт остаются."
+ },
+ "card.cabshade.description": {
+  "en": "Cab interiors seen through the windows sit in shade, as under a roof, instead of lit like open ground.",
+  "ru": "Салон за стёклами находится в тени, как под крышей, а не освещён как открытая земля."
+ },
  "card.water.description": {
   "en": "Banks, trees and trucks mirrored in rivers, mud, lakes, seas and puddles, not just the sky; the water's colour gives way to the reflection at shallow angles.",
   "ru": "В реках, грязи, озёрах, морях и лужах отражаются берега, деревья и грузовики, а не только небо; под пологим углом цвет воды уступает место отражению."
@@ -494,6 +502,38 @@
  "card.headglow.help.3": {
   "en": "Needs Object reflections with the reflection pass.",
   "ru": "Требует Object reflections с reflection pass."
+ },
+ "card.glass.help.0": {
+  "en": "The game draws a window pane in two layers: a reflection, and the glass's own colour lit by the light around it. Only dirt should show that colour, but the game adds it on clean glass too, so the cab behind every window sits under an even grey veil. This scales the glass's own colour by how dirty the pane is.",
+  "ru": "Игра рисует оконное стекло в два слоя: отражение и собственный цвет стекла, освещённый светом вокруг. Этот цвет должен быть виден только у грязи, но игра добавляет его и на чистое стекло, поэтому кабина за каждым окном оказывается под ровной серой пеленой. Модуль ослабляет собственный цвет стекла в меру его загрязнения."
+ },
+ "card.glass.help.1": {
+  "en": "Cab interiors seen through the windows are as dark and as coloured as they really are, not white or grey. Reflections on the glass are unchanged, and dirty or muddy windows keep their film.",
+  "ru": "Салон за стёклами такой же тёмный и цветной, как на самом деле, а не белый или серый. Отражения на стекле не меняются, а грязные и заляпанные окна сохраняют налёт."
+ },
+ "card.glass.help.2": {
+  "en": "None: one multiplication in the window shaders.",
+  "ru": "Никакой: одно умножение в шейдерах стекла."
+ },
+ "card.glass.help.3": {
+  "en": "Works on its own, without SnowRunner Shadows. In the game, the Graphics tab's Clear glass switch shows the game's own glass for comparison.",
+  "ru": "Работает сам по себе, без SnowRunner Shadows. В игре переключатель Clear glass на вкладке Graphics показывает для сравнения стекло самой игры."
+ },
+ "card.cabshade.help.0": {
+  "en": "The game lights the inside of a cab like open ground: nothing shades the seats, the dashboard and the roof liner from the sky, so at dusk and under clouds the interior stands grey behind the glass. This darkens what lies just behind a window pane, as a roof would.",
+  "ru": "Игра освещает внутренность кабины как открытую землю: сиденья, панель и обивку потолка ничто не затеняет от неба, поэтому в сумерках и под облаками салон выглядит серым за стеклом. Модуль затемняет то, что лежит сразу за оконным стеклом, как это сделала бы крыша."
+ },
+ "card.cabshade.help.1": {
+  "en": "Seen from outside, cab interiors are darker and keep their colours, most at dusk, at night and in rain. Reflections, dirt and mud on the glass are unchanged, and the open ground seen through two windows keeps its light.",
+  "ru": "Снаружи салон выглядит темнее и сохраняет свои цвета, заметнее всего в сумерках, ночью и в дождь. Отражения, грязь и налёт на стекле не меняются, а открытая земля, видимая сквозь два окна, сохраняет свой свет."
+ },
+ "card.cabshade.help.2": {
+  "en": "Next to none: one depth read per window pixel.",
+  "ru": "Почти никакой: одно чтение глубины на пиксель стекла."
+ },
+ "card.cabshade.help.3": {
+  "en": "Needs SnowRunner Shadows. It works from outside cameras; the view from the driver's seat is unchanged. It dims everything behind the pane by the same share, sunlit seats included. An open cab without glass gets no shade. In the game, the Graphics tab's Cab shade switch turns it off for comparison.",
+  "ru": "Требует SnowRunner Shadows. Работает для наружных камер; вид с места водителя не меняется. Всё, что за стеклом, затемняется на одну и ту же долю, включая освещённые солнцем сиденья. Открытая кабина без стёкол тени не получает. В игре переключатель Cab shade на вкладке Graphics отключает модуль для сравнения."
  },
  "card.water.help.0": {
   "en": "Rivers, mud, lakes, seas and the puddles on the roads reflect what is on screen: banks, trees and trucks, not just the sky. The water's own colour gives way to the reflection at shallow angles, as with real water.",

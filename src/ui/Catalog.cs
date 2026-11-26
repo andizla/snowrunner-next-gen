@@ -99,6 +99,10 @@ namespace SnowRunnerNextGen
             // a build of the reflection pass's reader, so the march-only method goes without it
             list.Add(M("headglow", "REFLECTIONS", "Headlights in reflections", true,
                 "At night, paint that finds nothing on screen to reflect shows the warm light of the headlights.", "objrefl"));
+            list.Add(M("glass", "REFLECTIONS", "Clear glass", true,
+                "A clean window shows the cab behind it and its reflection, without a grey veil; dirt and mud keep their film."));
+            list.Add(M("cabshade", "REFLECTIONS", "Cab shade", true,
+                "Cab interiors seen through the windows sit in shade, as under a roof, instead of lit like open ground.", "shadows"));
             Module water = M("water", "WATER", "Water reflections", true,
                 "Banks, trees and trucks mirrored in rivers, mud, lakes, seas and puddles, not just the sky; the water's colour gives way to the reflection at shallow angles.",
                 "shadows");

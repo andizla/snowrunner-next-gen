@@ -425,6 +425,7 @@ static void LabRoughReference(const LabCam &c, float W, float H, float wallTop, 
     for (int i = 0; i < 3; i++) rgb[i] = hits ? (float)(sum[i] / hits) : 0;
 }
 
+static bool g_ssrNoMotion = false;   // "nomotion": the DLL runs with SSRMotion=0, t124 stays empty
 static int SsrLab(ID3D11Device *dev, ID3D11DeviceContext *ctx, ID3D11VertexShader *vs, ID3D11RasterizerState *rs, bool rough)
 {
     const UINT W = 320, H = 180;
@@ -605,7 +606,13 @@ static int SsrLab(ID3D11Device *dev, ID3D11DeviceContext *ctx, ID3D11VertexShade
     v = readAll(1);
     const float *m = &v[(25 * W + 25) * 4], *still = &v[(100 * W + 200) * 4];
     snprintf(line, sizeof line, "reflections lab: t124 in the moving patch %.4f %.4f flag %g (want %.4f %.4f 1), elsewhere flag %g", m[0], m[1], m[2], 8.0f / W, -4.0f / H, still[2]);
-    Check(std::fabs(m[0] - 8.0f / W) < 0.1f * 8.0f / W && std::fabs(m[1] + 4.0f / H) < 0.1f * 4.0f / H && m[2] == 1 && still[2] == 0 && still[0] == 0, line);
+    if (g_ssrNoMotion)
+    {
+        snprintf(line, sizeof line, "reflections lab (SSRMotion=0): t124 in the moving patch flag %g, elsewhere %g (want -1 -1: nothing bound)", m[2], still[2]);
+        Check(m[2] == -1 && still[2] == -1, line);
+    }
+    else
+        Check(std::fabs(m[0] - 8.0f / W) < 0.1f * 8.0f / W && std::fabs(m[1] + 4.0f / H) < 0.1f * 4.0f / H && m[2] == 1 && still[2] == 0 && still[0] == 0, line);
     // t125 (the water's march): a shader that declares it sees the pass's depth pyramid, every level, with
     // 1 / linear depth where there is ground and 0 for the sky
     {
@@ -931,7 +938,16 @@ static int SsrReplay(ID3D11Device *dev, ID3D11DeviceContext *ctx, const char *fo
 static std::string ReadDllLog()
 {
     std::string text;
-    FILE *f = _wfsopen((ExeDir() + L"SnowRunnerShadows.log").c_str(), L"rb", _SH_DENYNO);
+    // a log per start, named by date and time: the newest by name is this run's
+    std::wstring newest;
+    WIN32_FIND_DATAW fd;
+    const HANDLE find = FindFirstFileW((ExeDir() + L"SnowRunnerShadows_????-??-??_??????.log").c_str(), &fd);
+    if (find != INVALID_HANDLE_VALUE)
+    {
+        do if (newest < fd.cFileName) newest = fd.cFileName; while (FindNextFileW(find, &fd));
+        FindClose(find);
+    }
+    FILE *f = newest.empty() ? nullptr : _wfsopen((ExeDir() + newest).c_str(), L"rb", _SH_DENYNO);
     if (!f) return text;
     char buf[4096];
     for (size_t n; (n = fread(buf, 1, sizeof buf, f)) > 0;) text.append(buf, n);
@@ -1719,6 +1735,7 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "moduleoff") == 0 && i + 1 < argc) { moduleOff = argv[++i]; continue; }
         contactMode |= strcmp(argv[i], "contact") == 0; texOff |= strcmp(argv[i], "texoff") == 0;
         ssrMode |= strcmp(argv[i], "ssr") == 0; ssrRough |= strcmp(argv[i], "rough") == 0; aoHalfMode |= strcmp(argv[i], "aohalf") == 0;
+        g_ssrNoMotion |= strcmp(argv[i], "nomotion") == 0;
         aoFullMode |= strcmp(argv[i], "aofull") == 0;
         if (strcmp(argv[i], "ssrreplay") == 0 && i + 1 < argc) replayDir = argv[i + 1];
         expectOff |= strcmp(argv[i], "off") == 0; hardware |= strcmp(argv[i], "hw") == 0; twoDevices |= strcmp(argv[i], "double") == 0;
