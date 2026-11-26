@@ -75,7 +75,8 @@ points come out three times as bright.</p>
 clouds_near) that turn around the map, each tinted per daytime state. The card (on by default since 1.1.0) replaces 47 of
 those textures, every region's, with ones made from photographs of real skies: domes by make_cube.js at the stock
 texture's size and mean colour with the photograph's sun taken out, and cloud bands. The two night layers that hold the
-game's own patch of the Milky Way stay the game's. The cloud bands are cut from panoramas by
+game's own painted patch of the Milky Way (env_cloud_01_ru_08 and env_cloud_01_us_09, 8192 &times; 2048) are emptied: their
+stock header and mips, every BC7 block mode 6 at colour and alpha 0, so they draw nothing. 49 textures in all. The cloud bands are cut from panoramas by
 make_clouds.js: a band is a texture 8 (or 4) times as wide as high whose alpha is the clouds' shape and whose colour is their
 shading in grey. What is cloud and what is sky is told by colour, since a clear sky is blue and a cloud is not:</p>
 <div class="eq">b = (B &minus; R) / (B + R),&nbsp;&nbsp; b<sub>sky</sub> = 85th percentile of b in the row,&nbsp;&nbsp; cloudiness = b<sub>sky</sub> &minus; b</div>

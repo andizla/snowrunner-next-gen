@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.4]
+
+- Skies empties the two night layers that hold the game's own painted patch of the Milky Way (Belozersk's, and the one regions us_09 and us_10 share): they keep the game's size and mips and draw nothing, so the night sky is the star map's points alone, 49 textures instead of 47. The sky pack holds the two new files.
+- Cab shade is off by default in the window, as 1.1.3's notes said; 1.1.3's card had it on.
+- The guide has the Cab shade card; 1.1.3's guide was built without it.
+
 ## [1.1.3]
 
 - New card, Clear glass: a clean window no longer lays a grey veil over the cab behind it. The game draws a pane's own lit colour in full on clean glass too, so every interior looked white or grey through the windows, with or without Next Gen. The pane's own colour now follows its dirt: clean glass shows the cab and its reflection, dirty and muddy glass keep their film. On by default; one multiplication in the 14 window shaders.

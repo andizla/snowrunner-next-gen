@@ -1,6 +1,6 @@
 {
     "exe":  "SnowRunnerNextGen.exe",
-    "built":  "2026-11-20 08:30",
+    "built":  "2026-11-26 13:26",
     "modules":  [
                     {
                         "id":  "shadows",
@@ -533,6 +533,38 @@
                                      {
                                          "heading":  "Good to know",
                                          "text":  "Works on its own, without SnowRunner Shadows. In the game, the Graphics tab\u0027s Clear glass switch shows the game\u0027s own glass for comparison."
+                                     }
+                                 ]
+                    },
+                    {
+                        "id":  "cabshade",
+                        "title":  "Cab shade",
+                        "category":  "REFLECTIONS",
+                        "group":  "Reflections and water",
+                        "description":  "Cab interiors seen through the windows sit in shade, as under a roof, instead of lit like open ground.",
+                        "on":  false,
+                        "requires":  [
+                                         "shadows"
+                                     ],
+                        "options":  [
+
+                                    ],
+                        "help":  [
+                                     {
+                                         "heading":  "What it does",
+                                         "text":  "The game lights the inside of a cab like open ground: nothing shades the seats, the dashboard and the roof liner from the sky, so at dusk and under clouds the interior stands grey behind the glass. This darkens what lies just behind a window pane, as a roof would."
+                                     },
+                                     {
+                                         "heading":  "What you will notice",
+                                         "text":  "Seen from outside, cab interiors are darker and keep their colours, most at dusk, at night and in rain. Reflections, dirt and mud on the glass are unchanged, and the open ground seen through two windows keeps its light."
+                                     },
+                                     {
+                                         "heading":  "What it costs",
+                                         "text":  "Next to none: one depth read per window pixel."
+                                     },
+                                     {
+                                         "heading":  "Good to know",
+                                         "text":  "Needs SnowRunner Shadows. It works from outside cameras; the view from the driver\u0027s seat is unchanged. It dims everything behind the pane by the same share, sunlit seats included. An open cab without glass gets no shade. In the game, the Graphics tab\u0027s Cab shade switch turns it off for comparison."
                                      }
                                  ]
                     },
@@ -1203,7 +1235,7 @@
                         "title":  "Skies",
                         "category":  "ATMOSPHERE",
                         "group":  "Atmosphere and image",
-                        "description":  "The painted skies of every region made anew from photographs of real skies: 47 of the game\u0027s sky domes, cloud bands and night layers, each at its own size and brightness, the photograph\u0027s sun taken out so the game\u0027s sun is the only one. The aurora is green, as a real one is. The clouds still drift.",
+                        "description":  "The painted skies of every region made anew from photographs of real skies: 49 of the game\u0027s sky domes, cloud bands and night layers, each at its own size and brightness, the photograph\u0027s sun taken out so the game\u0027s sun is the only one. The aurora is green, as a real one is. The clouds still drift.",
                         "on":  true,
                         "requires":  [
 
@@ -1214,7 +1246,7 @@
                         "help":  [
                                      {
                                          "heading":  "What it does",
-                                         "text":  "A region\u0027s sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 47 of the game\u0027s sky domes and cloud bands, across every region, with ones made from photographs of real skies, and the aurora\u0027s blue and violet with a real aurora\u0027s green. Each keeps the size of the texture it replaces and the game\u0027s own brightness for it. The photographs\u0027 own sun is taken out, so the game\u0027s sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency."
+                                         "text":  "A region\u0027s sky is a stack of layers: a painted dome of the whole upper sky, cloud bands that drift over it, the stars, the sun. This replaces 47 of the game\u0027s sky domes and cloud bands, across every region, with ones made from photographs of real skies, and the aurora\u0027s blue and violet with a real aurora\u0027s green. The two night layers that hold the game\u0027s own painted patch of the Milky Way are emptied, so the night sky is the star map\u0027s points alone. Each keeps the size of the texture it replaces and the game\u0027s own brightness for it. The photographs\u0027 own sun is taken out, so the game\u0027s sun disc is the only sun; the cloud bands are cut out of the photographs with their own transparency."
                                      },
                                      {
                                          "heading":  "What you will notice",

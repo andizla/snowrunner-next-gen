@@ -101,7 +101,7 @@ namespace SnowRunnerNextGen
                 "At night, paint that finds nothing on screen to reflect shows the warm light of the headlights.", "objrefl"));
             list.Add(M("glass", "REFLECTIONS", "Clear glass", true,
                 "A clean window shows the cab behind it and its reflection, without a grey veil; dirt and mud keep their film."));
-            list.Add(M("cabshade", "REFLECTIONS", "Cab shade", true,
+            list.Add(M("cabshade", "REFLECTIONS", "Cab shade", false,
                 "Cab interiors seen through the windows sit in shade, as under a roof, instead of lit like open ground.", "shadows"));
             Module water = M("water", "WATER", "Water reflections", true,
                 "Banks, trees and trucks mirrored in rivers, mud, lakes, seas and puddles, not just the sky; the water's colour gives way to the reflection at shallow angles.",
@@ -171,7 +171,7 @@ namespace SnowRunnerNextGen
                 "NASA's star map in place of the game's star texture: the real sky's stars as fine points."));
             // the sky domes and cloud bands made anew from photographs of real skies, the fifth part of boot.pak
             list.Add(M("skies", "ATMOSPHERE", "Skies", true,
-                "The painted skies of every region made anew from photographs of real skies: 47 of the game's sky domes, cloud bands and night layers, each at its own size and brightness, the photograph's sun taken out so the game's sun is the only one. The aurora is green, as a real one is. The clouds still drift."));
+                "The painted skies of every region made anew from photographs of real skies: 49 of the game's sky domes, cloud bands and night layers, each at its own size and brightness, the photograph's sun taken out so the game's sun is the only one. The aurora is green, as a real one is. The clouds still drift."));
             // the night sky's star layer times a factor, the third part of initial.pak
             Module stars = M("stars", "ATMOSPHERE", "Brighter stars", true, "The stars of the night sky drawn brighter, so they stand out against the dark.");
             stars.Options.Add(new OptionSet("Brightness", new[] { "3x", "2x" }, new[] { "3", "2" }, 0));
