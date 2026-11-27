@@ -213,6 +213,10 @@ function install(want)
     if (l) l.setDays(ownNamed().join(','));
 }
 
+// before the command line: install's setDays brings in lod_patch.js, which requires this file back for PAKS and
+// ownNamed when a region's own days leave initial.pak, and gets an empty object while this block still runs
+module.exports = { ROWS, PAKS, rowSpec, status, install, levelState, ownNamed };
+
 if (require.main === module)
 {
     const [cmd, arg] = process.argv.slice(2);
@@ -230,5 +234,3 @@ if (require.main === module)
     }
     catch (err) { console.error('error: ' + err.message); process.exitCode = 1; }
 }
-
-module.exports = { ROWS, PAKS, rowSpec, status, install, levelState, ownNamed };
