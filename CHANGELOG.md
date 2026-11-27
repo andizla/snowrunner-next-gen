@@ -5,6 +5,7 @@
 - Skies empties the two night layers that hold the game's own painted patch of the Milky Way (Belozersk's, and the one regions us_09 and us_10 share): they keep the game's size and mips and draw nothing, so the night sky is the star map's points alone, 49 textures instead of 47. The sky pack holds the two new files.
 - Cab shade is off by default in the window, as 1.1.3's notes said; 1.1.3's card had it on.
 - The guide has the Cab shade card; 1.1.3's guide was built without it.
+- Map days: an Apply or Restore that takes a region's own days out of initial.pak (Maine's own days back to Michigan's) no longer stops with "The "paths[0]" argument must be of type string". The map days tool asked the initial.pak builder to take them out before it had named what it holds, so the builder found nothing; in every version since 1.1.0.
 
 ## [1.1.3]
 
